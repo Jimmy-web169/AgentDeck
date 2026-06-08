@@ -1,0 +1,95 @@
+// Provider-aware API client. A module-level provider id prefixes every request
+// as /api/<provider>/...; App calls setProvider() before mounting a provider's
+// subtree (which remounts on switch). Methods that differ in signature between
+// providers branch on getProvider(): claude addresses sessions by (slug,id) and
+// edits resources as free-text files; codex addresses by id and uses scoped
+// structured resources. Components keep calling api.xxx(...) provider-naturally.
+
+let PROVIDER = 'claude'
+export function setProvider(p) {
+  PROVIDER = p
+}
+export function getProvider() {
+  return PROVIDER
+}
+
+async function req(method, path, { params = {}, body } = {}) {
+  const qs = new URLSearchParams(params).toString()
+  const res = await fetch(`/api/${PROVIDER}/${path}${qs ? `?${qs}` : ''}`, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  // tolerate non-JSON error bodies (e.g. a plain-text 403) instead of throwing
+  // an opaque "Unexpected token" JSON parse error
+  const text = await res.text()
+  let data
+  try {
+    data = text ? JSON.parse(text) : {}
+  } catch {
+    data = { error: text }
+  }
+  if (!res.ok) throw new Error(data.error || text || `HTTP ${res.status}`)
+  return data
+}
+const get = (path, params) => req('GET', path, { params })
+
+export const api = {
+  // ---- shared core ----
+  roots: () => get('roots'),
+  addRoot: (path, label) => req('POST', 'roots', { body: { path, label } }),
+  removeRoot: (id) => req('DELETE', 'roots', { params: { id } }),
+  projects: (root) => get('projects', { root }),
+  sessions: (root, slug) => get('sessions', { root, slug }),
+  stats: (root) => get('stats', { root }),
+  history: (root) => get('history', { root }),
+  usage: (root) => get('usage', { root }),
+  plugins: (root) => get('plugins', { root }),
+  skillRun: (body) => req('POST', 'skill-run', { body }),
+  browse: (path) => get('browse', path ? { path } : {}),
+  pickFolder: () => get('pick-folder'),
+  terminal: (body) => req('POST', 'terminal', { body }),
+  terminals: () => get('terminals'),
+  terminalStop: (key) => req('DELETE', 'terminal', { params: { key } }),
+
+  // ---- session-addressed (claude: root,slug,id · codex: root,id) ----
+  session: (root, a, b) => get('session', b !== undefined ? { root, slug: a, id: b } : { root, id: a }),
+  raw: (root, a, b) => get('raw', b !== undefined ? { root, slug: a, id: b } : { root, id: a }),
+  subagents: (root, a, b) => get('subagents', b !== undefined ? { root, slug: a, id: b } : { root, id: a }),
+  // claude-only: single sub-agent / workflow-run transcript
+  subagent: (root, slug, session, run, agent) => get('subagent', run ? { root, slug, session, run, agent } : { root, slug, session, agent }),
+  // claude: (root,slug) · codex: (root)
+  memory: (root, slug) => get('memory', slug !== undefined ? { root, slug } : { root }),
+
+  // ---- resources (signatures differ by provider) ----
+  resources: (root, a, b) => {
+    if (PROVIDER === 'codex') return get('resources', a === 'project' && b ? { root, scope: a, slug: b } : { root, scope: 'user' })
+    return get('resources', a ? { root, slug: a } : { root }) // claude: (root, slug?)
+  },
+  // claude-only: read single resource
+  resource: (root, kind, name, slug) => get('resource', slug ? { root, kind, name, slug } : { root, kind, name }),
+  // claude-only: write free-text resource
+  saveResource: (root, kind, name, content, slug) =>
+    req('POST', 'resource', { body: slug ? { root, kind, name, content, slug } : { root, kind, name, content } }),
+  // codex-only: create structured resource
+  createResource: (body) => req('POST', 'resource', { body }),
+  // claude: (root,kind,name,stamp,slug?) · codex: (root,scope,slug,kind,name)
+  deleteResource: (...args) => {
+    if (PROVIDER === 'codex') {
+      const [root, scope, slug, kind, name] = args
+      return req('DELETE', 'resource', { params: scope === 'project' && slug ? { root, scope, slug, kind, name } : { root, scope: 'user', kind, name } })
+    }
+    const [root, kind, name, stamp, slug] = args
+    return req('DELETE', 'resource', { params: slug ? { root, kind, name, stamp, slug } : { root, kind, name, stamp } })
+  },
+
+  // ---- open local app (claude: root,slug,id,what,cwd · codex: root,id,what,cwd,slug) ----
+  open: (...args) => {
+    if (PROVIDER === 'codex') {
+      const [root, id, what, cwd, slug] = args
+      return req('POST', 'open', { body: { root, id, what, cwd, slug } })
+    }
+    const [root, slug, id, what, cwd] = args
+    return req('POST', 'open', { body: { root, slug, id, what, cwd } })
+  },
+}

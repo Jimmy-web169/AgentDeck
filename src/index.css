@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-ink-800 text-zinc-200 antialiased;
+  margin: 0;
+}
+
+/* thin scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 4px;
+}
+
+/* lightweight markdown styling for assistant/user bubbles */
+.md {
+  @apply text-[15px] leading-7 break-words;
+}
+.md > *:first-child {
+  margin-top: 0;
+}
+.md > *:last-child {
+  margin-bottom: 0;
+}
+.md p {
+  @apply my-3;
+}
+.md h1 {
+  @apply text-xl font-semibold mt-5 mb-2;
+}
+.md h2 {
+  @apply text-lg font-semibold mt-5 mb-2;
+}
+.md h3 {
+  @apply text-base font-semibold mt-4 mb-2;
+}
+.md ul {
+  @apply list-disc pl-6 my-3 space-y-1;
+}
+.md ol {
+  @apply list-decimal pl-6 my-3 space-y-1;
+}
+.md a {
+  @apply text-sky-400 underline underline-offset-2;
+}
+.md blockquote {
+  @apply border-l-2 border-zinc-600 pl-3 my-3 text-zinc-400;
+}
+.md code {
+  @apply font-mono text-[13px] bg-ink-900/80 px-1.5 py-0.5 rounded text-amber-200;
+}
+.md pre {
+  @apply bg-ink-900 rounded-lg p-3 my-3 overflow-x-auto text-[13px] leading-6;
+}
+.md pre code {
+  @apply bg-transparent p-0 text-zinc-200;
+}
+.md table {
+  @apply my-3 w-full text-sm border-collapse;
+}
+.md th,
+.md td {
+  @apply border border-zinc-700 px-2 py-1 text-left;
+}
+.md hr {
+  @apply my-4 border-zinc-700;
+}
