@@ -8,7 +8,7 @@ import OpenAppButtons from '../shared/OpenAppButtons.jsx'
 // new one ({root,cwd} new path · {root,slug} new under project). If a terminal is
 // already running for this target (runningKeys), it auto-reattaches.
 //
-// "Pop out" opens the ttyd terminal in its own browser window and collapses the
+// "Pop out" opens the ttyd terminal in a new browser tab and collapses the
 // embedded iframe to a one-line bar, so the monitoring page stays uncluttered.
 // The tmux session keeps running either way; re-embed brings it back inline.
 export default function TerminalPanel({ root, slug, id, cwd, isNew, title, contextUsed, onClose, onChange, runningKeys, onOpenTool }) {
@@ -18,7 +18,7 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
   const [err, setErr] = useState(null)
   const [loading, setLoading] = useState(false)
   const [nonce, setNonce] = useState(0)
-  const [detached, setDetached] = useState(false) // popped out to its own window
+  const [detached, setDetached] = useState(false) // popped out to its own browser tab
   const panelRef = useRef(null)
   const popoutRef = useRef(null)
   const [height, setHeight] = useState(() => {
@@ -69,14 +69,16 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
     onClose && onClose()
   }
 
-  // open the ttyd terminal in its own window and collapse the embedded iframe
+  // open the ttyd terminal in a new browser tab (not a separate window) and collapse the embedded iframe
   const popOut = () => {
-    const w = window.open(url, `agentdeck-term-${key || myKey}`, 'popup,width=960,height=640')
+    // named (not _blank) so re-opening reuses the same tab; no window features = a tab, not a popup window
+    const w = window.open(url, `agentdeck-term-${key || myKey}`)
     if (w) {
       popoutRef.current = w
       setDetached(true)
+      try { w.focus() } catch {}
     } else {
-      // popup blocked — fall back to a new tab, keep it embedded
+      // blocked — fall back, keep it embedded
       window.open(url, '_blank', 'noopener')
     }
   }
@@ -102,9 +104,9 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
     return (
       <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex items-center gap-3">
         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse shrink-0" />
-        <span className="text-[12px] text-zinc-400 shrink-0">Terminal running in a separate window</span>
+        <span className="text-[12px] text-zinc-400 shrink-0">Terminal running in a separate tab</span>
         <span className="flex-1" />
-        <button onClick={() => { try { popoutRef.current?.focus?.() } catch {} }} className="text-[12px] text-sky-300/90 hover:text-sky-200">focus window</button>
+        <button onClick={() => { try { popoutRef.current?.focus?.() } catch {} }} className="text-[12px] text-sky-300/90 hover:text-sky-200">focus tab</button>
         <button onClick={() => setDetached(false)} className="text-[12px] text-zinc-400 hover:text-zinc-200">⧉ re-embed</button>
         <button onClick={close} className="text-[12px] text-zinc-500 hover:text-red-300" title="End this terminal">End ✕</button>
       </div>
@@ -124,7 +126,7 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
           </span>
         )}
         <OpenAppButtons onOpenTool={onOpenTool} className="mr-1" />
-        <button onClick={popOut} className="text-zinc-500 hover:text-sky-300" title="Open in a separate window and collapse this panel">⤢ pop out</button>
+        <button onClick={popOut} className="text-zinc-500 hover:text-sky-300" title="Open in a new browser tab and collapse this panel">⤢ pop out</button>
         <button onClick={() => setNonce((n) => n + 1)} className="text-zinc-500 hover:text-zinc-200">⟳ reload</button>
         <button onClick={close} className="text-zinc-500 hover:text-red-300 ml-1" title="End this terminal">close ✕</button>
       </div>
