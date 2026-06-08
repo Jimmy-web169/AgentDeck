@@ -127,6 +127,22 @@ changes needed).
 - For **Terminal mode**: [`ttyd`](https://github.com/tsl0922/ttyd) (`brew install
   ttyd` on macOS; your package manager on WSL/Linux).
 
+### Supported versions
+
+AgentDeck drives each agent through its **official SDK**, so the
+"continue a conversation" features track the versions below. Read-only
+monitoring is looser — it parses the on-disk session formats and tolerates other
+CLI versions.
+
+| Provider | SDK (bundled, in `package.json`) | Tested CLI |
+| --- | --- | --- |
+| **Claude Code** | `@anthropic-ai/claude-agent-sdk` `^0.3.161` | `claude` 2.1.x |
+| **OpenAI Codex** | `@openai/codex-sdk` `^0.137.0` | `codex` 0.137.0 |
+
+Newer CLI releases usually keep working. If a "continue" feature breaks after a
+CLI update, bump the matching SDK in `package.json` (`npm install
+@anthropic-ai/claude-agent-sdk@latest` / `@openai/codex-sdk@latest`).
+
 ## Quick start
 
 The quickest path uses the bundled `Makefile`:
