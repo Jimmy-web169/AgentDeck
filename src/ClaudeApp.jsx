@@ -234,7 +234,6 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     const t = setInterval(refreshTerminals, 4000)
     return () => clearInterval(t)
   }, [engine, refreshTerminals, appActive])
-  const runningTermKeys = new Set(terminals.map((t) => t.key))
 
   const activeKey = active && openSlug ? liveKeyOf({ root, slug: openSlug, id: active.id }) : null
   useEffect(() => void (activeKeyRef.current = activeKey), [activeKey])
@@ -248,6 +247,15 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const activeSessions = useActiveSessions(providers, { enabled: appActive })
   const liveCount = activeSessions.count
   const managerItems = toManagerItems(activeSessions)
+  // A target is "reattachable" if a ttyd is already running for it (in-memory
+  // pool) OR a detached tmux session is alive for it — the latter survives a
+  // server restart / browser close and is what the Live panel lists. Opening the
+  // panel re-attaches a ttyd to the existing tmux, so "Enter" actually shows the
+  // terminal instead of leaving the user on an "Open terminal" button.
+  const runningTermKeys = new Set([
+    ...terminals.map((t) => t.key),
+    ...activeSessions.tmux.map((t) => t.key).filter(Boolean),
+  ])
 
   // switch chat engine in-app (persists to localStorage; no server restart / .env edit)
   const switchEngine = (e) => {
@@ -262,7 +270,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   // switches provider + tells that app to open it in terminal mode (reattaches).
   const onManagerEnter = (it) => {
     setShowLive(false)
-    onOpenSession?.(it.provider, { root: it.root, slug: it.slug, id: it.id, kind: 'tmux', engine: 'terminal' })
+    onOpenSession?.(it.provider, { root: it.root, slug: it.slug, id: it.id, cwd: it.cwd, title: it.title, kind: 'tmux', engine: 'terminal' })
   }
   // End a terminal: kill its tmux session (its own provider, cross-provider).
   const onManagerClose = (it) => {
@@ -351,12 +359,29 @@ export default function App({ active: appActive = true, provider, onProvider, pr
       setRoot(pendingOpen.root)
       return
     }
-    // 2. open the project once the root matches
+    // 2. id-less terminal entry (a "new conversation"/"new project" terminal from
+    //    the Live panel): there is no saved session to select, so show its draft
+    //    and let TerminalPanel mount + reattach the running tmux. Rebuild the same
+    //    key postTerminal used — slug-keyed → `${root}|new|${slug}`, else cwd-keyed
+    //    → `${root}|new|${cwd}` — so it reattaches the SAME session, not a new one.
+    if (pendingOpen.engine === 'terminal' && !pendingOpen.id && (pendingOpen.slug || pendingOpen.cwd)) {
+      if (pendingOpen.slug && openSlug !== pendingOpen.slug) openProject(pendingOpen.slug)
+      setTermDraft(
+        pendingOpen.slug
+          ? { root: pendingOpen.root, slug: pendingOpen.slug, title: pendingOpen.title || 'New conversation' }
+          : { root: pendingOpen.root, cwd: pendingOpen.cwd, title: pendingOpen.title || 'New project' }
+      )
+      setTab('conversation')
+      consumedPendingRef.current = sig
+      onConsumedPending?.()
+      return
+    }
+    // 3. open the project once the root matches
     if (openSlug !== pendingOpen.slug) {
       openProject(pendingOpen.slug)
       return
     }
-    // 3. project is open — try to select the exact session, then consume
+    // 4. project is open — try to select the exact session, then consume
     if (pendingOpen.id) {
       const s = sessions.find((x) => x.id === pendingOpen.id)
       if (s) selectSession(s)

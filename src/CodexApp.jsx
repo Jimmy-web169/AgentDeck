@@ -198,9 +198,6 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     const t = setInterval(refreshTerminals, 4000)
     return () => clearInterval(t)
   }, [engine, refreshTerminals, appActive])
-  // server keys a resumed-session terminal as `${root}|${id}` (see postTerminal);
-  // TerminalPanel reattaches to a running one by key, so terminals survive navigation.
-  const runningTermKeys = new Set(terminals.map((t) => t.key))
 
   // ---- multi-session workspace ----
   const mkKey = (s) => `${s.root}|${s.id}`
@@ -239,6 +236,16 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const activeSessions = useActiveSessions(providers, { enabled: appActive })
   const liveCount = activeSessions.count
   const managerItems = toManagerItems(activeSessions)
+  // A target is "reattachable" if a ttyd is already running for it (in-memory
+  // pool) OR a detached tmux session is alive for it — the latter survives a
+  // server restart / browser close and is what the Live panel lists. The server
+  // keys a resumed terminal as `${root}|${id}`; opening the panel re-attaches a
+  // ttyd to the existing tmux, so "Enter" actually shows the terminal instead of
+  // leaving the user on an "Open terminal" button.
+  const runningTermKeys = new Set([
+    ...terminals.map((t) => t.key),
+    ...activeSessions.tmux.map((t) => t.key).filter(Boolean),
+  ])
 
   const switchEngine = (e) => {
     if (e === engine) return
@@ -251,7 +258,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   // Enter any item (possibly another provider's): hand off to the shell.
   const onManagerEnter = (it) => {
     setShowLive(false)
-    onOpenSession?.(it.provider, { root: it.root, slug: it.slug, id: it.id, kind: 'tmux', engine: 'terminal' })
+    onOpenSession?.(it.provider, { root: it.root, slug: it.slug, id: it.id, cwd: it.cwd, title: it.title, kind: 'tmux', engine: 'terminal' })
   }
   // End a terminal: kill its tmux session (its own provider, cross-provider).
   const onManagerClose = (it) => {
@@ -325,21 +332,38 @@ export default function App({ active: appActive = true, provider, onProvider, pr
       setRoot(pendingOpen.root)
       return
     }
-    // 2. open the project once the root matches
-    if (openSlug !== pendingOpen.slug) {
-      openProject(pendingOpen.slug)
+    // 2. id-less terminal entry (a "new conversation"/"new project" terminal from
+    //    the Live panel): there is no saved session to select, so show its draft
+    //    and let TerminalPanel mount + reattach the running tmux. Rebuild the same
+    //    key postTerminal used — slug-keyed → `${root}|new|${slug}`, else cwd-keyed
+    //    → `${root}|new|${cwd}` — so it reattaches the SAME session, not a new one.
+    if (pendingOpen.engine === 'terminal' && !pendingOpen.id && (pendingOpen.slug || pendingOpen.cwd)) {
+      if (pendingOpen.slug && openSlug !== pendingOpen.slug) openProject(pendingOpen.slug)
+      setTermDraft(
+        pendingOpen.slug
+          ? { root: pendingOpen.root, slug: pendingOpen.slug, title: pendingOpen.title || 'New conversation' }
+          : { root: pendingOpen.root, cwd: pendingOpen.cwd, title: pendingOpen.title || 'New project' }
+      )
+      setTab('conversation')
+      consumedPendingRef.current = sig
+      onConsumedPending?.()
       return
     }
-    // 3. project is open — try to select the exact session, then consume
+    // 3. open the target. Codex is id-addressed (apiAddr: 'id') — a live
+    //    terminal's meta carries no slug, so a slug-based openProject() would
+    //    never load the session list and the session could never be selected.
+    //    Open by id instead: it fetches the session, derives its project (cwd)
+    //    and loads the sidebar list. Fall back to the project view only when
+    //    there's no id (e.g. a slug-only "new conversation" entry).
     if (pendingOpen.id) {
-      const s = sessions.find((x) => x.id === pendingOpen.id)
-      if (s) selectSession(s)
-      else return // wait for sessions to load
+      if (!active || active.id !== pendingOpen.id) openSessionById(pendingOpen.id)
+    } else if (pendingOpen.slug && openSlug !== pendingOpen.slug) {
+      openProject(pendingOpen.slug)
     }
     consumedPendingRef.current = sig
     onConsumedPending?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [appActive, pendingOpen, root, openSlug, sessions])
+  }, [appActive, pendingOpen, root, openSlug, sessions, active])
 
   // ---- lazy tab data ----
   useEffect(() => {

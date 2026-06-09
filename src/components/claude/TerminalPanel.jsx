@@ -115,7 +115,7 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
 
   return (
     <div ref={panelRef} className="shrink-0 border-t border-zinc-800 flex flex-col" style={{ height }}>
-      <ResizeHandle targetRef={panelRef} onHeight={setHeight} min={160} />
+      <ResizeHandle targetRef={panelRef} onHeight={setHeight} min={160} max={1200} title="Drag to resize the terminal" />
       <div className="h-7 shrink-0 flex items-center gap-2 px-3 text-[11px] bg-ink-900/70 border-b border-zinc-800">
         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
         <span className="text-zinc-400">terminal · real claude TUI{isNew ? ' · new' : ''}</span>
