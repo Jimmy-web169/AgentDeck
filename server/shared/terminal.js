@@ -8,7 +8,7 @@ import crypto from 'node:crypto'
 // the tracked-root id, which is unique per home dir). Provider behavior is
 // supplied via `config`:
 //   { findBin(), title, envKey, resumeArgs(id) -> string[], checkOrigin: bool }
-// `checkOrigin` adds ttyd's -o flag (origin check) — providers opt in per their
+// `checkOrigin` adds ttyd's -O flag (origin check) — providers opt in per their
 // embedding needs, so neither provider's original behavior changes.
 //
 // When tmux is available the CLI runs inside a named tmux session rather than as
@@ -93,8 +93,11 @@ export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
   const port = pickPort()
   if (port == null) throw err(503, 'no free port for a terminal')
 
-  // ttyd [opts] <command> [args]; -W writable, -i localhost-only, optional -o origin check.
-  const ttydOpts = ['-p', String(port), '-i', '127.0.0.1', '-W', ...(config.checkOrigin ? ['-o'] : []), '-t', `titleFixed=${config.title}`]
+  // ttyd [opts] <command> [args]; -W writable, -i localhost-only, optional -O origin check.
+  // NB: -O is --check-origin; the lowercase -o is --once (accept one client, exit on
+  // disconnect) — using it broke "pop out", which disconnects the iframe to reconnect
+  // in a new tab, killing ttyd before the tab could attach.
+  const ttydOpts = ['-p', String(port), '-i', '127.0.0.1', '-W', ...(config.checkOrigin ? ['-O'] : []), '-t', `titleFixed=${config.title}`]
   const cliArgs = resumeId ? config.resumeArgs(resumeId) : []
 
   // Inside tmux when available (persistent, attachable); otherwise run the CLI
