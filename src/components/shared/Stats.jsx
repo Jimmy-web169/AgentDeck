@@ -84,12 +84,28 @@ function DrillRow({ name, cwd, count, countLabel, toolCalls, total, max, onClick
   )
 }
 
-export default function Stats({ stats, root, onOpenSession }) {
+export default function Stats({ stats, root, focus, onOpenSession }) {
   const [path, setPath] = useState({ slug: null, sid: null })
   const [sessionsBySlug, setSessionsBySlug] = useState({})
 
-  // reset the drill when the tracked folder (root) changes
-  useEffect(() => setPath({ slug: null, sid: null }), [stats?.root])
+  // Reset the drill when the tracked folder (root) changes — OR, when arrived via a
+  // Session → Stats deep link (`focus`), drill straight to that session (loading its
+  // project's session list if needed). A fresh `focus` object re-triggers this even
+  // when the target session is unchanged.
+  useEffect(() => {
+    if (!focus?.slug || !focus?.id) {
+      setPath({ slug: null, sid: null })
+      return
+    }
+    if (sessionsBySlug[focus.slug] === undefined) {
+      api
+        .sessions(root, focus.slug)
+        .then((d) => setSessionsBySlug((m) => ({ ...m, [focus.slug]: d.sessions })))
+        .catch(() => setSessionsBySlug((m) => ({ ...m, [focus.slug]: [] })))
+    }
+    setPath({ slug: focus.slug, sid: focus.id })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stats?.root, focus])
 
   if (!stats) return <div className="p-8 text-zinc-600">Loading stats…</div>
   const projects = stats.projects || []

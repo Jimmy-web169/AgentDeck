@@ -52,18 +52,40 @@ function Crumb({ children, onClick, last }) {
 
 const shortCwd = (p) => (p || '').split('/').filter(Boolean).slice(-2).join('/') || p || '(unknown)'
 
-export default function Stats({ root, stats, onOpenSession }) {
+export default function Stats({ root, stats, focus, onOpenSession }) {
   const [proj, setProj] = useState(null) // selected project rollup { slug, cwd, ... }
   const [sessions, setSessions] = useState(null) // per-session summaries for proj
   const [loadingSessions, setLoadingSessions] = useState(false)
   const [sess, setSess] = useState(null) // selected session summary
 
-  // reset drill-down if the root (folder) changes
+  // Reset drill-down on root/stats change — OR, when arrived via a Session → Stats
+  // deep link (`focus`), auto-drill straight to that session's stats. A fresh
+  // `focus` object re-triggers this even when the target session is unchanged.
   useEffect(() => {
+    if (!stats) return
+    if (focus?.slug && focus?.id) {
+      const p = (stats.projects || []).find((x) => x.slug === focus.slug)
+      if (p) {
+        setProj(p)
+        setSess(null)
+        setSessions(null)
+        setLoadingSessions(true)
+        api
+          .sessions(root, p.slug)
+          .then((d) => {
+            setSessions(d.sessions)
+            const s = d.sessions.find((x) => x.id === focus.id)
+            if (s) setSess(s)
+          })
+          .catch(() => setSessions([]))
+          .finally(() => setLoadingSessions(false))
+        return
+      }
+    }
     setProj(null)
     setSessions(null)
     setSess(null)
-  }, [root, stats])
+  }, [root, stats, focus])
 
   const openProject = (p) => {
     setProj(p)

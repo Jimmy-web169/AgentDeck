@@ -62,6 +62,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const [plugins, setPlugins] = useState(null)
   const [usage, setUsage] = useState(null)
   const [tab, setTab] = useState('conversation')
+  const [statsFocus, setStatsFocus] = useState(null) // {slug,id} deep-link into the Stats tab (Session → Stats); fresh object per click
   const [liveIds, setLiveIds] = useState(() => new Set())
   const [conn, setConn] = useState('connecting')
   const [lastEvent, setLastEvent] = useState(0)
@@ -133,6 +134,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     setSessionData(null)
     setSubagents(null)
     setStats(null)
+    setStatsFocus(null) // a stale focus would drill into a slug that isn't in the new folder
     setHistory(null)
     setPlugins(null)
   }, [root, loadProjects, appActive])
@@ -324,6 +326,16 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     stickBottom.current = true
     api.session(e.root, e.slug, e.id).then(setSessionData).catch(() => {})
   }, [loadSessions])
+
+  // Session → Stats: jump to this session's token stats (mirror of Stats' "Open
+  // session ↗"). A fresh focus object each call re-drills even to the same session
+  // after the user has navigated back up the Stats breadcrumb.
+  const viewSessionStats = () => {
+    if (!active || !openSlug) return
+    setMultiMode(false)
+    setStatsFocus({ slug: openSlug, id: active.id })
+    setTab('stats')
+  }
 
   // finish a cross-root jump once the root switch has cleared state
   useEffect(() => {
@@ -576,6 +588,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
         activeGlobal={!multiMode && isGlobal ? tab : null}
         onGlobalView={(k) => {
           setMultiMode(false) // a folder view leaves the compare workspace
+          setStatsFocus(null) // a sidebar Stats click starts at the folder level
           setTab(k)
         }}
         onAddSession={addToWorkspace}
@@ -616,7 +629,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
               )}
             </div>
           ) : (
-            <div className="flex gap-1">
+            <div className="flex gap-1 items-center">
               {SESSION_TABS.map((t) => (
                 <button
                   key={t.k}
@@ -627,6 +640,15 @@ export default function App({ active: appActive = true, provider, onProvider, pr
                   {t.label}
                 </button>
               ))}
+              {active && (
+                <button
+                  onClick={viewSessionStats}
+                  title="View this session's token stats"
+                  className="ml-1 text-[13px] px-3 py-1.5 rounded-md text-sky-400/90 hover:text-sky-300 hover:bg-ink-700/40"
+                >
+                  Stats →
+                </button>
+              )}
             </div>
           )}
           <div className="flex-1" />
@@ -735,7 +757,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
             {tab === 'subagents' && <SubagentsView data={subagents} />}
             {tab === 'raw' && raw && <RawView records={raw.records} />}
             {tab === 'memory' && <MemoryView root={root} projects={projects} />}
-            {tab === 'stats' && <Stats stats={stats} root={root} onOpenSession={(slug, s) => jumpToSession({ root, slug, id: s.id, title: s.title })} />}
+            {tab === 'stats' && <Stats stats={stats} root={root} focus={statsFocus} onOpenSession={(slug, s) => jumpToSession({ root, slug, id: s.id, title: s.title })} />}
             {tab === 'resources' && root && <Resources key={`res-${root}`} root={root} />}
             {tab === 'config' && root && openSlug && <Resources key={`cfg-${root}-${openSlug}`} root={root} slug={openSlug} />}
             {tab === 'history' && <HistoryView data={history} />}

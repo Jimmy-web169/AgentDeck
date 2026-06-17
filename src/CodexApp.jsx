@@ -69,6 +69,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const [history, setHistory] = useState(null)
   const [usage, setUsage] = useState(null)
   const [tab, setTab] = useState('conversation')
+  const [statsFocus, setStatsFocus] = useState(null) // {slug,id} deep-link into the Stats tab (Session → Stats); fresh object per click
   const [liveIds, setLiveIds] = useState(() => new Set())
   const [conn, setConn] = useState('connecting')
   const [lastEvent, setLastEvent] = useState(0)
@@ -138,6 +139,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     setActive(null)
     setSessionData(null)
     setStats(null)
+    setStatsFocus(null) // a stale focus would drill into a slug that isn't in the new folder
     setHistory(null)
   }, [root, loadProjects, appActive])
 
@@ -313,6 +315,18 @@ export default function App({ active: appActive = true, provider, onProvider, pr
       })
       .catch((e) => setError(e.message))
   }, [loadSessions])
+
+  // Session → Stats: jump to this session's token stats (mirror of Stats' "Open
+  // conversation →"). A fresh focus object each call re-drills even to the same
+  // session after the user has navigated back up the Stats breadcrumb.
+  const viewSessionStats = () => {
+    if (!active) return
+    const slug = openSlug || sessionData?.slug
+    if (!slug) return
+    setMultiMode(false)
+    setStatsFocus({ slug, id: active.id })
+    setTab('stats')
+  }
 
   // ---- consume a cross-provider Dashboard "open this" request ----
   // Drives root → project → session in steps as the async loads settle; guards
@@ -537,7 +551,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
             onManageRoots={() => setShowRoots(true)}
             globalViews={GLOBAL_VIEWS}
             activeGlobal={isGlobal ? tab : null}
-            onGlobalView={(k) => { setMultiMode(false); setTab(k) }}
+            onGlobalView={(k) => { setMultiMode(false); setStatsFocus(null); setTab(k) }}
             onNewConversation={startNewConversation}
             onNewProject={startNewProject}
           />
@@ -568,12 +582,17 @@ export default function App({ active: appActive = true, provider, onProvider, pr
               {active && <button onClick={() => setTab('conversation')} className="ml-2 text-[12px] text-sky-400 hover:text-sky-300">← back to session</button>}
             </div>
           ) : (
-            <div className="flex gap-1">
+            <div className="flex gap-1 items-center">
               {SESSION_TABS.map((t) => (
                 <button key={t.k} onClick={() => setTab(t.k)} disabled={disabledTab(t)} className={`text-[13px] px-3 py-1.5 rounded-md ${tab === t.k ? 'bg-ink-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'} disabled:opacity-30 disabled:cursor-not-allowed`}>
                   {t.label}
                 </button>
               ))}
+              {active && (
+                <button onClick={viewSessionStats} disabled={disabledTab({ need: 'session' })} title="View this session's token stats" className="ml-1 text-[13px] px-3 py-1.5 rounded-md text-sky-400/90 hover:text-sky-300 hover:bg-ink-700/40 disabled:opacity-30 disabled:cursor-not-allowed">
+                  Stats →
+                </button>
+              )}
             </div>
           )}
           <div className="flex-1" />
@@ -692,7 +711,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
           <div className="flex-1 overflow-y-auto">
             {tab === 'subagents' && active && <SubagentsView root={root} parent={active} onOpenSession={openSessionById} />}
             {tab === 'raw' && raw && <RawView records={raw.records} typeOf={CODEX_RAW_TYPE} />}
-            {tab === 'stats' && <Stats root={root} stats={stats} onOpenSession={openSessionById} />}
+            {tab === 'stats' && <Stats root={root} stats={stats} focus={statsFocus} onOpenSession={openSessionById} />}
             {tab === 'history' && <HistoryView data={history} onOpenSession={openSessionById} />}
             {tab === 'memory' && <MemoryView root={root} />}
             {tab === 'plugins' && <PluginsView root={root} />}
