@@ -20,6 +20,7 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
   const [detached, setDetached] = useState(false) // popped out to its own browser tab
   const wrapRef = useRef(null)
   const popoutRef = useRef(null)
+  const autoKeyRef = useRef(null) // target key we've already auto-decided — attach once, never reopen after the user closes/pops out
   const [h, setH] = useState(() => {
     const v = Number(localStorage.getItem('cxm_termH'))
     if (v >= 160 && v <= 1200) return v
@@ -32,6 +33,7 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
 
   const start = () => {
     if (loading) return
+    autoKeyRef.current = myKey // mark this target handled (manual or auto) so the auto-reattach effect won't double-fire or reopen
     setLoading(true)
     setErr(null)
     const body = { root, title }
@@ -50,16 +52,32 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
       .finally(() => setLoading(false))
   }
 
-  // on target change: reset; auto-reattach if a terminal is already running for it
+  // on target change: reset, then decide. If runningKeys already knows this
+  // target is live, reattach now; otherwise the effect below catches it once the
+  // live list finishes loading.
   useEffect(() => {
     setOpen(false)
     setUrl(null)
     setKey(null)
     setErr(null)
     setDetached(false)
+    autoKeyRef.current = null
     if (runningKeys && runningKeys.has(myKey)) start()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [root, slug, cwd, id])
+
+  // Late reattach: the live-tmux list (runningKeys) loads asynchronously, so
+  // entering a session cold from the project list mounts BEFORE it's known —
+  // unlike the Live panel, which has it preloaded. Re-check when it arrives, but
+  // only once per target (autoKeyRef) and only while nothing is open yet, so it
+  // never reopens after the user closed or popped the terminal out. This is what
+  // keeps the same session from being opened as a second terminal.
+  const isLive = !!(runningKeys && runningKeys.has(myKey))
+  useEffect(() => {
+    if (autoKeyRef.current === myKey || open || url || loading || detached) return
+    if (isLive) start()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLive])
 
   // explicit end — kills the server-side ttyd
   const stop = () => {
