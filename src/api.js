@@ -60,6 +60,11 @@ export const api = {
   subagent: (root, slug, session, run, agent) => get('subagent', run ? { root, slug, session, run, agent } : { root, slug, session, agent }),
   // claude: (root,slug) · codex: (root)
   memory: (root, slug) => get('memory', slug !== undefined ? { root, slug } : { root }),
+  // claude-only: move a session (transcript + sub-agent sidecar) to the OS trash
+  deleteSession: (root, slug, id) => req('DELETE', 'session', { params: { root, slug, id } }),
+  // claude-only: write / trash a per-project memory file
+  saveMemory: (root, slug, name, content) => req('POST', 'memory', { body: { root, slug, name, content } }),
+  deleteMemory: (root, slug, name) => req('DELETE', 'memory', { params: { root, slug, name } }),
 
   // ---- resources (signatures differ by provider) ----
   resources: (root, a, b) => {

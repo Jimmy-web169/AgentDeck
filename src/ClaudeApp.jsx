@@ -171,6 +171,26 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     api.session(root, openSlug, s.id).then((d) => setSessionData(d)).catch((e) => setError(e.message))
   }
 
+  // move a session to the OS trash (recoverable), then clear it everywhere it
+  // might be open — the active pane, and the multi-session workspace
+  const removeSession = async (s) => {
+    try {
+      await api.deleteSession(root, openSlug, s.id)
+    } catch (e) {
+      setError(e.message)
+      return
+    }
+    if (activeRef.current?.id === s.id) {
+      setActive(null)
+      setSessionData(null)
+      setSubagents(null)
+      setRaw(null)
+    }
+    setOpenSessions((prev) => prev.filter((x) => !(x.root === root && x.slug === openSlug && x.id === s.id)))
+    loadSessions(root, openSlug)
+    loadProjects(root)
+  }
+
   // add a session to the multi-session workspace (captures the current root)
   const addToWorkspace = (s) => {
     const entry = { root, slug: openSlug, id: s.id, title: s.title }
@@ -602,6 +622,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
           setTab(k)
         }}
         onAddSession={addToWorkspace}
+        onDeleteSession={removeSession}
         onNewConversation={startNewConversation}
         onNewProject={startNewProject}
           />

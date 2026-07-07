@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { ActivityIcon } from './icons.jsx'
@@ -33,6 +33,7 @@ export default function Sidebar({
   activeGlobal,
   onGlobalView,
   onAddSession,
+  onDeleteSession,
   onNewConversation,
   onNewProject,
   providers,
@@ -46,6 +47,9 @@ export default function Sidebar({
   const [filter, setFilter] = useState('')
   const [pickerOpen, setPickerOpen] = useState(false)
   const [picking, setPicking] = useState(false)
+  const [confirmDelId, setConfirmDelId] = useState(null) // session id pending delete confirmation
+  // a pending confirm shouldn't survive navigating away and back
+  useEffect(() => setConfirmDelId(null), [root, openSlug])
 
   // try the OS-native folder chooser first; fall back to the in-browser picker
   const newProjectFlow = async () => {
@@ -182,6 +186,9 @@ export default function Sidebar({
                     sessions.map((s) => {
                       const active = activeSession?.id === s.id
                       const live = liveIds?.has(s.id)
+                      // deleting a session something is still writing to leaves a truncated
+                      // transcript behind — surface that in the confirm text
+                      const recent = live || (s.lastTs && Date.now() - new Date(s.lastTs).getTime() < 5 * 60 * 1000)
                       return (
                         <div
                           key={s.id}
@@ -200,13 +207,39 @@ export default function Sidebar({
                               {s.hasSubagents && <span className="text-violet-400">· ⚇ subs</span>}
                             </div>
                           </button>
-                          <button
-                            onClick={() => onAddSession?.(s)}
-                            title="Open in multi-session (compare)"
-                            className="px-2 text-zinc-600 hover:text-sky-300 opacity-0 group-hover:opacity-100 shrink-0"
-                          >
-                            ⊞
-                          </button>
+                          {onDeleteSession && confirmDelId === s.id ? (
+                            <span className="flex items-center gap-1 pr-1.5 shrink-0">
+                              <span className="text-[10px] text-red-300">{recent ? 'active! trash?' : 'trash?'}</span>
+                              <button
+                                onClick={() => { setConfirmDelId(null); onDeleteSession(s) }}
+                                className="text-[11px] px-1.5 py-0.5 rounded bg-red-500/30 text-red-200"
+                              >
+                                yes
+                              </button>
+                              <button onClick={() => setConfirmDelId(null)} className="text-[11px] px-1.5 py-0.5 rounded bg-ink-600 text-zinc-300">
+                                no
+                              </button>
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => onAddSession?.(s)}
+                                title="Open in multi-session (compare)"
+                                className="px-2 text-zinc-600 hover:text-sky-300 opacity-0 group-hover:opacity-100 shrink-0"
+                              >
+                                ⊞
+                              </button>
+                              {onDeleteSession && (
+                                <button
+                                  onClick={() => setConfirmDelId(s.id)}
+                                  title="Move session to the OS trash (recoverable)"
+                                  className="pr-2 text-zinc-600 hover:text-red-300 opacity-0 group-hover:opacity-100 shrink-0"
+                                >
+                                  🗑
+                                </button>
+                              )}
+                            </>
+                          )}
                         </div>
                       )
                     })}
