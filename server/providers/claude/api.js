@@ -15,6 +15,7 @@ import {
 import { readRecords, buildTimeline, summarize } from './parser.js'
 import { discoverRuns, discoverPlainAgents } from './runs.js'
 import { inventory, readResource, writeResource, deleteResource } from './resources.js'
+import { safeTrash } from '../../shared/trash.js'
 import { parseSkillsAdd, runSkillsAdd } from '../../shared/skills.js'
 import { SKILL_CONFIG } from './skills.js'
 import { openTool, pickFolderNative } from '../../shared/launch.js'
@@ -145,6 +146,24 @@ function getRaw(q) {
   return { root: root.id, slug, id, records: readRecords(findSessionFile(root.dir, slug, id)) }
 }
 
+// Move a session to the OS trash (recoverable): its .jsonl transcript plus its
+// sidecar dir (subagents / workflow runs), which lives next to the .jsonl under
+// the same id. The id is matched against the real directory listing (via
+// findSessionFile), so it can't address anything but an existing session.
+// Sidecar first: if that fails the session stays listed and a retry covers both.
+async function deleteSession(q) {
+  const root = resolveRoot(q.get('root'))
+  const slug = q.get('slug')
+  const id = q.get('id')
+  if (!slug || !id) throw httpErr(400, 'missing slug/id')
+  const file = findSessionFile(root.dir, slug, id)
+  const sideDir = path.join(root.dir, 'projects', slug, id)
+  assertInside(root.dir, sideDir)
+  if (fs.existsSync(sideDir)) await safeTrash(sideDir)
+  await safeTrash(file)
+  return { root: root.id, slug, id, trashed: true }
+}
+
 function getSubagents(q) {
   const root = resolveRoot(q.get('root'))
   const slug = q.get('slug')
@@ -271,6 +290,48 @@ function getMemory(q) {
   } catch {}
   files.sort((a, b) => a.name.localeCompare(b.name))
   return { root: root.id, slug, index, files }
+}
+
+// Memory files are flat .md files under projects/<slug>/memory (getMemory reads
+// them non-recursively), so names allow no separators at all — stricter than
+// resources' safeName, which permits '/' for nested rules.
+function checkMemoryName(name) {
+  if (!name || name.includes('..') || name.includes('/') || name.includes('\\') || name.startsWith('.')) {
+    throw httpErr(400, `Invalid name: ${name}`)
+  }
+  if (!name.endsWith('.md')) throw httpErr(400, 'Name must end with .md')
+  return name
+}
+
+function memoryFile(root, slug, name) {
+  const file = path.join(root.dir, 'projects', slug, 'memory', name)
+  assertInside(root.dir, file) // also guards slug traversal — the joined path must stay inside the root
+  return file
+}
+
+function postMemory(_q, body) {
+  if (!body?.root || !body?.slug || !body?.name) throw httpErr(400, 'missing root/slug/name')
+  // JSON bodies can carry non-strings — reject early instead of 500ing deeper down
+  if (typeof body.slug !== 'string' || typeof body.name !== 'string') throw httpErr(400, 'slug/name must be strings')
+  if (body.content != null && typeof body.content !== 'string') throw httpErr(400, 'content must be a string')
+  const root = resolveRoot(body.root)
+  checkMemoryName(body.name)
+  const file = memoryFile(root, body.slug, body.name)
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, body.content ?? '')
+  return { root: root.id, slug: body.slug, name: body.name, bytes: (body.content ?? '').length }
+}
+
+async function deleteMemory(q) {
+  const root = resolveRoot(q.get('root'))
+  const slug = q.get('slug')
+  const name = q.get('name')
+  if (!slug || !name) throw httpErr(400, 'missing slug/name')
+  checkMemoryName(name)
+  const file = memoryFile(root, slug, name)
+  if (!fs.existsSync(file)) throw httpErr(404, 'memory file not found')
+  await safeTrash(file)
+  return { root: root.id, slug, name, trashed: true }
 }
 
 // installed_plugins.json (v2) is { version, plugins: { "<name>@<marketplace>":
@@ -578,12 +639,15 @@ const ROUTES = {
   'GET /api/projects': getProjects,
   'GET /api/sessions': getSessions,
   'GET /api/session': getSession,
+  'DELETE /api/session': deleteSession,
   'GET /api/raw': getRaw,
   'GET /api/subagents': getSubagents,
   'GET /api/subagent': getSubagent,
   'GET /api/stats': getStats,
   'GET /api/history': getHistory,
   'GET /api/memory': getMemory,
+  'POST /api/memory': postMemory,
+  'DELETE /api/memory': deleteMemory,
   'GET /api/plugins': getPlugins,
   'GET /api/usage': getUsage,
   'GET /api/version': getVersion,
