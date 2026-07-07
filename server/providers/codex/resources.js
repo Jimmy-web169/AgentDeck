@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import trash from 'trash'
+import { safeTrash } from '../../shared/trash.js'
 
 // Inventory the configurable Codex resources at a given scope. Codex resolves
 // most of these at BOTH user scope (the Codex home, e.g. ~/.codex) and project
@@ -473,19 +473,19 @@ export async function deleteResource(scope, base, kind, rawName) {
     case 'skill': {
       const target = findSkillDir(skillDirsFor(scope, base), name)
       if (!target) throw httpish(404, `skill "${name}" not found (system skills can't be deleted here)`)
-      await trash(target)
+      await safeTrash(target)
       return { kind, name, trashed: true }
     }
     case 'agent': {
       const file = findAgentFile(p.agentsDir, name)
       if (!file) throw httpish(404, `agent "${name}" not found`)
-      await trash(file)
+      await safeTrash(file)
       return { kind, name, trashed: true }
     }
     case 'rule': {
       const file = findRuleFile(path.join(p.codexDir, 'rules'), name)
       if (!file) throw httpish(404, `rule "${name}" not found`)
-      await trash(file)
+      await safeTrash(file)
       return { kind, name, trashed: true }
     }
     case 'mcp': {

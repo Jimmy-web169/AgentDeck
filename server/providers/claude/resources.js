@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import trash from 'trash'
+import { safeTrash } from '../../shared/trash.js'
 import { assertInside } from './paths.js'
 
 function err(status, message) {
@@ -206,7 +206,7 @@ export async function deleteResource(base, kind, name, _stamp, opts) {
   const { file, dir } = resolveTarget(base, kind, name, opts)
   const src = spec.kind === 'file' ? file : dir
   if (!fs.existsSync(src)) throw err(404, 'Resource not found')
-  await trash(src)
+  await safeTrash(src)
   return { kind, name, trashed: true }
 }
 
