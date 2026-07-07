@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
-import { ActivityIcon } from './icons.jsx'
+import { ActivityIcon, TrashIcon } from './icons.jsx'
 import PathPicker from './PathPicker.jsx'
 
 function shortPath(cwd, slug) {
@@ -233,9 +233,9 @@ export default function Sidebar({
                                 <button
                                   onClick={() => setConfirmDelId(s.id)}
                                   title="Move session to the OS trash (recoverable)"
-                                  className="pr-2 text-zinc-600 hover:text-red-300 opacity-0 group-hover:opacity-100 shrink-0"
+                                  className="px-2 flex items-center justify-center text-zinc-600 hover:text-sky-300 opacity-0 group-hover:opacity-100 shrink-0"
                                 >
-                                  🗑
+                                  <TrashIcon className="w-4 h-4" />
                                 </button>
                               )}
                             </>
