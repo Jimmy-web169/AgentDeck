@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api.js'
 import ResizeHandle from '../shared/ResizeHandle.jsx'
 import OpenAppButtons from '../shared/OpenAppButtons.jsx'
+import { getTermView, setTermView } from '../../lib/termView.js'
 
 // Terminal chat mode: embeds the real `claude` TUI (served by ttyd) below the
 // conversation. props: continue an existing session ({root,slug,id}) or start a
@@ -18,7 +19,7 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
   const [err, setErr] = useState(null)
   const [loading, setLoading] = useState(false)
   const [nonce, setNonce] = useState(0)
-  const [detached, setDetached] = useState(false) // popped out to its own browser tab
+  const [view, setView] = useState('embedded') // 'embedded' | 'hidden' | 'popped' — persisted per key, survives navigation
   const panelRef = useRef(null)
   const popoutRef = useRef(null)
   const autoKeyRef = useRef(null) // target key we've already auto-decided — attach once, never reopen after the user closes/pops out
@@ -57,7 +58,7 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
     setUrl(null)
     setKey(null)
     setErr(null)
-    setDetached(false)
+    setView(getTermView(myKey) || 'embedded')
     autoKeyRef.current = null
     if (runningKeys && runningKeys.has(myKey)) start()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -71,7 +72,9 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
   // keeps the same session from being opened as a second terminal.
   const isLive = !!(runningKeys && runningKeys.has(myKey))
   useEffect(() => {
-    if (autoKeyRef.current === myKey || open || url || loading || detached) return
+    // reattach even when hidden/popped so we hold a fresh url for show/focus; the
+    // view state (not this effect) decides whether the iframe is actually rendered.
+    if (autoKeyRef.current === myKey || open || url || loading) return
     if (isLive) start()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLive])
@@ -79,13 +82,18 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
   const close = () => {
     if (key) api.terminalStop(key).catch(() => {})
     try { popoutRef.current?.close?.() } catch {}
+    setTermView(myKey, null)
     setOpen(false)
     setUrl(null)
     setKey(null)
-    setDetached(false)
+    setView('embedded')
     onChange && onChange()
     onClose && onClose()
   }
+
+  // hide = collapse the panel but keep tmux + ttyd alive (NOT terminalStop)
+  const hide = () => { setTermView(key || myKey, 'hidden'); setView('hidden') }
+  const reEmbed = () => { setTermView(key || myKey, null); setView('embedded') }
 
   // open the ttyd terminal in a new browser tab (not a separate window) and collapse the embedded iframe
   const popOut = () => {
@@ -93,7 +101,8 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
     const w = window.open(url, `agentdeck-term-${key || myKey}`)
     if (w) {
       popoutRef.current = w
-      setDetached(true)
+      setTermView(key || myKey, 'popped')
+      setView('popped')
       try { w.focus() } catch {}
     } else {
       // blocked — fall back, keep it embedded
@@ -118,14 +127,28 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
   }
 
   // popped out: collapse to a slim bar so the monitoring page stays clean
-  if (detached) {
+  if (view === 'popped') {
     return (
       <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex items-center gap-3">
         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse shrink-0" />
         <span className="text-[12px] text-zinc-400 shrink-0">Terminal running in a separate tab</span>
         <span className="flex-1" />
-        <button onClick={() => { try { popoutRef.current?.focus?.() } catch {} }} className="text-[12px] text-sky-300/90 hover:text-sky-200">focus tab</button>
-        <button onClick={() => setDetached(false)} className="text-[12px] text-zinc-400 hover:text-zinc-200">⧉ re-embed</button>
+        <button onClick={() => { try { const w = window.open(url, `agentdeck-term-${key || myKey}`); if (w) { popoutRef.current = w; w.focus() } } catch {} }} className="text-[12px] text-sky-300/90 hover:text-sky-200">focus tab</button>
+        <button onClick={reEmbed} className="text-[12px] text-zinc-400 hover:text-zinc-200">⧉ re-embed</button>
+        <button onClick={close} className="text-[12px] text-zinc-500 hover:text-red-300" title="End this terminal">End ✕</button>
+      </div>
+    )
+  }
+
+  // hidden: collapsed but tmux + ttyd kept running — bring it back with "show"
+  if (view === 'hidden') {
+    return (
+      <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex items-center gap-3">
+        <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 shrink-0" />
+        <span className="text-[12px] text-zinc-400 shrink-0">Terminal hidden · tmux still running</span>
+        <span className="flex-1" />
+        <button onClick={reEmbed} className="text-[12px] text-sky-300/90 hover:text-sky-200">▸ show</button>
+        <button onClick={popOut} className="text-[12px] text-zinc-400 hover:text-zinc-200">⤢ pop out</button>
         <button onClick={close} className="text-[12px] text-zinc-500 hover:text-red-300" title="End this terminal">End ✕</button>
       </div>
     )
@@ -146,6 +169,7 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
         <OpenAppButtons onOpenTool={onOpenTool} className="mr-1" />
         <button onClick={popOut} className="text-zinc-500 hover:text-sky-300" title="Open in a new browser tab and collapse this panel">⤢ pop out</button>
         <button onClick={() => setNonce((n) => n + 1)} className="text-zinc-500 hover:text-zinc-200">⟳ reload</button>
+        <button onClick={hide} className="text-zinc-500 hover:text-zinc-200 ml-1" title="Hide this panel but keep the session running">▾ hide</button>
         <button onClick={close} className="text-zinc-500 hover:text-red-300 ml-1" title="End this terminal">close ✕</button>
       </div>
       <iframe key={nonce} src={url} title="claude terminal" className="flex-1 w-full border-0" style={{ background: '#000' }} />

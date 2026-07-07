@@ -237,6 +237,16 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     return () => clearInterval(t)
   }, [engine, refreshTerminals, appActive])
 
+  // Fallback poll: keep the conversation you're viewing fresh even if a file-watch
+  // event is missed or the CLI buffers its writes to disk. SSE stays the fast path;
+  // this only guarantees the open transcript never goes stale. refetchActive already
+  // no-ops for live-SDK chats (the store owns those) and when nothing is open.
+  useEffect(() => {
+    if (!appActive || !active) return
+    const t = setInterval(refetchActive, 3000)
+    return () => clearInterval(t)
+  }, [appActive, active, refetchActive])
+
   const activeKey = active && openSlug ? liveKeyOf({ root, slug: openSlug, id: active.id }) : null
   useEffect(() => void (activeKeyRef.current = activeKey), [activeKey])
   const activeSlice = activeKey ? live.sessions[activeKey] : null
@@ -602,7 +612,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
       )}
 
       <main className="flex-1 flex flex-col min-w-0">
-        <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-zinc-800 bg-ink-900/70">
+        <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-zinc-800 bg-ink-900/70 overflow-x-auto whitespace-nowrap [&>*]:shrink-0">
           <button onClick={() => setCollapsed((c) => !c)} title={`${collapsed ? 'Show' : 'Hide'} sidebar  (⌘/Ctrl+B)`} className="text-zinc-500 hover:text-zinc-200 text-[15px] leading-none px-1 shrink-0">
             {collapsed ? '»' : '«'}
           </button>
