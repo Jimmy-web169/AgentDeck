@@ -55,6 +55,32 @@ export function findOnPath(names, extra = []) {
   )
 }
 
+// npm global installs on Windows expose only .cmd/.ps1 shims, and Node's spawn
+// refuses .cmd/.bat without shell:true (CVE-2024-27980 hardening) — SDKs that
+// spawn the resolved path directly throw EINVAL. Dig the real vendored .exe out
+// of the npm package behind the shim. Breadth-first with a depth cap: the vendor
+// layout moves between package versions, so a fixed path would rot.
+export function resolveVendoredExe(bin, pkgName, exeName) {
+  if (!IS_WIN || !bin || !/\.(cmd|bat|ps1)$/i.test(bin)) return bin
+  const pkgDir = path.join(path.dirname(bin), 'node_modules', ...pkgName.split('/'))
+  const queue = [[pkgDir, 0]]
+  while (queue.length) {
+    const [dir, depth] = queue.shift()
+    let entries
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const e of entries) {
+      const p = path.join(dir, e.name)
+      if (e.isFile() && e.name.toLowerCase() === exeName) return p
+      if (e.isDirectory() && depth < 6) queue.push([p, depth + 1])
+    }
+  }
+  return bin // nothing vendored — hand back the shim so the caller's error surfaces
+}
+
 let ttydBin
 const findTtyd = () => (ttydBin !== undefined ? ttydBin : (ttydBin = findOnPath(['ttyd'], ['/opt/homebrew/bin/ttyd', '/usr/local/bin/ttyd'])))
 

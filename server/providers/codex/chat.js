@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { resolveRoot, cwdForId, isSessionId } from './paths.js'
-import { findOnPath } from '../../shared/terminal.js'
+import { findOnPath, resolveVendoredExe } from '../../shared/terminal.js'
 
 const MAX = 6 // concurrent live chats (single view + a few panes, with headroom)
 let active = 0
@@ -21,12 +21,17 @@ const MODES = {
 let codexBin
 function findCodex() {
   if (codexBin !== undefined) return codexBin
-  // findOnPath tries Windows extensions (.exe/.cmd/.bat) — a plain `codex` never matches on win32
-  codexBin = findOnPath(['codex'], [
-    path.join(os.homedir(), '.local/bin/codex'),
-    '/opt/homebrew/bin/codex',
-    '/usr/local/bin/codex',
-  ])
+  // findOnPath tries Windows extensions (.exe/.cmd/.bat) — a plain `codex` never matches on win32.
+  // An npm .cmd shim can't be spawned by the SDK (EINVAL), so swap it for the vendored exe.
+  codexBin = resolveVendoredExe(
+    findOnPath(['codex'], [
+      path.join(os.homedir(), '.local/bin/codex'),
+      '/opt/homebrew/bin/codex',
+      '/usr/local/bin/codex',
+    ]),
+    '@openai/codex',
+    'codex.exe'
+  )
   return codexBin
 }
 
