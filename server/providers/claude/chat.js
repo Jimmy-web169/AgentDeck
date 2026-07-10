@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { resolveRoot, sessionFiles } from './paths.js'
+import { findOnPath } from '../../shared/terminal.js'
 
 const MAX = 6 // concurrent live chats (single view + up to 3 multi-session panes, with headroom)
 let active = 0
@@ -15,17 +16,12 @@ const PERM_MODES = { plan: 'plan', acceptEdits: 'acceptEdits', default: 'default
 let claudeBin
 function findClaude() {
   if (claudeBin !== undefined) return claudeBin
-  const c = []
-  for (const d of (process.env.PATH || '').split(path.delimiter)) if (d) c.push(path.join(d, 'claude'))
-  c.push(path.join(os.homedir(), '.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude')
-  claudeBin = c.find((p) => {
-    try {
-      fs.accessSync(p, fs.constants.X_OK)
-      return true
-    } catch {
-      return false
-    }
-  }) || null
+  // findOnPath tries Windows extensions (.exe/.cmd/.bat) — a plain `claude` never matches on win32
+  claudeBin = findOnPath(['claude'], [
+    path.join(os.homedir(), '.local/bin/claude'),
+    '/opt/homebrew/bin/claude',
+    '/usr/local/bin/claude',
+  ])
   return claudeBin
 }
 
