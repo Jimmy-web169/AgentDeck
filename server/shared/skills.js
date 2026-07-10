@@ -1,4 +1,6 @@
 import { spawn } from 'node:child_process'
+import fs from 'node:fs'
+import path from 'node:path'
 
 // Skill import is delegated to the official `skills` CLI (vercel-labs/skills) —
 // the same tool you'd run as `npx skills add <ref>`. We don't reimplement GitHub
@@ -99,6 +101,17 @@ function cleanOutput(s) {
     .trim()
 }
 
+// On Windows `npx` is npx.cmd, which Node refuses to spawn directly
+// (CVE-2024-27980), and wrapping in cmd.exe would reopen quoting/injection
+// questions for URL refs. npx.cmd is just `node .../npm/bin/npx-cli.js`, so run
+// that script directly with our own node — argv stays a verbatim array.
+function npxSpawnSpec() {
+  if (process.platform !== 'win32') return { bin: 'npx', prefix: [] }
+  const cli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npx-cli.js')
+  if (fs.existsSync(cli)) return { bin: process.execPath, prefix: [cli] }
+  return { bin: 'npx.cmd', prefix: [] } // last resort for unusual node layouts
+}
+
 // Run `npx skills add ...` in cwd. Buffers stdout+stderr, resolves on exit.
 // stdin closed (a stray prompt fails fast), hard-timeout backstop.
 export function runSkillsAdd({ cwd, args, global, configDir, config }) {
@@ -114,7 +127,8 @@ export function runSkillsAdd({ cwd, args, global, configDir, config }) {
   return new Promise((resolve) => {
     let proc
     try {
-      proc = spawn('npx', argv, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
+      const { bin, prefix } = npxSpawnSpec()
+      proc = spawn(bin, [...prefix, ...argv], { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] })
     } catch (e) {
       return resolve({ ok: false, command, code: null, output: `failed to start npx: ${e.message}` })
     }

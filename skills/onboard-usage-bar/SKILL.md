@@ -1,6 +1,6 @@
 ---
 name: onboard-usage-bar
-description: Enable AgentDeck's usage bar (5-hour / weekly rate limits + context%) by bridging Claude Code's status line. Use when the user wants AgentDeck to show rate-limit or context-usage meters, or asks to "enable / set up / onboard the usage bar". It wraps the user's EXISTING status line without modifying it, and edits settings.json only after explicit confirmation.
+description: Enable AgentDeck's usage bar (5-hour / weekly rate limits + context%) by bridging Claude Code's status line. Use when the user wants AgentDeck to show rate-limit or context-usage meters, or asks to "enable / set up / onboard the usage bar". It wraps the user's EXISTING status line without modifying it, and edits settings.json only after explicit confirmation. Works on macOS/Linux/WSL (bash wrapper) and native Windows (Node wrapper).
 ---
 
 # Onboard the AgentDeck usage bar
@@ -17,34 +17,47 @@ unchanged.
 
 - **Confirm before editing `settings.json`** — it's the user's config. Show what
   you'll change and why, then proceed only on approval.
-- Requires **`jq`** (used by the wrapper and for safe JSON edits). If missing,
-  stop and tell the user to install it.
-- If AgentDeck tracks **multiple roots** (config dirs), do this for each one
-  the user wants the bar on. Ask which.
+- **Default to `~/.claude` only.** If AgentDeck tracks additional roots (config
+  dirs), list them and **ask the user which extra ones to onboard** — never
+  onboard extra roots silently. Repeat the steps for each dir they pick.
+- Pick the wrapper per OS: **macOS/Linux/WSL → bash wrapper** (requires `jq`;
+  if missing, stop and tell the user to install it). **Native Windows → Node
+  wrapper** (no jq/bash needed; `node` must be on PATH, which AgentDeck already
+  requires).
 - The bar only updates when a real `claude` TUI runs (the status line fires) —
   including AgentDeck's **Terminal** chat mode. **SDK chat mode won't update
   it.** Tell the user this so the behavior isn't surprising.
 
 ## Steps
 
-### 1. Pick the config dir
+### 1. Pick the config dir(s)
 
-Default to `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`. If the user runs Claude Code
-with a custom `CLAUDE_CONFIG_DIR` (e.g. `~/.claude-work`), confirm which dir(s)
-to set up. Let `CFG` be that directory and `SETTINGS="$CFG/settings.json"`.
+Default to `~/.claude` (`${CLAUDE_CONFIG_DIR:-$HOME/.claude}` on POSIX,
+`%USERPROFILE%\.claude` on Windows). Then check which roots AgentDeck tracks —
+read `roots.claude.json` in the AgentDeck repo, or ask the user — and if there
+are others (e.g. `~/.claude-work`), ask explicitly:
 
-### 2. Check jq and read the current status line
+> AgentDeck 目前追蹤這些 roots:… 預設只在 `~/.claude` 啟用 usage bar,
+> 還要幫哪些 root 一起啟用?
+
+Let `CFG` be each chosen directory and `SETTINGS = CFG/settings.json`. Run the
+matching OS section below once per chosen dir.
+
+### 2. Read the current status line
+
+Read `SETTINGS` (JSON) and note `statusLine.command` as `ORIG` (empty if the
+file or key doesn't exist). If `ORIG` already contains
+`cc-monitor-statusline-bridge`, the bridge is **already enabled** — stop and
+tell the user.
+
+On POSIX, verify jq first:
 
 ```bash
 command -v jq >/dev/null || { echo "jq is required — install it first."; exit 1; }
 ORIG=$(jq -r '.statusLine.command // ""' "$SETTINGS" 2>/dev/null)
-echo "current statusLine.command: ${ORIG:-(none)}"
 ```
 
-If `ORIG` already contains `cc-monitor-statusline-bridge.sh`, the bridge is
-**already enabled** — stop and tell the user.
-
-### 3. Write the wrapper (does not touch their status line script)
+### 3A. macOS / Linux / WSL — install the bash wrapper
 
 Create `"$CFG/cc-monitor-statusline-bridge.sh"` with EXACTLY this content, then
 `chmod +x` it:
@@ -69,10 +82,8 @@ if [ -n "${1:-}" ]; then
 fi
 ```
 
-### 4. Back up settings, then repoint statusLine.command
-
-Encode the original command (base64, so any quotes/spaces survive as one arg),
-back up `settings.json`, and set `statusLine` to call the wrapper with it:
+Back up settings, then repoint `statusLine.command` (base64 keeps the original
+command intact as one argument):
 
 ```bash
 cp "$SETTINGS" "$SETTINGS.cc-monitor.bak"
@@ -82,12 +93,10 @@ tmp=$(mktemp)
 jq --arg c "$NEWCMD" '.statusLine = {type:"command", command:$c}' "$SETTINGS" > "$tmp" && mv "$tmp" "$SETTINGS"
 ```
 
-(If `settings.json` doesn't exist yet, create it as `{}` first, then run the
-`jq` step — the user simply had no status line, and the bar will still work.)
+(If `settings.json` doesn't exist yet, create it as `{}` first — the user
+simply had no status line, and the bar will still work.)
 
-### 5. Verify
-
-Feed the wrapper a sample status line payload and confirm it writes the file:
+Verify:
 
 ```bash
 echo '{"transcript_path":"'"$CFG"'/projects/x/y.jsonl","session_id":"test","context_window":{"used_percentage":42},"rate_limits":{"five_hour":{"used_percentage":10,"resets_at":9999999999}}}' \
@@ -96,19 +105,49 @@ test -f "$CFG/rate-limits.json" && echo "✓ bridge works" || echo "✗ check jq
 rm -f "$CFG/rate-limits.json"   # remove the test snapshot; real data appears on next TUI run
 ```
 
-### 6. Tell the user it's done + how to revert
+### 3B. Native Windows — install the Node wrapper
+
+Copy the canonical wrapper from the AgentDeck repo
+(`scripts/statusline-bridge.mjs`) to `CFG\cc-monitor-statusline-bridge.mjs`
+(or create it with that exact content). No chmod / jq needed.
+
+Back up `SETTINGS` to `SETTINGS.cc-monitor.bak`, then edit the JSON (create
+`{}` first if missing), setting — with `<B64>` = base64 of `ORIG` (empty string
+→ no argument) and the real `CFG` path inlined:
+
+```json
+{ "statusLine": { "type": "command", "command": "node \"C:\\Users\\me\\.claude\\cc-monitor-statusline-bridge.mjs\" <B64>" } }
+```
+
+Preserve every other key in the file. Compute the base64 with Node if needed:
+`node -e "console.log(Buffer.from(process.argv[1]??'').toString('base64'))" "<ORIG>"`.
+
+Verify (PowerShell):
+
+```powershell
+'{"transcript_path":"C:/Users/me/.claude/projects/x/y.jsonl","session_id":"test","context_window":{"used_percentage":42},"rate_limits":{"five_hour":{"used_percentage":10}}}' |
+  node "$env:USERPROFILE\.claude\cc-monitor-statusline-bridge.mjs"
+Test-Path "$env:USERPROFILE\.claude\rate-limits.json"   # True = bridge works
+Remove-Item "$env:USERPROFILE\.claude\rate-limits.json" # remove the test snapshot
+```
+
+(Adjust the paths if `CFG` isn't `~/.claude`.)
+
+### 4. Tell the user it's done + how to revert
 
 - Done. AgentDeck's top bar will show **5h / 7d** and the **Terminal** bar will
   show **context% used** — once they next run a real `claude` TUI (or the
   AgentDeck's Terminal mode), since that's when the status line fires.
 - Their original status line is untouched and still runs (the wrapper calls it).
 - **To revert:** restore the backup —
-  `mv "$SETTINGS.cc-monitor.bak" "$SETTINGS"` — or set `statusLine.command` back
-  to the original value shown in step 2.
+  `mv "$SETTINGS.cc-monitor.bak" "$SETTINGS"` (POSIX) /
+  `Move-Item ... -Force` (Windows) — or set `statusLine.command` back to the
+  original value noted in step 2.
 
 ## Notes
 
-- This skill ships with AgentDeck; a canonical copy of the wrapper also
-  lives at `scripts/statusline-bridge.sh` in that repo.
+- This skill ships with AgentDeck; canonical copies of the wrappers live at
+  `scripts/statusline-bridge.sh` (bash) and `scripts/statusline-bridge.mjs`
+  (Node, used on native Windows) in that repo.
 - `rate_limits` is only present for Claude.ai (Pro/Max) subscribers, and only
   after the first API response in a session.

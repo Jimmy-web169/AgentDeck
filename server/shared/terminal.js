@@ -2,9 +2,11 @@ import { spawn, execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import crypto from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 
 // Shared embedded-terminal pool. Runs a provider's real CLI TUI inside a ttyd
-// process and serves it to the browser. One pool across providers (keys embed
+// process (webterm.js, our node-pty stand-in, on native Windows) and serves it
+// to the browser. One pool across providers (keys embed
 // the tracked-root id, which is unique per home dir). Provider behavior is
 // supplied via `config`:
 //   { findBin(), title, envKey, resumeArgs(id) -> string[], checkOrigin: bool }
@@ -24,10 +26,23 @@ const PORT_MAX = 7781
 const sessions = new Map() // key -> { proc, port, url, meta }
 let nextPort = PORT_BASE
 
+const IS_WIN = process.platform === 'win32'
+// On native Windows ttyd's latest release (1.7.7) crashes when spawning the CLI
+// (tsl0922/ttyd#1292), so the browser terminal is served by our own node-pty
+// based stand-in instead. tmux duties are covered by psmux's tmux.exe alias.
+const WEBTERM = fileURLToPath(new URL('./webterm.js', import.meta.url))
+
 export function findOnPath(names, extra = []) {
+  // Windows executables carry an extension; `claude` on PATH is claude.exe/.cmd
+  const exts = IS_WIN ? ['.exe', '.cmd', '.bat', ''] : ['']
   const cands = []
-  for (const d of (process.env.PATH || '').split(path.delimiter)) for (const n of names) if (d) cands.push(path.join(d, n))
-  cands.push(...extra)
+  for (const d of (process.env.PATH || '').split(path.delimiter)) {
+    // `npm run` prepends the project's node_modules/.bin — never run a bundled
+    // CLI (e.g. the codex SDK ships an old `codex`) in the embedded terminal.
+    if (!d || /node_modules[\\/]\.bin$/i.test(d)) continue
+    for (const n of names) for (const e of exts) cands.push(path.join(d, n + e))
+  }
+  for (const x of extra) for (const e of exts) cands.push(x + e)
   return (
     cands.find((p) => {
       try {
@@ -43,8 +58,17 @@ export function findOnPath(names, extra = []) {
 let ttydBin
 const findTtyd = () => (ttydBin !== undefined ? ttydBin : (ttydBin = findOnPath(['ttyd'], ['/opt/homebrew/bin/ttyd', '/usr/local/bin/ttyd'])))
 
+// On Windows "tmux" is psmux's tmux-compatible alias. winget's portable install
+// adds its package dir to the *user* PATH, which a server started from an older
+// shell won't have — so also try that deterministic install location directly.
+const TMUX_EXTRA = IS_WIN
+  ? [
+      path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Packages', 'marlocarlo.psmux_Microsoft.Winget.Source_8wekyb3d8bbwe', 'tmux'),
+      path.join(process.env.USERPROFILE || '', 'scoop', 'shims', 'tmux'),
+    ]
+  : ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux']
 let tmuxBin
-const findTmux = () => (tmuxBin !== undefined ? tmuxBin : (tmuxBin = findOnPath(['tmux'], ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux'])))
+const findTmux = () => (tmuxBin !== undefined ? tmuxBin : (tmuxBin = findOnPath(['tmux'], TMUX_EXTRA)))
 
 // A stable, collision-free tmux session name derived from the terminal key, so
 // reopening the same monitored session always re-attaches the same tmux session.
@@ -86,18 +110,13 @@ export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
     return { url: existing.url, port: existing.port, reused: true }
   }
   if (sessions.size >= MAX) throw err(429, `Too many embedded terminals open (max ${MAX}). Close one first.`)
-  const ttyd = findTtyd()
-  if (!ttyd) throw err(404, 'ttyd not found — install it (e.g. `brew install ttyd`) to use terminal mode.')
+  const ttyd = IS_WIN ? null : findTtyd() // win32 uses the built-in webterm instead
+  if (!IS_WIN && !ttyd) throw err(404, 'ttyd not found — install it (e.g. `brew install ttyd`) to use terminal mode.')
   const bin = config.findBin()
   if (!bin) throw err(404, `${config.title} executable not found`)
   const port = pickPort()
   if (port == null) throw err(503, 'no free port for a terminal')
 
-  // ttyd [opts] <command> [args]; -W writable, -i localhost-only, optional -O origin check.
-  // NB: -O is --check-origin; the lowercase -o is --once (accept one client, exit on
-  // disconnect) — using it broke "pop out", which disconnects the iframe to reconnect
-  // in a new tab, killing ttyd before the tab could attach.
-  const ttydOpts = ['-p', String(port), '-i', '127.0.0.1', '-W', ...(config.checkOrigin ? ['-O'] : []), '-t', `titleFixed=${config.title}`]
   const cliArgs = resumeId ? config.resumeArgs(resumeId) : []
 
   // Inside tmux when available (persistent, attachable); otherwise run the CLI
@@ -130,7 +149,15 @@ export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
     command = [bin, ...cliArgs]
   }
 
-  const proc = spawn(ttyd, [...ttydOpts, ...command], {
+  // Front-end serving the terminal page: ttyd where it works, webterm on win32.
+  // ttyd [opts] <command> [args]; -W writable, -i localhost-only, optional -O origin
+  // check. NB: -O is --check-origin; the lowercase -o is --once (accept one client,
+  // exit on disconnect) — using it broke "pop out", which disconnects the iframe to
+  // reconnect in a new tab, killing ttyd before the tab could attach.
+  const front = IS_WIN
+    ? [process.execPath, WEBTERM, '-p', String(port), ...(config.checkOrigin ? ['-O'] : []), '-t', config.title, '--', ...command]
+    : [ttyd, '-p', String(port), '-i', '127.0.0.1', '-W', ...(config.checkOrigin ? ['-O'] : []), '-t', `titleFixed=${config.title}`, ...command]
+  const proc = spawn(front[0], front.slice(1), {
     cwd: fs.existsSync(cwd) ? cwd : undefined,
     env: { ...process.env, [config.envKey]: configDir }, // pin the tracked home's login/config
     stdio: 'ignore',
@@ -160,7 +187,7 @@ export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
       proc.removeListener('exit', onEarlyExit)
       proc.removeListener('error', onEarlyExit)
       resolve({ url: entry.url, port, reused: false })
-    }, 350)
+    }, IS_WIN ? 700 : 350) // webterm is a node process — imports land before a bad bind fails
   })
 }
 
@@ -189,9 +216,14 @@ export function listLiveTmux() {
     if (!name || !name.startsWith('agentdeck-')) continue
     let meta = {}
     try {
-      const env = execFileSync(tmux, ['show-environment', '-t', name, 'AGENTDECK_META'], { encoding: 'utf8', timeout: 2000 }).trim()
-      const i = env.indexOf('=')
-      if (i > 0) meta = JSON.parse(Buffer.from(env.slice(i + 1), 'base64').toString('utf8'))
+      // tmux prints just the named variable; psmux (the Windows tmux stand-in)
+      // prints the whole environment — pick the right line either way.
+      const env = execFileSync(tmux, ['show-environment', '-t', name, 'AGENTDECK_META'], { encoding: 'utf8', timeout: 2000 })
+      const line = env
+        .split('\n')
+        .map((s) => s.trim())
+        .find((s) => s.startsWith('AGENTDECK_META='))
+      if (line) meta = JSON.parse(Buffer.from(line.slice('AGENTDECK_META='.length), 'base64').toString('utf8'))
     } catch {}
     out.push({ tmuxName: name, attached: attached !== '0', ...meta })
   }

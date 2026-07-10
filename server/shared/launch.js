@@ -7,13 +7,18 @@ import path from 'node:path'
 // We spawn with an argv array (never a shell string) so a path can't inject a command.
 
 function onPath(bin) {
+  // Windows launchers carry an extension (code.cmd, wt.exe); the extensionless
+  // sibling (e.g. VS Code's POSIX `bin/code` script) exists but can't be spawned.
+  const exts = process.platform === 'win32' ? ['.cmd', '.exe', '.bat'] : ['']
   for (const d of (process.env.PATH || '').split(path.delimiter)) {
     if (!d) continue
-    const p = path.join(d, bin)
-    try {
-      fs.accessSync(p, fs.constants.X_OK)
-      return p
-    } catch {}
+    for (const e of exts) {
+      const p = path.join(d, bin + e)
+      try {
+        fs.accessSync(p, fs.constants.X_OK)
+        return p
+      } catch {}
+    }
   }
   return null
 }
@@ -21,10 +26,20 @@ function onPath(bin) {
 // detached: fire-and-forget GUI app. waitExit: short-lived launcher (`open`) whose
 // exit code tells us whether the target app actually exists.
 function run(cmd, args, { waitExit = false } = {}) {
+  // Node refuses to spawn .cmd/.bat directly (CVE-2024-27980) — route through
+  // cmd.exe. /s + outer quotes + verbatim args is the quoting that stays correct
+  // when both the launcher path and an argument contain spaces (à la cross-spawn).
+  const opts = { detached: !waitExit, stdio: 'ignore' }
+  if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(cmd)) {
+    const line = [cmd, ...args].map((a) => `"${a}"`).join(' ')
+    args = ['/d', '/s', '/c', `"${line}"`]
+    cmd = 'cmd.exe'
+    opts.windowsVerbatimArguments = true
+  }
   return new Promise((resolve, reject) => {
     let child
     try {
-      child = spawn(cmd, args, { detached: !waitExit, stdio: 'ignore' })
+      child = spawn(cmd, args, opts)
     } catch (e) {
       return reject(e)
     }

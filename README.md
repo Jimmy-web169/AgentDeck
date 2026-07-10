@@ -101,7 +101,8 @@ src/
 
 - **Backend** — one server routes `/api/<provider>/…` and `/chat/<provider>` to the
   provider selected from `registry.js`. Cross-cutting code (tracked-roots
-  management, dispatch, the ttyd terminal pool, the skills runner, the origin
+  management, dispatch, the terminal pool (ttyd; a built-in node-pty web
+  terminal on native Windows), the skills runner, the origin
   guard, app launching) lives in `server/shared/`; only data-layout-specific code
   (paths, parsing, resources) lives per provider.
 - **Frontend** — a thin shell renders both provider apps and switches by toggling
@@ -117,27 +118,27 @@ changes needed).
 
 ## Requirements
 
-- **Platform: WSL (Ubuntu on Windows) or macOS.** These are the tested
-  environments. Plain Linux will likely work but is untested; native Windows is
-  not supported (run it under WSL).
+- **Platform: WSL (Ubuntu on Windows), macOS, or native Windows.** These are the
+  tested environments. Plain Linux will likely work but is untested.
 - **[Node.js](https://nodejs.org/) ≥ 20** (uses the built-in `--watch` flag).
 - For read-only monitoring: nothing else — just point it at `~/.claude` / `~/.codex`.
 - To **continue a conversation**: the relevant CLI installed and logged in
   (`claude` and/or `codex`).
 - For **Terminal mode**: [`ttyd`](https://github.com/tsl0922/ttyd) (`brew install
-  ttyd` on macOS; your package manager on WSL/Linux).
+  ttyd` on macOS; your package manager on WSL/Linux). On **native Windows** ttyd
+  is not used (its current release crashes at spawn —
+  [tsl0922/ttyd#1292](https://github.com/tsl0922/ttyd/issues/1292)); the browser
+  terminal is served by the built-in `server/shared/webterm.js` (node-pty +
+  xterm.js), and tmux duties are covered by [psmux](https://github.com/psmux/psmux)
+  (`winget install psmux`), whose `tmux` alias AgentDeck picks up automatically.
 
 ### Supported versions
 
-AgentDeck drives each agent through its **official SDK**, so the
-"continue a conversation" features track the versions below. Read-only
-monitoring is looser — it parses the on-disk session formats and tolerates other
-CLI versions.
-
-| Provider | SDK (bundled, in `package.json`) | Tested CLI |
-| --- | --- | --- |
-| **Claude Code** | `@anthropic-ai/claude-agent-sdk` `^0.3.161` | `claude` 2.1.x |
-| **OpenAI Codex** | `@openai/codex-sdk` `^0.137.0` | `codex` 0.137.0 |
+AgentDeck drives each agent through its **official SDK** (pinned in
+`package.json`), while read-only monitoring parses the on-disk session formats
+and tolerates a wide range of CLI versions. The **Terminal** mode always runs
+whatever `claude` / `codex` you have installed — the dashboard shows the CLI
+version observed in your most recent session, so nothing is hardcoded.
 
 Newer CLI releases usually keep working. If a "continue" feature breaks after a
 CLI update, bump the matching SDK in `package.json` (`npm install
@@ -159,6 +160,13 @@ Open <http://localhost:47842>. On first run it auto-detects `~/.claude` and
 optional [`ttyd`](https://github.com/tsl0922/ttyd) (Terminal mode) via your package
 manager, and checks for the `claude` / `codex` CLI. Safe to re-run. If `make all`
 ever fails on a fresh checkout, run `make init` first.
+
+On **native Windows** (no `make`/`sh`), use the PowerShell equivalent instead:
+
+```powershell
+npm run init:win   # npm install + optional psmux (Terminal mode) + CLI checks
+npm run dev        # API server (:47841) + Vite UI (:47842), both hot-reload
+```
 
 ### Make targets
 
