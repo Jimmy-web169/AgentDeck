@@ -2,7 +2,7 @@
 // skills CLI. Pure parsing — no process is spawned here.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { parseSkillsAdd, buildSkillsArgv } from '../server/shared/skills.js'
+import { parseSkillsAdd, buildSkillsArgv } from '../../server/shared/skills.js'
 
 test('accepts owner/repo', () => {
   assert.deepEqual(parseSkillsAdd('vercel-labs/skills'), ['vercel-labs/skills'])

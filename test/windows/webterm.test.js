@@ -7,7 +7,7 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import WebSocket from 'ws'
 
-const WEBTERM = fileURLToPath(new URL('../server/shared/webterm.js', import.meta.url))
+const WEBTERM = fileURLToPath(new URL('../../server/shared/webterm.js', import.meta.url))
 const PORT = 7779 // inside the pool range but high, to dodge dev servers
 
 // a long-lived interactive child that prints a marker, echoes stdin lines

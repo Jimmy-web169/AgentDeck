@@ -6,7 +6,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { findOnPath } from '../server/shared/terminal.js'
+import { findOnPath } from '../../server/shared/terminal.js'
 
 const IS_WIN = process.platform === 'win32'
 

@@ -8,7 +8,7 @@ import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
-const BRIDGE = fileURLToPath(new URL('../scripts/statusline-bridge.mjs', import.meta.url))
+const BRIDGE = fileURLToPath(new URL('../../scripts/statusline-bridge.mjs', import.meta.url))
 
 function runBridge(input, args = []) {
   return spawnSync(process.execPath, [BRIDGE, ...args], { input, encoding: 'utf8' })
