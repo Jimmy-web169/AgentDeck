@@ -65,10 +65,33 @@ export default function SubagentsView({ root, parent, onOpenSession }) {
     api.subagents(root, parent.id).then(setData).catch((e) => setError(e.message))
   }, [root, parent?.id])
 
+  // this tab stays mounted for as long as it's open — poll so turns/tokens/context%
+  // don't go stale until you switch away and back
+  useEffect(() => {
+    if (!root || !parent?.id) return
+    const t = setInterval(() => {
+      api.subagents(root, parent.id).then(setData).catch(() => {})
+    }, 3000)
+    return () => clearInterval(t)
+  }, [root, parent?.id])
+
   const open = (c) => {
     setTx({ c, loading: true })
     api.session(root, c.id).then((d) => setTx({ c, data: d })).catch((e) => setTx({ c, error: e.message }))
   }
+
+  // keep an open transcript modal fresh too — same rationale as above
+  useEffect(() => {
+    if (!tx || tx.loading || tx.error) return
+    const { c } = tx
+    const t = setInterval(() => {
+      api
+        .session(root, c.id)
+        .then((d) => setTx((prev) => (prev && prev.c.id === c.id ? { c, data: d } : prev)))
+        .catch(() => {})
+    }, 3000)
+    return () => clearInterval(t)
+  }, [root, tx])
 
   if (error) return <div className="p-8 text-red-300 text-sm">{error}</div>
   if (!data) return <div className="p-8 text-zinc-600 text-sm">Loading sub-agents…</div>

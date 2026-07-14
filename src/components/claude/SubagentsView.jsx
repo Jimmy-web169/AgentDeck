@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api } from '../../api.js'
 import Conversation from './Conversation.jsx'
 import { fmtTokens } from '../../lib/format.js'
@@ -185,16 +185,31 @@ function TranscriptModal({ tx, onClose }) {
 
 export default function SubagentsView({ data }) {
   const [tx, setTx] = useState(null)
+
+  // keep an open transcript modal fresh — mirrors the main conversation's fallback
+  // poll (ClaudeApp.jsx) so a still-running sub-agent doesn't require close+reopen
+  useEffect(() => {
+    if (!data || !tx || tx.loading || tx.error) return
+    const { agent, runId } = tx
+    const t = setInterval(() => {
+      api
+        .subagent(data.root, data.slug, data.id, runId, agent.id)
+        .then((d) => setTx((prev) => (prev && prev.agent.id === agent.id ? { agent, runId, data: d } : prev)))
+        .catch(() => {})
+    }, 3000)
+    return () => clearInterval(t)
+  }, [data, tx])
+
   if (!data) return <div className="p-8 text-zinc-600">Loading sub-agents…</div>
   const runs = data.runs || []
   const plain = data.agents || []
 
   const openAgent = (agent, runId) => {
-    setTx({ agent, loading: true })
+    setTx({ agent, runId, loading: true })
     api
       .subagent(data.root, data.slug, data.id, runId, agent.id)
-      .then((d) => setTx({ agent, data: d }))
-      .catch((e) => setTx({ agent, error: e.message }))
+      .then((d) => setTx({ agent, runId, data: d }))
+      .catch((e) => setTx({ agent, runId, error: e.message }))
   }
 
   return (
