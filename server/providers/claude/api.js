@@ -13,6 +13,12 @@ import {
   expandHome,
 } from './paths.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
+import { cachedRecords, cachedDerived } from '../../shared/parseCache.js'
+
+// All transcript reads below go through the fingerprint cache: a stat per
+// request revalidates, so results are exactly as fresh as parsing every time.
+const sessionRecords = (file) => cachedRecords(file, readRecords)
+const sessionSummary = (file, id) => cachedDerived(file, 'summary', () => summarize(sessionRecords(file), id))
 import { discoverRuns, discoverPlainAgents } from './runs.js'
 import { inventory, readResource, writeResource, deleteResource } from './resources.js'
 import { safeTrash } from '../../shared/trash.js'
@@ -112,7 +118,7 @@ function getSessions(q) {
       try {
         mtime = fs.statSync(f.file).mtimeMs
       } catch {}
-      const s = summarize(readRecords(f.file), f.id)
+      const s = { ...sessionSummary(f.file, f.id) }
       s.mtime = mtime
       s.hasSubagents = s.hasSidechain || sessionHasSubagents(root.dir, slug, f.id)
       return s
@@ -132,8 +138,9 @@ function getSession(q) {
   const slug = q.get('slug')
   const id = q.get('id')
   if (!slug || !id) throw httpErr(400, 'missing slug/id')
-  const recs = readRecords(findSessionFile(root.dir, slug, id))
-  const summary = summarize(recs, id)
+  const file = findSessionFile(root.dir, slug, id)
+  const recs = sessionRecords(file)
+  const summary = { ...sessionSummary(file, id) }
   summary.hasSubagents = summary.hasSidechain || sessionHasSubagents(root.dir, slug, id)
   return { root: root.id, slug, id, summary, timeline: buildTimeline(recs) }
 }
@@ -143,7 +150,7 @@ function getRaw(q) {
   const slug = q.get('slug')
   const id = q.get('id')
   if (!slug || !id) throw httpErr(400, 'missing slug/id')
-  return { root: root.id, slug, id, records: readRecords(findSessionFile(root.dir, slug, id)) }
+  return { root: root.id, slug, id, records: sessionRecords(findSessionFile(root.dir, slug, id)) }
 }
 
 // Move a session to the OS trash (recoverable): its .jsonl transcript plus its
@@ -198,8 +205,8 @@ function getSubagent(q) {
   }
   assertInside(root.dir, file)
   if (!fs.existsSync(file)) throw httpErr(404, 'agent transcript not found')
-  const recs = readRecords(file)
-  return { root: root.id, run, agent, summary: summarize(recs, agent), timeline: buildTimeline(recs) }
+  const recs = sessionRecords(file)
+  return { root: root.id, run, agent, summary: sessionSummary(file, agent), timeline: buildTimeline(recs) }
 }
 
 const zeroTokens = () => ({ input: 0, output: 0, cacheCreate: 0, cacheRead: 0 })
@@ -226,7 +233,7 @@ function getStats(q) {
     if (!files.length) continue
     const proj = { slug, cwd: null, sessions: files.length, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: 0 }
     for (const f of files) {
-      const s = summarize(readRecords(f.file), f.id)
+      const s = sessionSummary(f.file, f.id)
       let mtime = 0
       try {
         mtime = fs.statSync(f.file).mtimeMs

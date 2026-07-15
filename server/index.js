@@ -6,6 +6,7 @@ import chokidar from 'chokidar'
 import { PROVIDERS } from './registry.js'
 import { isAllowedOrigin } from './shared/origin.js'
 import { stopAllTerminals } from './shared/terminal.js'
+import { invalidate } from './shared/parseCache.js'
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -60,7 +61,12 @@ function startWatchers() {
           const ev = p.watch.toEvent(root.id, root.dir, absPath)
           if (ev) queue(ev)
         }
-        w.on('add', onEvt).on('change', onEvt).on('unlink', onEvt)
+        // change/add need no cache action (the per-request fingerprint check
+        // self-heals); unlink must drop entries or deleted files linger in memory
+        w.on('add', onEvt).on('change', onEvt).on('unlink', (absPath) => {
+          invalidate(absPath)
+          onEvt(absPath)
+        })
         watchers.push(w)
         console.log(`[watch] ${p.id}:${root.label} -> ${dir}`)
       } catch (e) {
