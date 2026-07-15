@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import Markdown from '../shared/Markdown.jsx'
 
 // Per-tool accent + how to preview the input on the collapsed header.
 const TOOL_META = {
-  Bash: { color: 'text-emerald-300', badge: 'bg-emerald-500/15', preview: (i) => i.command },
+  Bash: { color: 'text-emerald-300', badge: 'bg-emerald-500/15', preview: (i) => i.description || i.command },
+  PowerShell: { color: 'text-emerald-300', badge: 'bg-emerald-500/15', preview: (i) => i.description || i.command },
   Read: { color: 'text-sky-300', badge: 'bg-sky-500/15', preview: (i) => i.file_path },
   Edit: { color: 'text-amber-300', badge: 'bg-amber-500/15', preview: (i) => i.file_path },
   Write: { color: 'text-amber-300', badge: 'bg-amber-500/15', preview: (i) => i.file_path },
@@ -33,12 +35,146 @@ function Pre({ children }) {
   )
 }
 
+// ---- pretty input views ------------------------------------------------------
+// A label:value row for input fields that are paths, patterns, flags…
+function Field({ label, mono = true, children }) {
+  if (children == null || children === '' || children === false) return null
+  return (
+    <div className="flex gap-2 mt-1 text-[12px] leading-5">
+      <span className="text-zinc-500 shrink-0 w-16">{label}</span>
+      <span className={`${mono ? 'font-mono' : ''} text-zinc-300 break-all min-w-0`}>{String(children)}</span>
+    </div>
+  )
+}
+
+// Free prose (descriptions, prompts) — the parts that were written for humans.
+function Prose({ children }) {
+  if (!children) return null
+  return <div className="text-[12.5px] leading-5 text-zinc-200 mt-1 whitespace-pre-wrap break-words">{children}</div>
+}
+
+function MdBox({ children }) {
+  if (!children) return null
+  return (
+    <div className="mt-1 bg-ink-900/50 rounded-md px-3 py-1 max-h-96 overflow-y-auto [&_.md]:text-[12.5px] [&_.md]:leading-5">
+      <Markdown>{children}</Markdown>
+    </div>
+  )
+}
+
+// old → new, git-diff style. The single most unreadable thing as raw JSON.
+function DiffBlock({ oldText, newText }) {
+  return (
+    <div className="mt-1 rounded-md overflow-hidden border border-zinc-700/50 text-[12px] font-mono leading-5">
+      <div className="bg-red-500/10 border-l-2 border-red-500/60">
+        <div className="px-2.5 pt-1 text-[10px] text-red-300 select-none">− old</div>
+        <pre className="px-2.5 pb-2 m-0 whitespace-pre-wrap break-words overflow-x-auto max-h-60 text-red-200">{oldText}</pre>
+      </div>
+      <div className="bg-emerald-500/10 border-l-2 border-emerald-500/60 border-t border-zinc-700/40">
+        <div className="px-2.5 pt-1 text-[10px] text-emerald-300 select-none">+ new</div>
+        <pre className="px-2.5 pb-2 m-0 whitespace-pre-wrap break-words overflow-x-auto max-h-60 text-emerald-200">{newText}</pre>
+      </div>
+    </div>
+  )
+}
+
+const shellView = (i) => (
+  <>
+    <Prose>{i.description}</Prose>
+    <Pre>{i.command}</Pre>
+    <Field label="background">{i.run_in_background ? 'yes' : null}</Field>
+  </>
+)
+
+// Per-tool input renderers. Anything not listed (or throwing) falls back to
+// the raw JSON block, so unknown/odd shapes lose nothing.
+const INPUT_VIEWS = {
+  Bash: shellView,
+  PowerShell: shellView,
+  Read: (i) => (
+    <>
+      <Field label="file">{i.file_path}</Field>
+      {(i.offset != null || i.limit != null) && (
+        <Field label="lines">{`${i.offset ?? 1} – ${(i.offset ?? 1) + (i.limit ?? 2000) - 1}`}</Field>
+      )}
+      <Field label="pages">{i.pages}</Field>
+    </>
+  ),
+  Edit: (i) => (
+    <>
+      <Field label="file">{i.file_path}</Field>
+      <Field label="mode">{i.replace_all ? 'replace all occurrences' : null}</Field>
+      <DiffBlock oldText={i.old_string} newText={i.new_string} />
+    </>
+  ),
+  Write: (i) => (
+    <>
+      <Field label="file">{i.file_path}</Field>
+      <Pre>{i.content}</Pre>
+    </>
+  ),
+  Grep: (i) => (
+    <>
+      <Field label="pattern">{i.pattern}</Field>
+      <Field label="path">{i.path}</Field>
+      <Field label="glob">{i.glob}</Field>
+      <Field label="type">{i.type}</Field>
+      <Field label="mode">{i.output_mode}</Field>
+    </>
+  ),
+  Glob: (i) => (
+    <>
+      <Field label="pattern">{i.pattern}</Field>
+      <Field label="path">{i.path}</Field>
+    </>
+  ),
+  Task: (i) => (
+    <>
+      <Field label="agent" mono={false}>{i.subagent_type}</Field>
+      <Field label="task" mono={false}>{i.description}</Field>
+      <MdBox>{i.prompt}</MdBox>
+    </>
+  ),
+  Agent: (i) => (
+    <>
+      <Field label="agent" mono={false}>{i.subagent_type}</Field>
+      <Field label="task" mono={false}>{i.description}</Field>
+      <MdBox>{i.prompt}</MdBox>
+    </>
+  ),
+  WebFetch: (i) => (
+    <>
+      <Field label="url">{i.url}</Field>
+      <Prose>{i.prompt}</Prose>
+    </>
+  ),
+  WebSearch: (i) => <Field label="query">{i.query}</Field>,
+}
+
+// Tools whose output is natural language, best read as Markdown. Everything
+// else (file contents, command output, listings) stays monospace.
+const MD_OUTPUT = new Set(['Task', 'Agent', 'WebFetch', 'WebSearch'])
+
+function renderInput(name, input) {
+  const view = INPUT_VIEWS[name]
+  if (!view || !input) return null
+  try {
+    return view(input)
+  } catch {
+    return null
+  }
+}
+
 export default function ToolCall({ part }) {
   const [open, setOpen] = useState(false)
+  const [raw, setRaw] = useState(false)
   const meta = TOOL_META[part.name] || { color: 'text-zinc-300', badge: 'bg-zinc-500/15' }
   const result = part.result
   const err = result?.isError
   const inputStr = JSON.stringify(part.input ?? {}, null, 2)
+  const pretty = !raw && renderInput(part.name, part.input)
+  const outText = result ? (typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2)) : ''
+  const outAsMd = !raw && !err && MD_OUTPUT.has(part.name)
 
   return (
     <div className={`rounded-lg border ${err ? 'border-red-500/40' : 'border-zinc-700/70'} bg-ink-700/60 my-2`}>
@@ -62,14 +198,23 @@ export default function ToolCall({ part }) {
       </button>
       {open && (
         <div className="px-3 pb-3">
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500 mt-1">input</div>
-          <Pre>{inputStr}</Pre>
+          <div className="flex items-center justify-between mt-1">
+            <div className="text-[11px] uppercase tracking-wide text-zinc-500">input</div>
+            <button
+              onClick={() => setRaw(!raw)}
+              className="text-[10px] px-1.5 py-0.5 rounded bg-ink-600 text-zinc-400 hover:text-zinc-200"
+              title="toggle raw JSON view"
+            >
+              {raw ? 'pretty' : 'raw'}
+            </button>
+          </div>
+          {pretty || <Pre>{inputStr}</Pre>}
           {result && (
             <>
               <div className={`text-[11px] uppercase tracking-wide mt-2 ${err ? 'text-red-400' : 'text-zinc-500'}`}>
                 output{err ? ' (error)' : ''}
               </div>
-              <Pre>{typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2)}</Pre>
+              {outAsMd ? <MdBox>{outText}</MdBox> : <Pre>{outText}</Pre>}
             </>
           )}
         </div>

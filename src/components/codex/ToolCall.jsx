@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Markdown from '../shared/Markdown.jsx'
 
 // Render a shell command. Codex has stored it as an argv array (`command`) in
 // older rollouts and as a `cmd` string (with `workdir`) in newer ones.
@@ -51,20 +52,107 @@ function Pre({ children }) {
   )
 }
 
+function Field({ label, mono = true, children }) {
+  if (children == null || children === '' || children === false) return null
+  return (
+    <div className="flex gap-2 mt-1 text-[12px] leading-5">
+      <span className="text-zinc-500 shrink-0 w-16">{label}</span>
+      <span className={`${mono ? 'font-mono' : ''} text-zinc-300 break-all min-w-0`}>{String(children)}</span>
+    </div>
+  )
+}
+
+function MdBox({ children }) {
+  if (!children) return null
+  return (
+    <div className="mt-1 bg-ink-900/50 rounded-md px-3 py-1 max-h-96 overflow-y-auto [&_.md]:text-[12.5px] [&_.md]:leading-5">
+      <Markdown>{children}</Markdown>
+    </div>
+  )
+}
+
+// An apply_patch input is already a unified-diff-ish text — color it per line.
+function PatchBlock({ text }) {
+  const lines = (text || '').split('\n')
+  return (
+    <pre className="bg-ink-900 rounded-md p-2.5 mt-1 overflow-x-auto text-[12px] leading-5 font-mono whitespace-pre-wrap break-words max-h-96">
+      {lines.map((l, idx) => {
+        const cls = l.startsWith('+')
+          ? 'text-emerald-200 bg-emerald-500/10'
+          : l.startsWith('-')
+            ? 'text-red-200 bg-red-500/10'
+            : /^(@@|\*\*\*)/.test(l)
+              ? 'text-sky-300'
+              : 'text-zinc-300'
+        return (
+          <div key={idx} className={cls}>
+            {l || ' '}
+          </div>
+        )
+      })}
+    </pre>
+  )
+}
+
 const SHELL_TOOLS = new Set(['shell', 'shell_command', 'local_shell', 'exec_command'])
 
-function renderInput(name, input) {
-  if (SHELL_TOOLS.has(name) && commandText(input)) return commandText(input)
-  if (name === 'apply_patch' && typeof input.patch === 'string') return input.patch
-  return JSON.stringify(input ?? {}, null, 2)
+// Pretty input views per tool; anything unlisted (or throwing) falls back to
+// the raw JSON block, so unknown shapes lose nothing.
+function prettyInput(name, input) {
+  if (!input) return null
+  try {
+    if (SHELL_TOOLS.has(name)) {
+      const cmd = commandText(input)
+      if (!cmd) return null
+      return (
+        <>
+          <Pre>{cmd}</Pre>
+          <Field label="workdir">{input.workdir}</Field>
+        </>
+      )
+    }
+    if (name === 'apply_patch' && typeof input.patch === 'string') return <PatchBlock text={input.patch} />
+    if (name === 'read_file') return <Field label="file">{input.path || input.file_path}</Field>
+    if (name === 'web_search') return <Field label="query">{input.query}</Field>
+    if (name === 'update_plan') {
+      const items = input.plan || input.items || []
+      if (!items.length) return null
+      return (
+        <ul className="mt-1 space-y-0.5 text-[12.5px] leading-5 text-zinc-300 list-none">
+          {items.map((it, idx) => (
+            <li key={idx} className="flex gap-2">
+              <span className="text-zinc-600 select-none">{it.status === 'completed' ? '☑' : it.status === 'in_progress' ? '◐' : '☐'}</span>
+              <span>{typeof it === 'string' ? it : it.step || it.text || JSON.stringify(it)}</span>
+            </li>
+          ))}
+        </ul>
+      )
+    }
+    if (name === 'spawn_agent') {
+      return (
+        <>
+          <Field label="agent" mono={false}>{input.agent_type}</Field>
+          <MdBox>{input.message}</MdBox>
+        </>
+      )
+    }
+  } catch {}
+  return null
 }
+
+// Natural-language outputs read better as Markdown; command output stays mono.
+const MD_OUTPUT = new Set(['spawn_agent', 'wait_agent', 'web_search'])
 
 export default function ToolCall({ part }) {
   const [open, setOpen] = useState(false)
+  const [raw, setRaw] = useState(false)
   const meta = TOOL_META[part.name] || { color: 'text-zinc-300', badge: 'bg-zinc-500/15' }
   const result = part.result
   const err = result?.isError
   const exit = result?.meta && typeof result.meta.exit_code === 'number' ? result.meta.exit_code : null
+  const pretty = !raw && prettyInput(part.name, part.input)
+  const outText = result ? (typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2)) : ''
+  const outAsMd = !raw && !err && MD_OUTPUT.has(part.name)
 
   return (
     <div className={`rounded-lg border ${err ? 'border-red-500/40' : 'border-zinc-700/70'} bg-ink-700/60 my-2`}>
@@ -85,14 +173,23 @@ export default function ToolCall({ part }) {
       </button>
       {open && (
         <div className="px-3 pb-3">
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500 mt-1">input</div>
-          <Pre>{renderInput(part.name, part.input)}</Pre>
+          <div className="flex items-center justify-between mt-1">
+            <div className="text-[11px] uppercase tracking-wide text-zinc-500">input</div>
+            <button
+              onClick={() => setRaw(!raw)}
+              className="text-[10px] px-1.5 py-0.5 rounded bg-ink-600 text-zinc-400 hover:text-zinc-200"
+              title="toggle raw JSON view"
+            >
+              {raw ? 'pretty' : 'raw'}
+            </button>
+          </div>
+          {pretty || <Pre>{JSON.stringify(part.input ?? {}, null, 2)}</Pre>}
           {result && (
             <>
               <div className={`text-[11px] uppercase tracking-wide mt-2 ${err ? 'text-red-400' : 'text-zinc-500'}`}>
                 output{err ? ' (error)' : ''}
               </div>
-              <Pre>{typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2)}</Pre>
+              {outAsMd ? <MdBox>{outText}</MdBox> : <Pre>{outText}</Pre>}
             </>
           )}
         </div>
