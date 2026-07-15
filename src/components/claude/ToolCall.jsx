@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import Markdown from '../shared/Markdown.jsx'
+import { Pre, Field, MdBox } from '../shared/ToolCallParts.jsx'
 
 // Per-tool accent + how to preview the input on the collapsed header.
 const TOOL_META = {
@@ -27,39 +27,11 @@ function previewOf(name, input) {
   return (s || '').toString().replace(/\s+/g, ' ').slice(0, 120)
 }
 
-function Pre({ children }) {
-  return (
-    <pre className="bg-ink-900 rounded-md p-2.5 mt-1 overflow-x-auto text-[12px] leading-5 font-mono text-zinc-300 whitespace-pre-wrap break-words max-h-96">
-      {children}
-    </pre>
-  )
-}
-
 // ---- pretty input views ------------------------------------------------------
-// A label:value row for input fields that are paths, patterns, flags…
-function Field({ label, mono = true, children }) {
-  if (children == null || children === '' || children === false) return null
-  return (
-    <div className="flex gap-2 mt-1 text-[12px] leading-5">
-      <span className="text-zinc-500 shrink-0 w-16">{label}</span>
-      <span className={`${mono ? 'font-mono' : ''} text-zinc-300 break-all min-w-0`}>{String(children)}</span>
-    </div>
-  )
-}
-
 // Free prose (descriptions, prompts) — the parts that were written for humans.
 function Prose({ children }) {
   if (!children) return null
   return <div className="text-[12.5px] leading-5 text-zinc-200 mt-1 whitespace-pre-wrap break-words">{children}</div>
-}
-
-function MdBox({ children }) {
-  if (!children) return null
-  return (
-    <div className="mt-1 bg-ink-900/50 rounded-md px-3 py-1 max-h-96 overflow-y-auto [&_.md]:text-[12.5px] [&_.md]:leading-5">
-      <Markdown>{children}</Markdown>
-    </div>
-  )
 }
 
 // old → new, git-diff style. The single most unreadable thing as raw JSON.

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import Markdown from '../shared/Markdown.jsx'
+import { Pre, Field, MdBox } from '../shared/ToolCallParts.jsx'
 
 // Render a shell command. Codex has stored it as an argv array (`command`) in
 // older rollouts and as a `cmd` string (with `workdir`) in newer ones.
@@ -42,33 +42,6 @@ function previewOf(name, input) {
   } catch {}
   if (!s && input) s = Object.values(input).find((v) => typeof v === 'string') || ''
   return (s || '').toString().replace(/\s+/g, ' ').slice(0, 140)
-}
-
-function Pre({ children }) {
-  return (
-    <pre className="bg-ink-900 rounded-md p-2.5 mt-1 overflow-x-auto text-[12px] leading-5 font-mono text-zinc-300 whitespace-pre-wrap break-words max-h-96">
-      {children}
-    </pre>
-  )
-}
-
-function Field({ label, mono = true, children }) {
-  if (children == null || children === '' || children === false) return null
-  return (
-    <div className="flex gap-2 mt-1 text-[12px] leading-5">
-      <span className="text-zinc-500 shrink-0 w-16">{label}</span>
-      <span className={`${mono ? 'font-mono' : ''} text-zinc-300 break-all min-w-0`}>{String(children)}</span>
-    </div>
-  )
-}
-
-function MdBox({ children }) {
-  if (!children) return null
-  return (
-    <div className="mt-1 bg-ink-900/50 rounded-md px-3 py-1 max-h-96 overflow-y-auto [&_.md]:text-[12.5px] [&_.md]:leading-5">
-      <Markdown>{children}</Markdown>
-    </div>
-  )
 }
 
 // An apply_patch input is already a unified-diff-ish text — color it per line.
