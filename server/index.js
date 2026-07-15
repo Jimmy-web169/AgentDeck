@@ -170,6 +170,20 @@ const server = http.createServer(async (req, res) => {
     const { status, body: out } = await provider.dispatch(req.method, apiPath, url.searchParams, body)
     // tracked-folder changes -> re-arm watchers so live updates cover new roots
     if (apiPath === '/api/roots' && req.method !== 'GET' && status < 400) startWatchers()
+    // handlers may attach _etag (a content fingerprint) to a GET body: echo it
+    // as an ETag and answer a matching If-None-Match with an empty 304, so
+    // pollers pay nothing when nothing changed. The client sends no-store and
+    // revalidates manually, so the browser's own HTTP cache stays out of it.
+    if (req.method === 'GET' && status === 200 && out && typeof out === 'object' && typeof out._etag === 'string') {
+      const etag = out._etag
+      delete out._etag
+      res.setHeader('ETag', etag)
+      if (req.headers['if-none-match'] === etag) {
+        res.statusCode = 304
+        res.end()
+        return
+      }
+    }
     res.statusCode = status
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.end(JSON.stringify(out))

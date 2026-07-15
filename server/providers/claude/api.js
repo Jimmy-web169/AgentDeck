@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import crypto from 'node:crypto'
 import {
   rootsWithMeta,
   addRoot,
@@ -19,6 +20,15 @@ import { cachedRecords, cachedDerived } from '../../shared/parseCache.js'
 // request revalidates, so results are exactly as fresh as parsing every time.
 const sessionRecords = (file) => cachedRecords(file, readRecords)
 const sessionSummary = (file, id) => cachedDerived(file, 'summary', () => summarize(sessionRecords(file), id))
+const sessionTimeline = (file) => cachedDerived(file, 'timeline', () => buildTimeline(sessionRecords(file)))
+
+// `_etag` on a GET response body lets the server answer If-None-Match with a
+// 304 (see server/index.js). It's derived from the same fingerprints the parse
+// cache validates against, so it changes exactly when the payload would.
+function fileEtag(file, extra = '') {
+  const st = fs.statSync(file)
+  return `"${st.mtimeMs}:${st.size}${extra ? `:${extra}` : ''}"`
+}
 import { discoverRuns, discoverPlainAgents } from './runs.js'
 import { inventory, readResource, writeResource, deleteResource } from './resources.js'
 import { safeTrash } from '../../shared/trash.js'
@@ -112,19 +122,25 @@ function getSessions(q) {
   const root = resolveRoot(q.get('root'))
   const slug = q.get('slug')
   if (!slug) throw httpErr(400, 'missing slug')
+  const parts = []
   const sessions = sessionFiles(root.dir, slug)
     .map((f) => {
       let mtime = 0
+      let size = 0
       try {
-        mtime = fs.statSync(f.file).mtimeMs
+        const st = fs.statSync(f.file)
+        mtime = st.mtimeMs
+        size = st.size
       } catch {}
       const s = { ...sessionSummary(f.file, f.id) }
       s.mtime = mtime
       s.hasSubagents = s.hasSidechain || sessionHasSubagents(root.dir, slug, f.id)
+      parts.push(`${f.id}:${mtime}:${size}:${s.hasSubagents ? 1 : 0}`)
       return s
     })
     .sort((a, b) => (b.lastTs || '').localeCompare(a.lastTs || ''))
-  return { root: root.id, slug, sessions }
+  const _etag = `"${crypto.createHash('sha1').update(parts.join('|')).digest('hex')}"`
+  return { root: root.id, slug, sessions, _etag }
 }
 
 function findSessionFile(rootDir, slug, id) {
@@ -139,10 +155,16 @@ function getSession(q) {
   const id = q.get('id')
   if (!slug || !id) throw httpErr(400, 'missing slug/id')
   const file = findSessionFile(root.dir, slug, id)
-  const recs = sessionRecords(file)
   const summary = { ...sessionSummary(file, id) }
   summary.hasSubagents = summary.hasSidechain || sessionHasSubagents(root.dir, slug, id)
-  return { root: root.id, slug, id, summary, timeline: buildTimeline(recs) }
+  return {
+    root: root.id,
+    slug,
+    id,
+    summary,
+    timeline: sessionTimeline(file),
+    _etag: fileEtag(file, summary.hasSubagents ? 'S' : ''),
+  }
 }
 
 function getRaw(q) {
@@ -205,8 +227,7 @@ function getSubagent(q) {
   }
   assertInside(root.dir, file)
   if (!fs.existsSync(file)) throw httpErr(404, 'agent transcript not found')
-  const recs = sessionRecords(file)
-  return { root: root.id, run, agent, summary: sessionSummary(file, agent), timeline: buildTimeline(recs) }
+  return { root: root.id, run, agent, summary: sessionSummary(file, agent), timeline: sessionTimeline(file), _etag: fileEtag(file) }
 }
 
 const zeroTokens = () => ({ input: 0, output: 0, cacheCreate: 0, cacheRead: 0 })
