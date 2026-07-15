@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../../api.js'
+import useEscToClose from '../../lib/useEscToClose.js'
 
 // Normalize whatever the user typed (a bare ref, a skills.sh/GitHub URL, or a
 // full `npx skills add ...` command) down to the args after `skills add`, so we
@@ -14,6 +15,7 @@ const normalize = (input) =>
     .trim()
 
 export default function SkillImport({ root, scope, slug, onClose, onImported }) {
+  useEscToClose(onClose)
   const [ref, setRef] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)

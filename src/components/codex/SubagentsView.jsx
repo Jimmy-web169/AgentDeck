@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api.js'
+import useEscToClose from '../../lib/useEscToClose.js'
 import Conversation from './Conversation.jsx'
 import ContextMeter from './ContextMeter.jsx'
 import { fmtTokens } from '../../lib/format.js'
@@ -27,6 +28,7 @@ function AgentRow({ c, onOpen }) {
 }
 
 function TranscriptModal({ tx, onClose, onOpenSession }) {
+  useEscToClose(onClose)
   const label = `${tx.c.agentRole || 'agent'}${tx.c.agentNickname ? ` (${tx.c.agentNickname})` : ''}`
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6" onClick={onClose}>
@@ -40,7 +42,7 @@ function TranscriptModal({ tx, onClose, onOpenSession }) {
             {onOpenSession && (
               <button onClick={() => { onOpenSession(tx.c.id); onClose() }} className="text-[11px] text-sky-400 hover:text-sky-300">open as session ↗</button>
             )}
-            <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-xl leading-none">×</button>
+            <button onClick={onClose} aria-label="Close" className="text-zinc-500 hover:text-zinc-200 text-xl leading-none">×</button>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto">

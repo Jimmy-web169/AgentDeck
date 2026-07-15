@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../api.js'
+import useEscToClose from '../../lib/useEscToClose.js'
 
 // Pop-up folder picker for "new project at a path". Browses the server's
 // filesystem (OS-friendly via Node fs/path) — navigate folders or paste a path.
 export default function PathPicker({ onPick, onClose }) {
+  useEscToClose(onClose)
   const [cur, setCur] = useState(null) // { path, parent, home, dirs }
   const [input, setInput] = useState('')
   const [err, setErr] = useState(null)

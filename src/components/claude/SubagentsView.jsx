@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../../api.js'
+import useEscToClose from '../../lib/useEscToClose.js'
 import Conversation from './Conversation.jsx'
 import { fmtTokens } from '../../lib/format.js'
 
@@ -161,6 +162,7 @@ function PlainAgents({ agents, onOpenAgent }) {
 }
 
 function TranscriptModal({ tx, onClose }) {
+  useEscToClose(onClose)
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-6" onClick={onClose}>
       <div className="w-[860px] max-w-[95vw] h-[88vh] bg-ink-800 border border-zinc-700 rounded-xl shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -171,7 +173,7 @@ function TranscriptModal({ tx, onClose }) {
               {tx.agent.agentType ? `${tx.agent.agentType} · ` : ''}agent {tx.agent.id}
             </div>
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-xl leading-none shrink-0 ml-3">×</button>
+          <button onClick={onClose} aria-label="Close" className="text-zinc-500 hover:text-zinc-200 text-xl leading-none shrink-0 ml-3">×</button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {tx.loading && <div className="p-8 text-center text-zinc-600">Loading transcript…</div>}

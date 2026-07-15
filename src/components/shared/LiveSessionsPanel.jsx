@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import useEscToClose from '../../lib/useEscToClose.js'
 
 // badge color comes from the provider's config (`accent`); unknown → zinc
 function ProviderTag({ providers, id }) {
@@ -12,6 +13,7 @@ function ProviderTag({ providers, id }) {
 // every provider. `items` is the normalized cross-provider list of live tmux
 // terminals — the single source of truth for what's live now.
 export default function LiveSessionsPanel({ items = [], providers = [], onEnter, onClose, onClosePanel, title = 'Live sessions' }) {
+  useEscToClose(onClosePanel)
   const [copied, setCopied] = useState(null)
 
   // copy `tmux attach -t <name>` so the session can be attached from any terminal
