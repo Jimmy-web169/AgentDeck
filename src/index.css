@@ -102,6 +102,90 @@
   --fuchsia-500: 163 21 126;
 }
 
+/* ---- code highlighting (highlight.js) ----
+   Token colors as theme variables — github-dark values by default, github
+   light values under data-theme="light". Background stays transparent so the
+   surrounding <pre> (styled via the ink palette) controls it in both themes. */
+:root {
+  --hljs-fg: #c9d1d9;
+  --hljs-comment: #8b949e;
+  --hljs-keyword: #ff7b72;
+  --hljs-title: #d2a8ff;
+  --hljs-const: #79c0ff;
+  --hljs-string: #a5d6ff;
+  --hljs-builtin: #ffa657;
+  --hljs-tag: #7ee787;
+}
+:root[data-theme='light'] {
+  --hljs-fg: #24292e;
+  --hljs-comment: #6a737d;
+  --hljs-keyword: #d73a49;
+  --hljs-title: #6f42c1;
+  --hljs-const: #005cc5;
+  --hljs-string: #032f62;
+  --hljs-builtin: #e36209;
+  --hljs-tag: #22863a;
+}
+.hljs {
+  color: var(--hljs-fg);
+  background: transparent;
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--hljs-comment);
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-doctag,
+.hljs-meta .hljs-keyword,
+.hljs-template-tag,
+.hljs-type {
+  color: var(--hljs-keyword);
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_ {
+  color: var(--hljs-title);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-number,
+.hljs-operator,
+.hljs-variable,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-meta {
+  color: var(--hljs-const);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-meta .hljs-string,
+.hljs-char.escape_ {
+  color: var(--hljs-string);
+}
+.hljs-built_in,
+.hljs-symbol,
+.hljs-params {
+  color: var(--hljs-builtin);
+}
+.hljs-name,
+.hljs-section,
+.hljs-deletion,
+.hljs-subst,
+.hljs-tag,
+.hljs-bullet {
+  color: var(--hljs-tag);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: bold;
+}
+
 html,
 body,
 #root {

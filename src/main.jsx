@@ -1,6 +1,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
-import 'highlight.js/styles/github-dark.css'
+// code-highlight colors live in index.css as theme-aware variables
+// (a static stylesheet like github-dark.css would leak into the light theme)
 import './index.css'
 import App from './App.jsx'
 
