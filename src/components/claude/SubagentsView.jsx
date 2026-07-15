@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api.js'
 import Conversation from './Conversation.jsx'
 import { fmtTokens } from '../../lib/format.js'
@@ -183,24 +183,32 @@ function TranscriptModal({ tx, onClose }) {
   )
 }
 
-export default function SubagentsView({ data }) {
+export default function SubagentsView({ data, version = 0 }) {
   const [tx, setTx] = useState(null)
+  const lastVersion = useRef(version)
 
-  // keep an open transcript modal fresh — mirrors the main conversation's fallback
-  // poll (ClaudeApp.jsx) so a still-running sub-agent doesn't require close+reopen
+  // keep an open transcript modal fresh, the same way the main conversation
+  // stays fresh: refetch when this session's SSE version bumps (subagent
+  // writes map to their parent session — see registry.js toEvent), plus a
+  // slow fallback poll in case a file event is missed or writes are buffered
   useEffect(() => {
     if (!data || !tx || tx.loading || tx.error) return
     const { agent, runId } = tx
-    const t = setInterval(() => {
+    const refetch = () => {
       api
         .subagent(data.root, data.slug, data.id, runId, agent.id)
         // identical data (e.g. a 304 revalidation returning the same object)
         // -> keep prev so React bails out of the re-render entirely
         .then((d) => setTx((prev) => (prev && prev.agent.id === agent.id ? (prev.data === d ? prev : { agent, runId, data: d }) : prev)))
         .catch(() => {})
-    }, 3000)
+    }
+    if (lastVersion.current !== version) {
+      lastVersion.current = version
+      refetch()
+    }
+    const t = setInterval(refetch, 15000)
     return () => clearInterval(t)
-  }, [data, tx])
+  }, [data, tx, version])
 
   if (!data) return <div className="p-8 text-zinc-600">Loading sub-agents…</div>
   const runs = data.runs || []

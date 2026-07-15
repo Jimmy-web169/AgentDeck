@@ -785,7 +785,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
-            {tab === 'subagents' && <SubagentsView data={subagents} />}
+            {tab === 'subagents' && <SubagentsView data={subagents} version={(active && sessionVersions[active.id]) || 0} />}
             {tab === 'raw' && raw && <RawView records={raw.records} />}
             {tab === 'memory' && <MemoryView root={root} projects={projects} />}
             {tab === 'stats' && <Stats stats={stats} root={root} focus={statsFocus} onOpenSession={(slug, s) => jumpToSession({ root, slug, id: s.id, title: s.title })} />}

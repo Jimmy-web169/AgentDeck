@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api.js'
 import Conversation from './Conversation.jsx'
 import ContextMeter from './ContextMeter.jsx'
@@ -53,7 +53,7 @@ function TranscriptModal({ tx, onClose, onOpenSession }) {
   )
 }
 
-export default function SubagentsView({ root, parent, onOpenSession }) {
+export default function SubagentsView({ root, parent, versions = {}, onOpenSession }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [tx, setTx] = useState(null)
@@ -65,35 +65,52 @@ export default function SubagentsView({ root, parent, onOpenSession }) {
     api.subagents(root, parent.id).then(setData).catch((e) => setError(e.message))
   }, [root, parent?.id])
 
-  // this tab stays mounted for as long as it's open — poll so turns/tokens/context%
-  // don't go stale until you switch away and back
+  // Codex subagents are independent rollouts, so SSE change events carry each
+  // child's own session id — sum the known children's version bumps to know
+  // when the list's turns/tokens/context% went stale. Newly-spawned children
+  // aren't in the sum yet; the slow fallback poll picks those up.
+  const listVersion = data?.children ? data.children.reduce((n, c) => n + (versions[c.id] || 0), 0) : 0
+  const lastListVersion = useRef(listVersion)
   useEffect(() => {
     if (!root || !parent?.id) return
-    const t = setInterval(() => {
-      // setState with the same reference (a 304 revalidation) bails out for free
+    const refetch = () => {
+      // setState with the same reference bails out for free
       api.subagents(root, parent.id).then((d) => setData((prev) => (prev === d ? prev : d))).catch(() => {})
-    }, 3000)
+    }
+    if (lastListVersion.current !== listVersion) {
+      lastListVersion.current = listVersion
+      refetch()
+    }
+    const t = setInterval(refetch, 15000)
     return () => clearInterval(t)
-  }, [root, parent?.id])
+  }, [root, parent?.id, listVersion])
 
   const open = (c) => {
     setTx({ c, loading: true })
     api.session(root, c.id).then((d) => setTx({ c, data: d })).catch((e) => setTx({ c, error: e.message }))
   }
 
-  // keep an open transcript modal fresh too — same rationale as above
+  // keep an open transcript modal fresh — SSE-driven off the child rollout's
+  // own version, plus the same slow fallback poll
+  const txVersion = (tx?.c && versions[tx.c.id]) || 0
+  const lastTxVersion = useRef(txVersion)
   useEffect(() => {
     if (!tx || tx.loading || tx.error) return
     const { c } = tx
-    const t = setInterval(() => {
+    const refetch = () => {
       api
         .session(root, c.id)
         // same data reference (304 revalidation) -> keep prev, no re-render
         .then((d) => setTx((prev) => (prev && prev.c.id === c.id ? (prev.data === d ? prev : { c, data: d }) : prev)))
         .catch(() => {})
-    }, 3000)
+    }
+    if (lastTxVersion.current !== txVersion) {
+      lastTxVersion.current = txVersion
+      refetch()
+    }
+    const t = setInterval(refetch, 15000)
     return () => clearInterval(t)
-  }, [root, tx])
+  }, [root, tx, txVersion])
 
   if (error) return <div className="p-8 text-red-300 text-sm">{error}</div>
   if (!data) return <div className="p-8 text-zinc-600 text-sm">Loading sub-agents…</div>
