@@ -194,7 +194,9 @@ export default function SubagentsView({ data }) {
     const t = setInterval(() => {
       api
         .subagent(data.root, data.slug, data.id, runId, agent.id)
-        .then((d) => setTx((prev) => (prev && prev.agent.id === agent.id ? { agent, runId, data: d } : prev)))
+        // identical data (e.g. a 304 revalidation returning the same object)
+        // -> keep prev so React bails out of the re-render entirely
+        .then((d) => setTx((prev) => (prev && prev.agent.id === agent.id ? (prev.data === d ? prev : { agent, runId, data: d }) : prev)))
         .catch(() => {})
     }, 3000)
     return () => clearInterval(t)

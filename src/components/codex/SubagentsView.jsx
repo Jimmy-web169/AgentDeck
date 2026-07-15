@@ -70,7 +70,8 @@ export default function SubagentsView({ root, parent, onOpenSession }) {
   useEffect(() => {
     if (!root || !parent?.id) return
     const t = setInterval(() => {
-      api.subagents(root, parent.id).then(setData).catch(() => {})
+      // setState with the same reference (a 304 revalidation) bails out for free
+      api.subagents(root, parent.id).then((d) => setData((prev) => (prev === d ? prev : d))).catch(() => {})
     }, 3000)
     return () => clearInterval(t)
   }, [root, parent?.id])
@@ -87,7 +88,8 @@ export default function SubagentsView({ root, parent, onOpenSession }) {
     const t = setInterval(() => {
       api
         .session(root, c.id)
-        .then((d) => setTx((prev) => (prev && prev.c.id === c.id ? { c, data: d } : prev)))
+        // same data reference (304 revalidation) -> keep prev, no re-render
+        .then((d) => setTx((prev) => (prev && prev.c.id === c.id ? (prev.data === d ? prev : { c, data: d }) : prev)))
         .catch(() => {})
     }, 3000)
     return () => clearInterval(t)
