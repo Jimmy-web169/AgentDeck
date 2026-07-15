@@ -17,6 +17,7 @@ import LiveSessionsPanel from './components/shared/LiveSessionsPanel.jsx'
 import RootsManager from './components/shared/RootsManager.jsx'
 import RateLimitsBar from './components/codex/RateLimitsBar.jsx'
 import InfoDot from './components/shared/InfoDot.jsx'
+import ErrorBoundary from './components/shared/ErrorBoundary.jsx'
 import ContextMeter from './components/codex/ContextMeter.jsx'
 import useLiveChatStore, { keyOf as liveKeyOf } from './lib/store.codex.js'
 import useActiveSessions, { toManagerItems } from './lib/useActiveSessions.js'
@@ -661,19 +662,21 @@ export default function App({ active: appActive = true, provider, onProvider, pr
         ) : tab === 'conversation' ? (
           <div className="flex-1 min-h-0 flex flex-col">
             <div ref={mainRef} onScroll={onMainScroll} className="flex-1 overflow-y-auto">
-              {engine === 'terminal' ? (
-                termDraft ? (
-                  <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
-                ) : sessionData ? (
-                  <Conversation data={sessionData} onOpenSession={openSessionById} />
+              <ErrorBoundary label="this conversation">
+                {engine === 'terminal' ? (
+                  termDraft ? (
+                    <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
+                  ) : sessionData ? (
+                    <Conversation data={sessionData} onOpenSession={openSessionById} />
+                  ) : (
+                    <Empty active={active} />
+                  )
+                ) : convData ? (
+                  <Conversation data={convData} live={viewSlice ? { items: viewSlice.items } : null} onOpenSession={openSessionById} />
                 ) : (
                   <Empty active={active} />
-                )
-              ) : convData ? (
-                <Conversation data={convData} live={viewSlice ? { items: viewSlice.items } : null} onOpenSession={openSessionById} />
-              ) : (
-                <Empty active={active} />
-              )}
+                )}
+              </ErrorBoundary>
             </div>
 
             {engine === 'terminal' ? (
@@ -719,12 +722,14 @@ export default function App({ active: appActive = true, provider, onProvider, pr
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
-            {tab === 'subagents' && active && <SubagentsView root={root} parent={active} onOpenSession={openSessionById} />}
-            {tab === 'raw' && raw && <RawView records={raw.records} typeOf={CODEX_RAW_TYPE} />}
-            {tab === 'stats' && <Stats root={root} stats={stats} focus={statsFocus} onOpenSession={openSessionById} />}
-            {tab === 'history' && <HistoryView data={history} onOpenSession={openSessionById} />}
-            {tab === 'memory' && <MemoryView root={root} />}
-            {tab === 'plugins' && <PluginsView root={root} />}
+            <ErrorBoundary label="this view">
+              {tab === 'subagents' && active && <SubagentsView root={root} parent={active} onOpenSession={openSessionById} />}
+              {tab === 'raw' && raw && <RawView records={raw.records} typeOf={CODEX_RAW_TYPE} />}
+              {tab === 'stats' && <Stats root={root} stats={stats} focus={statsFocus} onOpenSession={openSessionById} />}
+              {tab === 'history' && <HistoryView data={history} onOpenSession={openSessionById} />}
+              {tab === 'memory' && <MemoryView root={root} />}
+              {tab === 'plugins' && <PluginsView root={root} />}
+            </ErrorBoundary>
           </div>
         )}
       </main>

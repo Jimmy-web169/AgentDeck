@@ -19,6 +19,7 @@ import useActiveSessions, { toManagerItems } from './lib/useActiveSessions.js'
 import { ActivityIcon } from './components/shared/icons.jsx'
 import RateLimitsBar from './components/claude/RateLimitsBar.jsx'
 import InfoDot from './components/shared/InfoDot.jsx'
+import ErrorBoundary from './components/shared/ErrorBoundary.jsx'
 
 const LIVE_MS = 8000
 
@@ -737,22 +738,24 @@ export default function App({ active: appActive = true, provider, onProvider, pr
         ) : tab === 'conversation' ? (
           <div className="flex-1 min-h-0 flex flex-col">
             <div ref={mainRef} onScroll={onMainScroll} className="flex-1 overflow-y-auto">
-              {engine === 'terminal' ? (
-                termDraft ? (
-                  <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
-                ) : sessionData ? (
-                  <Conversation data={sessionData} />
+              <ErrorBoundary label="this conversation">
+                {engine === 'terminal' ? (
+                  termDraft ? (
+                    <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
+                  ) : sessionData ? (
+                    <Conversation data={sessionData} />
+                  ) : (
+                    <Empty active={active} />
+                  )
+                ) : convData ? (
+                  <Conversation
+                    data={convData}
+                    live={viewSlice ? { items: viewSlice.items, onPerm: (r, bh, scope, answers) => live.respondPerm(viewKey, r, bh, scope, answers) } : null}
+                  />
                 ) : (
                   <Empty active={active} />
-                )
-              ) : convData ? (
-                <Conversation
-                  data={convData}
-                  live={viewSlice ? { items: viewSlice.items, onPerm: (r, bh, scope, answers) => live.respondPerm(viewKey, r, bh, scope, answers) } : null}
-                />
-              ) : (
-                <Empty active={active} />
-              )}
+                )}
+              </ErrorBoundary>
             </div>
             {engine === 'terminal' ? (
               termDraft ? (
@@ -785,14 +788,16 @@ export default function App({ active: appActive = true, provider, onProvider, pr
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
-            {tab === 'subagents' && <SubagentsView data={subagents} />}
-            {tab === 'raw' && raw && <RawView records={raw.records} />}
-            {tab === 'memory' && <MemoryView root={root} projects={projects} />}
-            {tab === 'stats' && <Stats stats={stats} root={root} focus={statsFocus} onOpenSession={(slug, s) => jumpToSession({ root, slug, id: s.id, title: s.title })} />}
-            {tab === 'resources' && root && <Resources key={`res-${root}`} root={root} />}
-            {tab === 'config' && root && openSlug && <Resources key={`cfg-${root}-${openSlug}`} root={root} slug={openSlug} />}
-            {tab === 'history' && <HistoryView data={history} />}
-            {tab === 'plugins' && <PluginsView data={plugins} />}
+            <ErrorBoundary label="this view">
+              {tab === 'subagents' && <SubagentsView data={subagents} />}
+              {tab === 'raw' && raw && <RawView records={raw.records} />}
+              {tab === 'memory' && <MemoryView root={root} projects={projects} />}
+              {tab === 'stats' && <Stats stats={stats} root={root} focus={statsFocus} onOpenSession={(slug, s) => jumpToSession({ root, slug, id: s.id, title: s.title })} />}
+              {tab === 'resources' && root && <Resources key={`res-${root}`} root={root} />}
+              {tab === 'config' && root && openSlug && <Resources key={`cfg-${root}-${openSlug}`} root={root} slug={openSlug} />}
+              {tab === 'history' && <HistoryView data={history} />}
+              {tab === 'plugins' && <PluginsView data={plugins} />}
+            </ErrorBoundary>
           </div>
         )}
       </main>
