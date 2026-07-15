@@ -6,6 +6,7 @@ import chokidar from 'chokidar'
 import { PROVIDERS } from './registry.js'
 import { isAllowedOrigin } from './shared/origin.js'
 import { stopAllTerminals } from './shared/terminal.js'
+import { registerWatchControl } from './shared/watchGate.js'
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -42,13 +43,17 @@ function queue(event) {
     }, 250)
   }
 }
-function startWatchers() {
-  for (const w of watchers) {
-    try {
-      w.close()
-    } catch {}
-  }
+// Closing is async (chokidar returns a promise); await it wherever the old
+// generation's handles must actually be released — on Windows a still-open
+// directory handle blocks deleting that directory.
+async function stopWatchers() {
+  const closing = watchers.map((w) => Promise.resolve(w.close()).catch(() => {}))
   watchers = []
+  await Promise.all(closing)
+}
+
+function startWatchers() {
+  void stopWatchers() // re-arm: old handles release as their close() settles
   for (const p of Object.values(PROVIDERS)) {
     if (!p.watch) continue
     for (const root of p.loadRoots()) {
@@ -178,6 +183,7 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`  providers: ${Object.keys(PROVIDERS).join(', ')}`)
   console.log(`  dev UI: http://localhost:${DEV_UI_PORT}\n`)
   startWatchers()
+  registerWatchControl(stopWatchers, startWatchers)
 })
 
 // Route /chat/<provider> WebSocket upgrades to each provider's noServer wss, so

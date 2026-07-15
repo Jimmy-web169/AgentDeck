@@ -16,6 +16,7 @@ import { readRecords, buildTimeline, summarize } from './parser.js'
 import { discoverRuns, discoverPlainAgents } from './runs.js'
 import { inventory, readResource, writeResource, deleteResource } from './resources.js'
 import { safeTrash } from '../../shared/trash.js'
+import { withWatchersPaused } from '../../shared/watchGate.js'
 import { parseSkillsAdd, runSkillsAdd } from '../../shared/skills.js'
 import { SKILL_CONFIG } from './skills.js'
 import { openTool, pickFolderNative } from '../../shared/launch.js'
@@ -159,8 +160,12 @@ async function deleteSession(q) {
   const file = findSessionFile(root.dir, slug, id)
   const sideDir = path.join(root.dir, 'projects', slug, id)
   assertInside(root.dir, sideDir)
-  if (fs.existsSync(sideDir)) await safeTrash(sideDir)
-  await safeTrash(file)
+  // our own watchers hold handles on the sidecar dir; on Windows that makes
+  // the recycle-bin move fail — pause them for the duration of the trash
+  await withWatchersPaused(async () => {
+    if (fs.existsSync(sideDir)) await safeTrash(sideDir)
+    await safeTrash(file)
+  })
   return { root: root.id, slug, id, trashed: true }
 }
 
