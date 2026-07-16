@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../../api.js'
+import useEscToClose from '../../lib/useEscToClose.js'
 
 // Normalize whatever the user typed (a bare ref, a skills.sh/GitHub URL, or a
 // full `npx skills add ...` command) down to the args after `skills add`, so we
@@ -16,6 +17,9 @@ const normalize = (input) =>
 export default function SkillImport({ root, scope, slug, onClose, onImported }) {
   const [ref, setRef] = useState('')
   const [busy, setBusy] = useState(false)
+  // Don't let Escape dismiss the modal while `npx skills add` is running
+  // server-side — the install would keep going with no UI to report back to.
+  useEscToClose(onClose, !busy)
   const [err, setErr] = useState(null)
   const [result, setResult] = useState(null)
 

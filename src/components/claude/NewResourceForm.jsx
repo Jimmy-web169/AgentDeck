@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../../api.js'
+import useEscToClose from '../../lib/useEscToClose.js'
 
 // Creation-only scaffolding. Fields come straight from the Claude Code docs.
 // After create we hand off to the main textarea editor (no form<->frontmatter
@@ -85,6 +86,7 @@ function toYaml(obj) {
 }
 
 export default function NewResourceForm({ kind, root, slug, onClose, onCreated }) {
+  useEscToClose(onClose)
   const schema = SCHEMA[kind]
   const [id, setId] = useState('')
   const [vals, setVals] = useState({})
@@ -120,7 +122,7 @@ export default function NewResourceForm({ kind, root, slug, onClose, onCreated }
       <div className="w-[600px] max-w-[95vw] max-h-[88vh] bg-ink-800 border border-zinc-700 rounded-xl shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
           <div className="text-[14px] text-zinc-100 font-medium">{schema.title}</div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-xl leading-none">×</button>
+          <button onClick={onClose} aria-label="Close" className="text-zinc-500 hover:text-zinc-200 text-xl leading-none">×</button>
         </div>
         <div className="p-4 space-y-3 overflow-y-auto">
           <Field label={schema.idLabel} required>

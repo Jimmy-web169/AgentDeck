@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from '../../api.js'
+import useEscToClose from '../../lib/useEscToClose.js'
 
 // Normalize whatever the user typed (a bare ref or a full `npx skills add ...`
 // command) down to the args that follow `skills add`, so we can show the exact
@@ -15,6 +16,9 @@ const normalize = (input) =>
 export default function SkillImport({ root, slug, onClose, onImported }) {
   const [ref, setRef] = useState('')
   const [busy, setBusy] = useState(false)
+  // Don't let Escape dismiss the modal while `npx skills add` is running
+  // server-side — the install would keep going with no UI to report back to.
+  useEscToClose(onClose, !busy)
   const [err, setErr] = useState(null)
   const [result, setResult] = useState(null) // { ok, code, command, output }
 
@@ -42,7 +46,7 @@ export default function SkillImport({ root, slug, onClose, onImported }) {
       <div className="w-[760px] max-w-[95vw] max-h-[88vh] bg-ink-800 border border-zinc-700 rounded-xl shadow-2xl flex flex-col" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-800 shrink-0">
           <div className="text-[14px] text-zinc-100 font-medium">Install a skill</div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-xl leading-none">×</button>
+          <button onClick={onClose} aria-label="Close" className="text-zinc-500 hover:text-zinc-200 text-xl leading-none">×</button>
         </div>
 
         <div className="p-4 space-y-3 overflow-y-auto">

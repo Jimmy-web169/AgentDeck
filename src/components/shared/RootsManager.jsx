@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '../../api.js'
 import { FolderIcon } from './icons.jsx'
+import useEscToClose from '../../lib/useEscToClose.js'
 
 // Provider copy is parameterized; defaults preserve claude behavior.
 // `rootStatusField` selects which boolean on a root marks "has history"
@@ -15,6 +16,7 @@ export default function RootsManager({
   hasHistoryLabel = 'has history',
   noHistoryLabel = 'no history (config only)',
 }) {
+  useEscToClose(onClose)
   const [path, setPath] = useState('')
   const [label, setLabel] = useState('')
   const [busy, setBusy] = useState(false)
@@ -56,7 +58,7 @@ export default function RootsManager({
           <div className="flex items-center gap-2 text-zinc-100 font-semibold">
             <FolderIcon /> {title}
           </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200 text-lg leading-none">×</button>
+          <button onClick={onClose} aria-label="Close" className="text-zinc-500 hover:text-zinc-200 text-lg leading-none">×</button>
         </div>
 
         <div className="p-4 space-y-2 max-h-72 overflow-y-auto">
