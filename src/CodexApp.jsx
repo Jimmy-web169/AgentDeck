@@ -719,7 +719,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
-            {tab === 'subagents' && active && <SubagentsView root={root} parent={active} versions={sessionVersions} onOpenSession={openSessionById} />}
+            {tab === 'subagents' && active && <SubagentsView key={active.id} root={root} parent={active} versions={sessionVersions} active={appActive} onOpenSession={openSessionById} />}
             {tab === 'raw' && raw && <RawView records={raw.records} typeOf={CODEX_RAW_TYPE} />}
             {tab === 'stats' && <Stats root={root} stats={stats} focus={statsFocus} onOpenSession={openSessionById} />}
             {tab === 'history' && <HistoryView data={history} onOpenSession={openSessionById} />}

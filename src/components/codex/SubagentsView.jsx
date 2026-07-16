@@ -53,7 +53,11 @@ function TranscriptModal({ tx, onClose, onOpenSession }) {
   )
 }
 
-export default function SubagentsView({ root, parent, versions = {}, onOpenSession }) {
+// min gap between version-driven refetches: SSE versions bump every ~250ms
+// while a rollout streams — the trailing timeout still picks up the final state
+const VERSION_REFETCH_THROTTLE_MS = 750
+
+export default function SubagentsView({ root, parent, versions = {}, active = true, onOpenSession }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [tx, setTx] = useState(null)
@@ -71,46 +75,84 @@ export default function SubagentsView({ root, parent, versions = {}, onOpenSessi
   // aren't in the sum yet; the slow fallback poll picks those up.
   const listVersion = data?.children ? data.children.reduce((n, c) => n + (versions[c.id] || 0), 0) : 0
   const lastListVersion = useRef(listVersion)
+  const lastListFetchAt = useRef(0)
   useEffect(() => {
-    if (!root || !parent?.id) return
+    if (!active || !root || !parent?.id) return
+    let cancelled = false
     const refetch = () => {
-      // setState with the same reference bails out for free
-      api.subagents(root, parent.id).then((d) => setData((prev) => (prev === d ? prev : d))).catch(() => {})
+      lastListFetchAt.current = Date.now()
+      api
+        .subagents(root, parent.id)
+        .then((d) => {
+          // cancelled guard: don't let an in-flight response for a previous
+          // parent overwrite the new parent's list after a session switch
+          if (cancelled) return
+          // reference short-circuit: a no-op today (fresh object per parse) —
+          // pays off once conditional GETs land (PR #4 returns cached objects)
+          setData((prev) => (prev === d ? prev : d))
+          setError(null)
+        })
+        .catch(() => {})
     }
+    let throttleTimer = null
     if (lastListVersion.current !== listVersion) {
       lastListVersion.current = listVersion
-      refetch()
+      const wait = VERSION_REFETCH_THROTTLE_MS - (Date.now() - lastListFetchAt.current)
+      if (wait <= 0) refetch()
+      else throttleTimer = setTimeout(refetch, wait)
     }
     const t = setInterval(refetch, 15000)
-    return () => clearInterval(t)
-  }, [root, parent?.id, listVersion])
+    return () => {
+      cancelled = true
+      clearInterval(t)
+      if (throttleTimer) clearTimeout(throttleTimer)
+    }
+  }, [active, root, parent?.id, listVersion])
+
+  const txVersion = (tx?.c && versions[tx.c.id]) || 0
+  const lastTxVersion = useRef(txVersion)
+  const lastTxFetchAt = useRef(0)
 
   const open = (c) => {
+    // the initial fetch already reflects the current version — sync the ref so
+    // the effect doesn't immediately refetch what we just loaded
+    lastTxVersion.current = versions[c.id] || 0
     setTx({ c, loading: true })
-    api.session(root, c.id).then((d) => setTx({ c, data: d })).catch((e) => setTx({ c, error: e.message }))
+    api
+      .session(root, c.id)
+      // functional guard: if the user opened a different child (or closed the
+      // modal) before this resolved, don't clobber the newer state
+      .then((d) => setTx((prev) => (prev && prev.c.id === c.id ? { c, data: d } : prev)))
+      .catch((e) => setTx((prev) => (prev && prev.c.id === c.id ? { c, error: e.message } : prev)))
   }
 
   // keep an open transcript modal fresh — SSE-driven off the child rollout's
   // own version, plus the same slow fallback poll
-  const txVersion = (tx?.c && versions[tx.c.id]) || 0
-  const lastTxVersion = useRef(txVersion)
   useEffect(() => {
-    if (!tx || tx.loading || tx.error) return
+    if (!active || !tx || tx.loading || tx.error) return
     const { c } = tx
     const refetch = () => {
+      lastTxFetchAt.current = Date.now()
       api
         .session(root, c.id)
-        // same data reference (304 revalidation) -> keep prev, no re-render
+        // reference short-circuit: a no-op today (fresh object per parse) —
+        // pays off once conditional GETs land (PR #4 returns cached objects)
         .then((d) => setTx((prev) => (prev && prev.c.id === c.id ? (prev.data === d ? prev : { c, data: d }) : prev)))
         .catch(() => {})
     }
+    let throttleTimer = null
     if (lastTxVersion.current !== txVersion) {
       lastTxVersion.current = txVersion
-      refetch()
+      const wait = VERSION_REFETCH_THROTTLE_MS - (Date.now() - lastTxFetchAt.current)
+      if (wait <= 0) refetch()
+      else throttleTimer = setTimeout(refetch, wait)
     }
     const t = setInterval(refetch, 15000)
-    return () => clearInterval(t)
-  }, [root, tx, txVersion])
+    return () => {
+      clearInterval(t)
+      if (throttleTimer) clearTimeout(throttleTimer)
+    }
+  }, [active, root, tx, txVersion])
 
   if (error) return <div className="p-8 text-red-300 text-sm">{error}</div>
   if (!data) return <div className="p-8 text-zinc-600 text-sm">Loading sub-agents…</div>
