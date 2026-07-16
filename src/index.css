@@ -9,7 +9,10 @@
    classes (bg-zinc-800, text-emerald-300, ...) are wired to these variables
    in tailwind.config.js, so no component needed to change. */
 :root {
-  --ink-950: 8 8 8;
+  color-scheme: dark;
+  /* ink-950 was previously undefined (bg-ink-950 fell through to the body's
+     #171717), so it matches ink-800 to preserve the exact rendered appearance */
+  --ink-950: 23 23 23;
   --ink-900: 13 13 13;
   --ink-800: 23 23 23;
   --ink-700: 33 33 33;
@@ -56,7 +59,9 @@
 }
 
 :root[data-theme='light'] {
-  --ink-950: 253 250 244;
+  color-scheme: light;
+  /* mirrors the dark side: ink-950 tracks ink-800 (the body background) */
+  --ink-950: 251 248 242;
   --ink-900: 243 239 230;
   --ink-800: 251 248 242;
   --ink-700: 242 236 221;
