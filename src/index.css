@@ -2,6 +2,195 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ---- theme tokens ----
+   Default (no data-theme, or data-theme="dark") = the original dark palette,
+   values unchanged from before the light theme existed. data-theme="light"
+   overrides every token below with the light equivalent. Tailwind color
+   classes (bg-zinc-800, text-emerald-300, ...) are wired to these variables
+   in tailwind.config.js, so no component needed to change. */
+:root {
+  color-scheme: dark;
+  /* ink-950 was previously undefined (bg-ink-950 fell through to the body's
+     #171717), so it matches ink-800 to preserve the exact rendered appearance */
+  --ink-950: 23 23 23;
+  --ink-900: 13 13 13;
+  --ink-800: 23 23 23;
+  --ink-700: 33 33 33;
+  --ink-600: 42 42 42;
+  --ink-500: 52 53 65;
+  --ink-400: 63 63 70;
+  --white: 255 255 255;
+  --zinc-100: 244 244 245;
+  --zinc-200: 228 228 231;
+  --zinc-300: 212 212 216;
+  --zinc-400: 161 161 170;
+  --zinc-500: 113 113 122;
+  --zinc-600: 82 82 91;
+  --zinc-700: 63 63 70;
+  --zinc-800: 39 39 42;
+  --emerald-200: 167 243 208;
+  --emerald-300: 110 231 183;
+  --emerald-400: 52 211 153;
+  --emerald-500: 16 185 129;
+  --emerald-600: 5 150 105;
+  --amber-200: 253 230 138;
+  --amber-300: 252 211 77;
+  --amber-400: 251 191 36;
+  --amber-500: 245 158 11;
+  --sky-100: 224 242 254;
+  --sky-200: 186 230 253;
+  --sky-300: 125 211 252;
+  --sky-400: 56 189 248;
+  --sky-500: 14 165 233;
+  --violet-200: 221 214 254;
+  --violet-300: 196 181 253;
+  --violet-400: 167 139 250;
+  --violet-500: 139 92 246;
+  --rose-300: 253 164 175;
+  --rose-500: 244 63 94;
+  --red-200: 254 202 202;
+  --red-300: 252 165 165;
+  --red-400: 248 113 113;
+  --red-500: 239 68 68;
+  --cyan-300: 103 232 249;
+  --cyan-500: 6 182 212;
+  --fuchsia-300: 240 171 252;
+  --fuchsia-500: 217 70 239;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  /* mirrors the dark side: ink-950 tracks ink-800 (the body background) */
+  --ink-950: 251 248 242;
+  --ink-900: 243 239 230;
+  --ink-800: 251 248 242;
+  --ink-700: 242 236 221;
+  --ink-600: 235 226 204;
+  --ink-500: 224 213 184;
+  --ink-400: 214 201 163;
+  --white: 38 37 33;
+  --zinc-100: 38 37 33;
+  --zinc-200: 52 50 44;
+  --zinc-300: 70 68 60;
+  --zinc-400: 92 89 78;
+  --zinc-500: 139 133 119;
+  --zinc-600: 163 156 140;
+  --zinc-700: 226 220 208;
+  --zinc-800: 234 228 215;
+  --emerald-200: 13 107 83;
+  --emerald-300: 22 135 111;
+  --emerald-400: 21 152 115;
+  --emerald-500: 14 150 104;
+  --emerald-600: 11 122 84;
+  --amber-200: 138 90 6;
+  --amber-300: 181 114 10;
+  --amber-400: 194 127 19;
+  --amber-500: 168 105 10;
+  --sky-100: 10 77 110;
+  --sky-200: 15 88 120;
+  --sky-300: 17 119 163;
+  --sky-400: 31 143 196;
+  --sky-500: 18 138 184;
+  --violet-200: 91 63 174;
+  --violet-300: 95 63 192;
+  --violet-400: 111 82 209;
+  --violet-500: 103 65 201;
+  --rose-300: 217 88 76;
+  --rose-500: 201 76 63;
+  --red-200: 155 28 28;
+  --red-300: 179 38 30;
+  --red-400: 194 46 36;
+  --red-500: 197 48 48;
+  --cyan-300: 15 122 140;
+  --cyan-500: 14 116 144;
+  --fuchsia-300: 165 45 138;
+  --fuchsia-500: 163 21 126;
+}
+
+/* ---- code highlighting (highlight.js) ----
+   Token colors as theme variables — github-dark values by default, github
+   light values under data-theme="light". Background stays transparent so the
+   surrounding <pre> (styled via the ink palette) controls it in both themes. */
+:root {
+  --hljs-fg: #c9d1d9;
+  --hljs-comment: #8b949e;
+  --hljs-keyword: #ff7b72;
+  --hljs-title: #d2a8ff;
+  --hljs-const: #79c0ff;
+  --hljs-string: #a5d6ff;
+  --hljs-builtin: #ffa657;
+  --hljs-tag: #7ee787;
+}
+:root[data-theme='light'] {
+  --hljs-fg: #24292e;
+  --hljs-comment: #6a737d;
+  --hljs-keyword: #d73a49;
+  --hljs-title: #6f42c1;
+  --hljs-const: #005cc5;
+  --hljs-string: #032f62;
+  --hljs-builtin: #e36209;
+  --hljs-tag: #22863a;
+}
+.hljs {
+  color: var(--hljs-fg);
+  background: transparent;
+}
+.hljs-comment,
+.hljs-quote {
+  color: var(--hljs-comment);
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-doctag,
+.hljs-meta .hljs-keyword,
+.hljs-template-tag,
+.hljs-type {
+  color: var(--hljs-keyword);
+}
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_ {
+  color: var(--hljs-title);
+}
+.hljs-attr,
+.hljs-attribute,
+.hljs-literal,
+.hljs-number,
+.hljs-operator,
+.hljs-variable,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id,
+.hljs-meta {
+  color: var(--hljs-const);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-meta .hljs-string,
+.hljs-char.escape_ {
+  color: var(--hljs-string);
+}
+.hljs-built_in,
+.hljs-symbol,
+.hljs-params {
+  color: var(--hljs-builtin);
+}
+.hljs-name,
+.hljs-section,
+.hljs-deletion,
+.hljs-subst,
+.hljs-tag,
+.hljs-bullet {
+  color: var(--hljs-tag);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: bold;
+}
+
 html,
 body,
 #root {
@@ -16,14 +205,14 @@ body {
 /* thin scrollbars */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #3f3f46 transparent;
+  scrollbar-color: rgb(var(--zinc-700)) transparent;
 }
 *::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 *::-webkit-scrollbar-thumb {
-  background: #3f3f46;
+  background: rgb(var(--zinc-700));
   border-radius: 4px;
 }
 

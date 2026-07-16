@@ -3,6 +3,7 @@ import { api } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { ActivityIcon, TrashIcon } from './icons.jsx'
 import PathPicker from './PathPicker.jsx'
+import ThemeToggle from './ThemeToggle.jsx'
 
 function shortPath(cwd, slug) {
   const p = cwd || slug || ''
@@ -249,6 +250,10 @@ export default function Sidebar({
           )
         })}
         {filtered.length === 0 && <div className="p-4 text-[12px] text-zinc-600">No projects.</div>}
+      </div>
+
+      <div className="p-2 border-t border-zinc-800">
+        <ThemeToggle />
       </div>
 
       {pickerOpen && (
