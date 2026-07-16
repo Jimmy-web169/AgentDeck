@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pre, Field, MdBox } from '../shared/ToolCallParts.jsx'
+import { Pre, Field, MdBox, asText, isHuge } from '../shared/ToolCallParts.jsx'
 
 // Render a shell command. Codex has stored it as an argv array (`command`) in
 // older rollouts and as a `cmd` string (with `workdir`) in newer ones.
@@ -8,9 +8,11 @@ function commandText(input) {
   if (typeof input.cmd === 'string') return input.cmd
   const c = input.command
   if (Array.isArray(c)) {
+    // coerce non-string argv entries so malformed data can't leak objects into render
+    const parts = c.map((x) => (typeof x === 'string' ? x : asText(x)))
     // codex sometimes wraps as ["bash","-lc","<script>"] — show the script if so
-    if (c.length === 3 && /^(ba|z|)sh$/.test(c[0]) && c[1] === '-lc') return c[2]
-    return c.join(' ')
+    if (parts.length === 3 && /^(ba|z|)sh$/.test(parts[0]) && parts[1] === '-lc') return parts[2]
+    return parts.join(' ')
   }
   if (typeof c === 'string') return c
   return ''
@@ -46,7 +48,10 @@ function previewOf(name, input) {
 
 // An apply_patch input is already a unified-diff-ish text — color it per line.
 function PatchBlock({ text }) {
-  const lines = (text || '').split('\n')
+  const t = asText(text)
+  // One div per line gets expensive on huge patches — fall back to plain text.
+  if (isHuge(t)) return <Pre>{t}</Pre>
+  const lines = t.split('\n')
   return (
     <pre className="bg-ink-900 rounded-md p-2.5 mt-1 overflow-x-auto text-[12px] leading-5 font-mono whitespace-pre-wrap break-words max-h-96">
       {lines.map((l, idx) => {
@@ -85,27 +90,35 @@ function prettyInput(name, input) {
       )
     }
     if (name === 'apply_patch' && typeof input.patch === 'string') return <PatchBlock text={input.patch} />
-    if (name === 'read_file') return <Field label="file">{input.path || input.file_path}</Field>
-    if (name === 'web_search') return <Field label="query">{input.query}</Field>
+    if (name === 'read_file') {
+      const p = input.path ?? input.file_path
+      return p == null ? null : <Field label="file">{p}</Field>
+    }
+    if (name === 'web_search') return input.query == null ? null : <Field label="query">{input.query}</Field>
     if (name === 'update_plan') {
-      const items = input.plan || input.items || []
+      const items = Array.isArray(input.plan) ? input.plan : Array.isArray(input.items) ? input.items : []
       if (!items.length) return null
       return (
         <ul className="mt-1 space-y-0.5 text-[12.5px] leading-5 text-zinc-300 list-none">
-          {items.map((it, idx) => (
-            <li key={idx} className="flex gap-2">
-              <span className="text-zinc-600 select-none">{it.status === 'completed' ? '☑' : it.status === 'in_progress' ? '◐' : '☐'}</span>
-              <span>{typeof it === 'string' ? it : it.step || it.text || JSON.stringify(it)}</span>
-            </li>
-          ))}
+          {items.map((it, idx) => {
+            const o = it && typeof it === 'object' ? it : null
+            const label = typeof it === 'string' ? it : asText(o?.step ?? o?.text ?? it)
+            return (
+              <li key={idx} className="flex gap-2">
+                <span className="text-zinc-600 select-none">{o?.status === 'completed' ? '☑' : o?.status === 'in_progress' ? '◐' : '☐'}</span>
+                <span>{label}</span>
+              </li>
+            )
+          })}
         </ul>
       )
     }
     if (name === 'spawn_agent') {
+      if (input.agent_type == null && input.message == null) return null
       return (
         <>
           <Field label="agent" mono={false}>{input.agent_type}</Field>
-          <MdBox>{input.message}</MdBox>
+          {typeof input.message === 'string' ? <MdBox>{input.message}</MdBox> : <Field label="message">{input.message}</Field>}
         </>
       )
     }
@@ -125,7 +138,8 @@ export default function ToolCall({ part }) {
   const exit = result?.meta && typeof result.meta.exit_code === 'number' ? result.meta.exit_code : null
   const pretty = !raw && prettyInput(part.name, part.input)
   const outText = result ? (typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2)) : ''
-  const outAsMd = !raw && !err && MD_OUTPUT.has(part.name)
+  // JSON-looking output reads better (and parses faster) as plain text.
+  const outAsMd = !raw && !err && MD_OUTPUT.has(part.name) && !/^[{[]/.test(outText.trimStart())
 
   return (
     <div className={`rounded-lg border ${err ? 'border-red-500/40' : 'border-zinc-700/70'} bg-ink-700/60 my-2`}>
