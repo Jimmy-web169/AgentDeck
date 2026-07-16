@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import crypto from 'node:crypto'
 import {
   rootsWithMeta,
   addRoot,
@@ -13,6 +14,17 @@ import {
   expandHome,
 } from './paths.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
+import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../shared/parseCache.js'
+
+// All transcript reads below go through the fingerprint cache: a stat per
+// request revalidates, so results are exactly as fresh as parsing every time.
+// Handlers that emit an `_etag` take ONE fingerprint per file (fingerprintOf,
+// BEFORE any read) and thread it through both cache lookups and etagOf — see
+// the ordering contract in parseCache.js. Cached returns are shared objects:
+// treat them as immutable and spread-copy before attaching request fields.
+const sessionRecords = (file, fp) => cachedRecords(file, readRecords, fp)
+const sessionSummary = (file, id, fp) => cachedDerived(file, 'summary', () => summarize(sessionRecords(file, fp), id), fp)
+const sessionTimeline = (file, fp) => cachedDerived(file, 'timeline', () => buildTimeline(sessionRecords(file, fp)), fp)
 import { discoverRuns, discoverPlainAgents } from './runs.js'
 import { inventory, readResource, writeResource, deleteResource } from './resources.js'
 import { safeTrash } from '../../shared/trash.js'
@@ -107,19 +119,23 @@ function getSessions(q) {
   const root = resolveRoot(q.get('root'))
   const slug = q.get('slug')
   if (!slug) throw httpErr(400, 'missing slug')
+  const parts = []
   const sessions = sessionFiles(root.dir, slug)
     .map((f) => {
-      let mtime = 0
+      // one stat per file, before its content is read (see parseCache.js)
+      let fp = null
       try {
-        mtime = fs.statSync(f.file).mtimeMs
+        fp = fingerprintOf(f.file)
       } catch {}
-      const s = summarize(readRecords(f.file), f.id)
-      s.mtime = mtime
+      const s = { ...sessionSummary(f.file, f.id, fp || undefined) }
+      s.mtime = fp ? fp.mtimeMs : 0
       s.hasSubagents = s.hasSidechain || sessionHasSubagents(root.dir, slug, f.id)
+      parts.push(`${f.id}:${fp ? fp.key : '?'}:${s.hasSubagents ? 1 : 0}`)
       return s
     })
     .sort((a, b) => (b.lastTs || '').localeCompare(a.lastTs || ''))
-  return { root: root.id, slug, sessions }
+  const _etag = `"${crypto.createHash('sha1').update(parts.join('|')).digest('hex')}"`
+  return { root: root.id, slug, sessions, _etag }
 }
 
 function findSessionFile(rootDir, slug, id) {
@@ -133,10 +149,20 @@ function getSession(q) {
   const slug = q.get('slug')
   const id = q.get('id')
   if (!slug || !id) throw httpErr(400, 'missing slug/id')
-  const recs = readRecords(findSessionFile(root.dir, slug, id))
-  const summary = summarize(recs, id)
+  const file = findSessionFile(root.dir, slug, id)
+  // one stat before any read: summary, timeline and etag all come from this
+  // snapshot, so the etag can never be newer than the body it describes
+  const fp = fingerprintOf(file)
+  const summary = { ...sessionSummary(file, id, fp) }
   summary.hasSubagents = summary.hasSidechain || sessionHasSubagents(root.dir, slug, id)
-  return { root: root.id, slug, id, summary, timeline: buildTimeline(recs) }
+  return {
+    root: root.id,
+    slug,
+    id,
+    summary,
+    timeline: sessionTimeline(file, fp),
+    _etag: etagOf(fp, summary.hasSubagents ? 'S' : ''),
+  }
 }
 
 function getRaw(q) {
@@ -144,7 +170,7 @@ function getRaw(q) {
   const slug = q.get('slug')
   const id = q.get('id')
   if (!slug || !id) throw httpErr(400, 'missing slug/id')
-  return { root: root.id, slug, id, records: readRecords(findSessionFile(root.dir, slug, id)) }
+  return { root: root.id, slug, id, records: sessionRecords(findSessionFile(root.dir, slug, id)) }
 }
 
 // Move a session to the OS trash (recoverable): its .jsonl transcript plus its
@@ -203,8 +229,9 @@ function getSubagent(q) {
   }
   assertInside(root.dir, file)
   if (!fs.existsSync(file)) throw httpErr(404, 'agent transcript not found')
-  const recs = readRecords(file)
-  return { root: root.id, run, agent, summary: summarize(recs, agent), timeline: buildTimeline(recs) }
+  const fp = fingerprintOf(file) // one stat, before any read (see parseCache.js)
+  // spread-copy: cached summaries are shared across requests (immutable)
+  return { root: root.id, run, agent, summary: { ...sessionSummary(file, agent, fp) }, timeline: sessionTimeline(file, fp), _etag: etagOf(fp) }
 }
 
 const zeroTokens = () => ({ input: 0, output: 0, cacheCreate: 0, cacheRead: 0 })
@@ -231,11 +258,13 @@ function getStats(q) {
     if (!files.length) continue
     const proj = { slug, cwd: null, sessions: files.length, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: 0 }
     for (const f of files) {
-      const s = summarize(readRecords(f.file), f.id)
-      let mtime = 0
+      // one stat per file, before its content is read (see parseCache.js)
+      let fp = null
       try {
-        mtime = fs.statSync(f.file).mtimeMs
+        fp = fingerprintOf(f.file)
       } catch {}
+      const s = sessionSummary(f.file, f.id, fp || undefined)
+      const mtime = fp ? fp.mtimeMs : 0
       if (mtime > proj.lastActivity) {
         proj.lastActivity = mtime
         proj.cwd = readCwd(f.file) || proj.cwd

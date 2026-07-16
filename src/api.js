@@ -13,13 +13,37 @@ export function getProvider() {
   return PROVIDER
 }
 
+// Conditional-GET store: url -> { etag, data }. When the server replies 304
+// we return the exact same object reference as last time, so a poller's
+// setState bails out and nothing re-renders. cache:'no-store' keeps the
+// browser's own HTTP cache from answering the revalidation for us (it would
+// hand back a fresh-looking 200 with a *new* object every time).
+// Because 304s re-serve the SAME object, callers must treat returned data as
+// immutable — mutating it would corrupt what the next poll hands back.
+// LRU by Map insertion order (delete+set on every hit, including 304s).
+// Entries hold whole payloads (timelines can be sizeable), so keep the count
+// modest; polled views only touch a handful of URLs at a time anyway.
+const etags = new Map()
+const ETAG_MAX = 100
+
 async function req(method, path, { params = {}, body } = {}) {
   const qs = new URLSearchParams(params).toString()
-  const res = await fetch(`/api/${PROVIDER}/${path}${qs ? `?${qs}` : ''}`, {
+  const url = `/api/${PROVIDER}/${path}${qs ? `?${qs}` : ''}`
+  const cached = method === 'GET' ? etags.get(url) : null
+  const res = await fetch(url, {
     method,
-    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    cache: method === 'GET' ? 'no-store' : undefined,
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : null),
+      ...(cached ? { 'If-None-Match': cached.etag } : null),
+    },
     body: body ? JSON.stringify(body) : undefined,
   })
+  if (res.status === 304 && cached) {
+    etags.delete(url) // LRU bump: a 304 is a use, keep hot pollers resident
+    etags.set(url, cached)
+    return cached.data
+  }
   // tolerate non-JSON error bodies (e.g. a plain-text 403) instead of throwing
   // an opaque "Unexpected token" JSON parse error
   const text = await res.text()
@@ -34,6 +58,12 @@ async function req(method, path, { params = {}, body } = {}) {
     const err = new Error(data.error || text || `HTTP ${res.status}`)
     err.status = res.status
     throw err
+  }
+  const etag = method === 'GET' ? res.headers.get('ETag') : null
+  if (etag) {
+    etags.delete(url)
+    etags.set(url, { etag, data })
+    if (etags.size > ETAG_MAX) etags.delete(etags.keys().next().value)
   }
   return data
 }

@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
+import crypto from 'node:crypto'
 import {
   rootsWithMeta,
   addRoot,
@@ -19,6 +20,18 @@ import {
 } from './paths.js'
 import { safeTrash } from '../../shared/trash.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
+import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../shared/parseCache.js'
+
+// Rollout reads go through the shared fingerprint cache (same discipline as
+// the claude provider): one stat per file per request — taken BEFORE any
+// content read — revalidates the cache and feeds the `_etag`, so results are
+// exactly as fresh as re-parsing every time. See parseCache.js for the
+// ordering and immutability contracts (spread-copy before mutating summaries).
+const sessionRecords = (file, fp) => cachedRecords(file, readRecords, fp)
+const sessionSummary = (file, id, fp) => cachedDerived(file, 'summary', () => summarize(sessionRecords(file, fp), id), fp)
+const sessionTimeline = (file, fp) => cachedDerived(file, 'timeline', () => buildTimeline(sessionRecords(file, fp)), fp)
+
+const sha1 = (s) => crypto.createHash('sha1').update(s).digest('hex')
 import { inventory, createResource, deleteResource } from './resources.js'
 import { parseSkillsAdd, runSkillsAdd } from '../../shared/skills.js'
 import { SKILL_CONFIG } from './skills.js'
@@ -71,21 +84,29 @@ function getSessions(q) {
   const root = resolveRoot(q.get('root'))
   const slug = q.get('slug')
   if (!slug) throw httpErr(400, 'missing slug')
+  const parts = []
   const sessions = sessionFiles(root.dir, slug)
     // subagent threads are hidden here — they're viewed from the parent's Sub-agents tab
     .filter((f) => !f.isSubagent)
     .map((f) => {
-      const s = summarize(readRecords(f.file), f.id)
+      // one stat per file, before its content is read (see parseCache.js)
+      let fp = null
+      try {
+        fp = fingerprintOf(f.file)
+      } catch {}
+      const s = { ...sessionSummary(f.file, f.id, fp || undefined) }
       s.mtime = f.mtimeMs
       s.isSubagent = f.isSubagent
       s.parentId = f.parentId
       s.agentRole = f.agentRole
       s.agentNickname = f.agentNickname
       s.childCount = childrenOf(root.dir, f.id).length
+      parts.push(`${f.id}:${fp ? fp.key : '?'}:${s.childCount}`)
       return s
     })
     .sort((a, b) => (b.lastTs || '').localeCompare(a.lastTs || ''))
-  return { root: root.id, slug, sessions }
+  const _etag = `"${sha1(parts.join('|'))}"`
+  return { root: root.id, slug, sessions, _etag }
 }
 
 function findFile(rootDir, id) {
@@ -99,13 +120,27 @@ function getSession(q) {
   const id = q.get('id')
   if (!id) throw httpErr(400, 'missing id')
   const entry = findFile(root.dir, id)
-  const recs = readRecords(entry.file)
-  const summary = summarize(recs, id)
+  // one stat before any read: summary, timeline and etag all come from this
+  // snapshot, so the etag can never be newer than the body it describes
+  const fp = fingerprintOf(entry.file)
+  const children = childrenOf(root.dir, id)
+  // spread-copy: cached summaries are shared across requests (immutable)
+  const summary = { ...sessionSummary(entry.file, id, fp) }
   summary.isSubagent = entry.isSubagent
   summary.parentId = entry.parentId
   summary.agentRole = entry.agentRole
   summary.agentNickname = entry.agentNickname
-  return { root: root.id, slug: summary.cwd || entry.cwd || '(unknown working dir)', id, summary, children: childrenOf(root.dir, id), timeline: buildTimeline(recs) }
+  // the children list rides on this payload, so it must move the etag too
+  const childSig = children.length ? sha1(children.map((c) => `${c.id}:${c.mtimeMs}`).join(',')).slice(0, 16) : ''
+  return {
+    root: root.id,
+    slug: summary.cwd || entry.cwd || '(unknown working dir)',
+    id,
+    summary,
+    children,
+    timeline: sessionTimeline(entry.file, fp),
+    _etag: etagOf(fp, childSig),
+  }
 }
 
 // Move a session to the OS trash (recoverable): its rollout .jsonl plus every
@@ -145,11 +180,17 @@ function getSubagents(q) {
   if (!id) throw httpErr(400, 'missing id')
   // Each subagent is its own rollout; summarize it so the UI can show context%,
   // turns and tokens without loading the full transcript up front.
+  const parts = []
   const children = childrenOf(root.dir, id).map((c) => {
     const entry = sessionFileById(root.dir, c.id)
     let s = null
     try {
-      if (entry) s = summarize(readRecords(entry.file), c.id)
+      if (entry) {
+        // one stat per child, before its content is read (see parseCache.js)
+        const fp = fingerprintOf(entry.file)
+        s = sessionSummary(entry.file, c.id, fp)
+        parts.push(`${c.id}:${fp.key}`)
+      }
     } catch {}
     return {
       ...c,
@@ -166,14 +207,15 @@ function getSubagents(q) {
       lastTs: s?.lastTs || null,
     }
   })
-  return { root: root.id, id, children }
+  const _etag = `"${sha1(parts.join('|'))}"`
+  return { root: root.id, id, children, _etag }
 }
 
 function getRaw(q) {
   const root = resolveRoot(q.get('root'))
   const id = q.get('id')
   if (!id) throw httpErr(400, 'missing id')
-  return { root: root.id, id, records: readRecords(findFile(root.dir, id).file) }
+  return { root: root.id, id, records: sessionRecords(findFile(root.dir, id).file) }
 }
 
 // --- stats -------------------------------------------------------------------
@@ -202,7 +244,7 @@ function getStats(q) {
   for (const proj of listProjects(root.dir)) {
     const acc = { slug: proj.slug, cwd: proj.cwd, sessions: proj.sessionCount, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: proj.lastActivity }
     for (const f of sessionFiles(root.dir, proj.slug)) {
-      const s = summarize(readRecords(f.file), f.id)
+      const s = sessionSummary(f.file, f.id)
       sessions++
       userTurns += s.userTurns
       toolCalls += s.toolCalls

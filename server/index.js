@@ -7,6 +7,7 @@ import { PROVIDERS } from './registry.js'
 import { isAllowedOrigin } from './shared/origin.js'
 import { stopAllTerminals } from './shared/terminal.js'
 import { registerWatchControl, restartWatchers } from './shared/watchGate.js'
+import { invalidate } from './shared/parseCache.js'
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -67,7 +68,12 @@ async function startWatchers() {
           const ev = p.watch.toEvent(root.id, root.dir, absPath)
           if (ev) queue(ev)
         }
-        w.on('add', onEvt).on('change', onEvt).on('unlink', onEvt)
+        // change/add need no cache action (the per-request fingerprint check
+        // self-heals); unlink must drop entries or deleted files linger in memory
+        w.on('add', onEvt).on('change', onEvt).on('unlink', (absPath) => {
+          invalidate(absPath)
+          onEvt(absPath)
+        })
         watchers.push(w)
         console.log(`[watch] ${p.id}:${root.label} -> ${dir}`)
       } catch (e) {
@@ -187,6 +193,24 @@ const server = http.createServer(async (req, res) => {
     // tracked-folder changes -> re-arm watchers so live updates cover new roots
     // (via the gate: deferred if a delete currently holds the watchers paused)
     if (apiPath === '/api/roots' && req.method !== 'GET' && status < 400) await restartWatchers()
+    // handlers may attach _etag (a content fingerprint) to a GET body: echo it
+    // as an ETag and answer a matching If-None-Match with an empty 304, so
+    // pollers pay nothing when nothing changed. The client sends no-store and
+    // revalidates manually, so the browser's own HTTP cache stays out of it.
+    if (req.method === 'GET' && status === 200 && out && typeof out === 'object' && typeof out._etag === 'string') {
+      const etag = out._etag
+      delete out._etag
+      res.setHeader('ETag', etag)
+      // Deliberately a private protocol between src/api.js and this server,
+      // not full RFC 9110 semantics: exact string comparison only — no weak
+      // (`W/`) validators, no comma-separated lists, no `*`. Our own client is
+      // the only caller that sends If-None-Match; anything else just gets 200s.
+      if (req.headers['if-none-match'] === etag) {
+        res.statusCode = 304
+        res.end()
+        return
+      }
+    }
     res.statusCode = status
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.end(JSON.stringify(out))
