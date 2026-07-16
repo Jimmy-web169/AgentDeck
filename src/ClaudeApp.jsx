@@ -845,12 +845,13 @@ export default function App({ active: appActive = true, provider, onProvider, pr
                 termDraft ? (
                   <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
                 ) : sessionData ? (
-                  <Conversation data={sessionData} />
+                  <Conversation key={active?.id} data={sessionData} />
                 ) : (
                   <Empty active={active} />
                 )
               ) : convData ? (
                 <Conversation
+                  key={viewKey || active?.id}
                   data={convData}
                   live={viewSlice ? { items: viewSlice.items, onPerm: (r, bh, scope, answers) => live.respondPerm(viewKey, r, bh, scope, answers) } : null}
                 />

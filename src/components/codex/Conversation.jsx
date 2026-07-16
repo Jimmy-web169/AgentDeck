@@ -1,3 +1,4 @@
+import { memo, useState } from 'react'
 import Markdown from '../shared/Markdown.jsx'
 import ToolCall from './ToolCall.jsx'
 import Thinking from '../shared/Thinking.jsx'
@@ -94,9 +95,15 @@ function LiveItem({ it }) {
   return null
 }
 
-export default function Conversation({ data, live, onOpenSession }) {
+// Mounting a long transcript parses + highlights every message synchronously;
+// render only the tail by default so returning to a conversation stays instant.
+const INITIAL_TAIL = 40
+
+function Conversation({ data, live, onOpenSession }) {
   const { summary, timeline } = data
   const children = data.children || []
+  const [startIdx, setStartIdx] = useState(() => Math.max(0, timeline.length - INITIAL_TAIL))
+  const visible = startIdx > 0 ? timeline.slice(startIdx) : timeline
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
       <div className="mb-5 pb-4 border-b border-zinc-700/60">
@@ -134,10 +141,18 @@ export default function Conversation({ data, live, onOpenSession }) {
       </div>
 
       <div className="space-y-6">
-        {timeline.map((ev, i) => {
-          if (ev.kind === 'user') return <UserMsg key={i} ev={ev} />
-          if (ev.kind === 'assistant') return <AssistantMsg key={i} ev={ev} />
-          if (ev.kind === 'system') return <SystemMsg key={i} ev={ev} />
+        {startIdx > 0 && (
+          <div className="text-center">
+            <button onClick={() => setStartIdx(0)} className="text-[12px] text-zinc-400 hover:text-zinc-200 bg-ink-700/60 border border-zinc-700/60 rounded-full px-3 py-1">
+              Show {startIdx} earlier {startIdx > 1 ? 'messages' : 'message'}
+            </button>
+          </div>
+        )}
+        {visible.map((ev, i) => {
+          const k = startIdx + i
+          if (ev.kind === 'user') return <UserMsg key={k} ev={ev} />
+          if (ev.kind === 'assistant') return <AssistantMsg key={k} ev={ev} />
+          if (ev.kind === 'system') return <SystemMsg key={k} ev={ev} />
           return null
         })}
         {timeline.length === 0 && !(live && live.items.length) && (
@@ -148,3 +163,5 @@ export default function Conversation({ data, live, onOpenSession }) {
     </div>
   )
 }
+
+export default memo(Conversation)
