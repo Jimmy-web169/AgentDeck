@@ -6,7 +6,7 @@ import chokidar from 'chokidar'
 import { PROVIDERS } from './registry.js'
 import { isAllowedOrigin } from './shared/origin.js'
 import { stopAllTerminals } from './shared/terminal.js'
-import { registerWatchControl } from './shared/watchGate.js'
+import { registerWatchControl, restartWatchers } from './shared/watchGate.js'
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -52,8 +52,10 @@ async function stopWatchers() {
   await Promise.all(closing)
 }
 
-function startWatchers() {
-  void stopWatchers() // re-arm: old handles release as their close() settles
+async function startWatchers() {
+  // re-arm: fully release the old generation's handles first, or two watcher
+  // generations coexist and the old one keeps directories locked on Windows
+  await stopWatchers()
   for (const p of Object.values(PROVIDERS)) {
     if (!p.watch) continue
     for (const root of p.loadRoots()) {
@@ -74,6 +76,21 @@ function startWatchers() {
     }
   }
 }
+
+// After a pause window (session delete) clients may have missed fs events —
+// nudge them with one synthetic change per watched root so lists refetch.
+function broadcastRefresh() {
+  const changes = []
+  for (const p of Object.values(PROVIDERS)) {
+    if (!p.watch) continue
+    for (const root of p.loadRoots()) changes.push({ provider: p.id, root: root.id, slug: null, id: null })
+  }
+  broadcast({ type: 'change', changes, at: Date.now() })
+}
+
+// Register at module init — a delete arriving before the listen callback must
+// still find the stop/start pair, or the gate silently skips pausing.
+registerWatchControl(stopWatchers, startWatchers, broadcastRefresh)
 
 // ---- static ----
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.ico': 'image/x-icon' }
@@ -168,7 +185,8 @@ const server = http.createServer(async (req, res) => {
     const body = req.method === 'POST' || req.method === 'DELETE' ? await readBody(req) : null
     const { status, body: out } = await provider.dispatch(req.method, apiPath, url.searchParams, body)
     // tracked-folder changes -> re-arm watchers so live updates cover new roots
-    if (apiPath === '/api/roots' && req.method !== 'GET' && status < 400) startWatchers()
+    // (via the gate: deferred if a delete currently holds the watchers paused)
+    if (apiPath === '/api/roots' && req.method !== 'GET' && status < 400) await restartWatchers()
     res.statusCode = status
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.end(JSON.stringify(out))
@@ -182,8 +200,7 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`\n  AgentDeck API  →  http://localhost:${PORT}  (127.0.0.1 only)`)
   console.log(`  providers: ${Object.keys(PROVIDERS).join(', ')}`)
   console.log(`  dev UI: http://localhost:${DEV_UI_PORT}\n`)
-  startWatchers()
-  registerWatchControl(stopWatchers, startWatchers)
+  void startWatchers()
 })
 
 // Route /chat/<provider> WebSocket upgrades to each provider's noServer wss, so
