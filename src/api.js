@@ -18,8 +18,13 @@ export function getProvider() {
 // setState bails out and nothing re-renders. cache:'no-store' keeps the
 // browser's own HTTP cache from answering the revalidation for us (it would
 // hand back a fresh-looking 200 with a *new* object every time).
+// Because 304s re-serve the SAME object, callers must treat returned data as
+// immutable — mutating it would corrupt what the next poll hands back.
+// LRU by Map insertion order (delete+set on every hit, including 304s).
+// Entries hold whole payloads (timelines can be sizeable), so keep the count
+// modest; polled views only touch a handful of URLs at a time anyway.
 const etags = new Map()
-const ETAG_MAX = 300
+const ETAG_MAX = 100
 
 async function req(method, path, { params = {}, body } = {}) {
   const qs = new URLSearchParams(params).toString()
@@ -34,7 +39,11 @@ async function req(method, path, { params = {}, body } = {}) {
     },
     body: body ? JSON.stringify(body) : undefined,
   })
-  if (res.status === 304 && cached) return cached.data
+  if (res.status === 304 && cached) {
+    etags.delete(url) // LRU bump: a 304 is a use, keep hot pollers resident
+    etags.set(url, cached)
+    return cached.data
+  }
   // tolerate non-JSON error bodies (e.g. a plain-text 403) instead of throwing
   // an opaque "Unexpected token" JSON parse error
   const text = await res.text()

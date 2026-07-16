@@ -178,6 +178,10 @@ const server = http.createServer(async (req, res) => {
       const etag = out._etag
       delete out._etag
       res.setHeader('ETag', etag)
+      // Deliberately a private protocol between src/api.js and this server,
+      // not full RFC 9110 semantics: exact string comparison only — no weak
+      // (`W/`) validators, no comma-separated lists, no `*`. Our own client is
+      // the only caller that sends If-None-Match; anything else just gets 200s.
       if (req.headers['if-none-match'] === etag) {
         res.statusCode = 304
         res.end()
