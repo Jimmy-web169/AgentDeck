@@ -14,9 +14,11 @@ const normalize = (input) =>
     .trim()
 
 export default function SkillImport({ root, slug, onClose, onImported }) {
-  useEscToClose(onClose)
   const [ref, setRef] = useState('')
   const [busy, setBusy] = useState(false)
+  // Don't let Escape dismiss the modal while `npx skills add` is running
+  // server-side — the install would keep going with no UI to report back to.
+  useEscToClose(onClose, !busy)
   const [err, setErr] = useState(null)
   const [result, setResult] = useState(null) // { ok, code, command, output }
 

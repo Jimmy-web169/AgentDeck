@@ -30,7 +30,7 @@ export default function PathPicker({ onPick, onClose }) {
       <div className="w-[620px] max-w-[94vw] max-h-[78vh] flex flex-col rounded-xl border border-zinc-700 bg-ink-800 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
           <div className="text-sm font-semibold text-zinc-100">Choose a folder for the new conversation</div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-200">✕</button>
+          <button onClick={onClose} aria-label="Close" className="text-zinc-500 hover:text-zinc-200">✕</button>
         </div>
 
         {/* path bar */}

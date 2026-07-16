@@ -48,7 +48,7 @@ export default function LiveSessionsPanel({ items = [], providers = [], onEnter,
       <div className="w-[560px] max-w-[92vw] max-h-[70vh] overflow-y-auto rounded-xl border border-zinc-700 bg-ink-800 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-700">
           <div className="text-sm font-semibold text-zinc-100">{title}</div>
-          <button onClick={onClosePanel} className="text-zinc-500 hover:text-zinc-200">✕</button>
+          <button onClick={onClosePanel} aria-label="Close" className="text-zinc-500 hover:text-zinc-200">✕</button>
         </div>
 
         <div className="px-4 py-3">
