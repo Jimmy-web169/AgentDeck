@@ -29,3 +29,4 @@ testproj/
 # per-provider tracked roots (machine-specific absolute paths)
 roots.claude.json
 roots.codex.json
+.claude/
