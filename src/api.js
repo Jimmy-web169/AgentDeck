@@ -29,7 +29,12 @@ async function req(method, path, { params = {}, body } = {}) {
   } catch {
     data = { error: text }
   }
-  if (!res.ok) throw new Error(data.error || text || `HTTP ${res.status}`)
+  if (!res.ok) {
+    // keep the status machine-readable so callers can special-case e.g. 404
+    const err = new Error(data.error || text || `HTTP ${res.status}`)
+    err.status = res.status
+    throw err
+  }
   return data
 }
 const get = (path, params) => req('GET', path, { params })
@@ -60,8 +65,10 @@ export const api = {
   subagent: (root, slug, session, run, agent) => get('subagent', run ? { root, slug, session, run, agent } : { root, slug, session, agent }),
   // claude: (root,slug) · codex: (root)
   memory: (root, slug) => get('memory', slug !== undefined ? { root, slug } : { root }),
-  // claude-only: move a session (transcript + sub-agent sidecar) to the OS trash
-  deleteSession: (root, slug, id) => req('DELETE', 'session', { params: { root, slug, id } }),
+  // move a session to the OS trash — claude: (root,slug,id) incl. sub-agent
+  // sidecar · codex: (root,id) incl. child subagent rollouts
+  deleteSession: (root, a, b) =>
+    req('DELETE', 'session', { params: b !== undefined ? { root, slug: a, id: b } : { root, id: a } }),
   // claude-only: write / trash a per-project memory file
   saveMemory: (root, slug, name, content) => req('POST', 'memory', { body: { root, slug, name, content } }),
   deleteMemory: (root, slug, name) => req('DELETE', 'memory', { params: { root, slug, name } }),

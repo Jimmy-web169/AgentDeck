@@ -200,16 +200,21 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     for (const s of list) {
       try {
         await api.deleteSession(r, slug, s.id)
-        if (activeRef.current?.id === s.id) {
-          setActive(null)
-          setSessionData(null)
-          setSubagents(null)
-          setRaw(null)
-        }
-        setOpenSessions((prev) => prev.filter((x) => !(x.root === r && x.slug === slug && x.id === s.id)))
       } catch (e) {
-        failed.push(s.title || s.id)
+        // 404 = already gone (e.g. trashed elsewhere between refreshes) — the
+        // desired end state holds, so fall through to the same cleanup
+        if (e.status !== 404) {
+          failed.push(s.title || s.id)
+          continue
+        }
       }
+      if (activeRef.current?.id === s.id) {
+        setActive(null)
+        setSessionData(null)
+        setSubagents(null)
+        setRaw(null)
+      }
+      setOpenSessions((prev) => prev.filter((x) => !(x.root === r && x.slug === slug && x.id === s.id)))
     }
     // a long batch can outlive the user's navigation — only refresh what's on screen
     if (rootRef.current === r) {
