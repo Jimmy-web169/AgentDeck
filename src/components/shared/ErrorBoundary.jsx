@@ -4,22 +4,35 @@ import { Component } from 'react'
 // inline error card instead of white-screening the whole app. Wrap broad
 // (the app root) and narrow (a provider's main content area) — the nearest
 // boundary wins, so a crash inside a tab leaves the sidebar usable.
+//
+// Pass `resetKey` (any primitive identifying what's being rendered — active
+// session key, tab name, pane session) so navigating away from the crashed
+// content clears the error instead of sticking to the reused instance.
 export default class ErrorBoundary extends Component {
   constructor(props) {
     super(props)
-    this.state = { error: null }
+    this.state = { hasError: false, error: null }
   }
 
   static getDerivedStateFromError(error) {
-    return { error }
+    // `throw null/undefined/''` must still trip the boundary — use an explicit
+    // sentinel instead of the error value's truthiness.
+    return { hasError: true, error: error ?? new Error('Unknown render error') }
   }
 
   componentDidCatch(error, info) {
     console.error('render error:', error, info?.componentStack)
   }
 
+  componentDidUpdate(prevProps) {
+    // navigating to different content (session/tab/pane) gets a fresh try
+    if (this.state.hasError && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ hasError: false, error: null })
+    }
+  }
+
   render() {
-    if (!this.state.error) return this.props.children
+    if (!this.state.hasError) return this.props.children
     return (
       <div className="m-4 rounded-lg border border-red-500/40 bg-red-500/10 p-4 text-[13px]">
         <div className="text-red-300 font-semibold mb-1">Something broke while rendering{this.props.label ? ` ${this.props.label}` : ''}.</div>
@@ -28,7 +41,7 @@ export default class ErrorBoundary extends Component {
         </pre>
         <div className="mt-2 flex gap-2">
           <button
-            onClick={() => this.setState({ error: null })}
+            onClick={() => this.setState({ hasError: false, error: null })}
             className="text-[11px] px-2 py-1 rounded bg-ink-700 border border-zinc-700 text-zinc-300 hover:text-zinc-100"
           >
             Try again
