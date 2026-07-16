@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api.js'
 import useEscToClose from '../../lib/useEscToClose.js'
 import Conversation from './Conversation.jsx'
@@ -185,18 +185,62 @@ function TranscriptModal({ tx, onClose }) {
   )
 }
 
-export default function SubagentsView({ data }) {
+// min gap between version-driven refetches: SSE versions bump every ~250ms
+// while the parent streams, and refetching the full transcript that often is
+// wasteful — the trailing timeout still picks up the final state
+const VERSION_REFETCH_THROTTLE_MS = 750
+
+export default function SubagentsView({ data, version = 0, active = true }) {
   const [tx, setTx] = useState(null)
+  const lastVersion = useRef(version)
+  const lastFetchAt = useRef(0)
+
+  // keep an open transcript modal fresh, the same way the main conversation
+  // stays fresh: refetch when this session's SSE version bumps (subagent
+  // writes map to their parent session — see registry.js toEvent), plus a
+  // slow fallback poll in case a file event is missed or writes are buffered
+  useEffect(() => {
+    if (!active || !data || !tx || tx.loading || tx.error) return
+    const { agent, runId } = tx
+    const refetch = () => {
+      lastFetchAt.current = Date.now()
+      api
+        .subagent(data.root, data.slug, data.id, runId, agent.id)
+        // reference short-circuit: a no-op today (the api client parses a
+        // fresh object per response) — it starts paying off once conditional
+        // GETs land (PR #4's 304 handling returns the same cached object)
+        .then((d) => setTx((prev) => (prev && prev.agent.id === agent.id && prev.runId === runId ? (prev.data === d ? prev : { agent, runId, data: d }) : prev)))
+        .catch(() => {})
+    }
+    let throttleTimer = null
+    if (lastVersion.current !== version) {
+      lastVersion.current = version
+      const wait = VERSION_REFETCH_THROTTLE_MS - (Date.now() - lastFetchAt.current)
+      if (wait <= 0) refetch()
+      else throttleTimer = setTimeout(refetch, wait)
+    }
+    const t = setInterval(refetch, 15000)
+    return () => {
+      clearInterval(t)
+      if (throttleTimer) clearTimeout(throttleTimer)
+    }
+  }, [active, data, tx, version])
+
   if (!data) return <div className="p-8 text-zinc-600">Loading sub-agents…</div>
   const runs = data.runs || []
   const plain = data.agents || []
 
   const openAgent = (agent, runId) => {
-    setTx({ agent, loading: true })
+    // the initial fetch already reflects the current version — sync the ref so
+    // the effect doesn't immediately refetch what we just loaded
+    lastVersion.current = version
+    setTx({ agent, runId, loading: true })
     api
       .subagent(data.root, data.slug, data.id, runId, agent.id)
-      .then((d) => setTx({ agent, data: d }))
-      .catch((e) => setTx({ agent, error: e.message }))
+      // functional guard: if the user opened a different agent (or closed the
+      // modal) before this resolved, don't clobber the newer state
+      .then((d) => setTx((prev) => (prev && prev.agent.id === agent.id && prev.runId === runId ? { agent, runId, data: d } : prev)))
+      .catch((e) => setTx((prev) => (prev && prev.agent.id === agent.id && prev.runId === runId ? { agent, runId, error: e.message } : prev)))
   }
 
   return (
