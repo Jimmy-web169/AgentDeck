@@ -15,7 +15,9 @@ import {
   isSessionId,
   latestRateLimits,
   latestCliVersion,
+  invalidateIndex,
 } from './paths.js'
+import { safeTrash } from '../../shared/trash.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
 import { inventory, createResource, deleteResource } from './resources.js'
 import { parseSkillsAdd, runSkillsAdd } from '../../shared/skills.js'
@@ -104,6 +106,36 @@ function getSession(q) {
   summary.agentRole = entry.agentRole
   summary.agentNickname = entry.agentNickname
   return { root: root.id, slug: summary.cwd || entry.cwd || '(unknown working dir)', id, summary, children: childrenOf(root.dir, id), timeline: buildTimeline(recs) }
+}
+
+// Move a session to the OS trash (recoverable): its rollout .jsonl plus every
+// descendant subagent rollout (codex subagents are separate rollouts linked by
+// parent id — the analogue of claude's sidecar dir). Files are located only by
+// their unique id via the index, so this can't address anything but existing
+// sessions. Children first: if one fails the parent stays listed and a retry
+// covers the rest.
+async function deleteSession(q) {
+  const root = resolveRoot(q.get('root'))
+  const id = q.get('id')
+  if (!id) throw httpErr(400, 'missing id')
+  const entry = findFile(root.dir, id) // 404 when already gone
+  // collect descendants breadth-first (depth is small; cycle-guard via seen set)
+  const seen = new Set([id])
+  const queue = [id]
+  const descendants = []
+  while (queue.length) {
+    for (const c of childrenOf(root.dir, queue.shift())) {
+      if (seen.has(c.id)) continue
+      seen.add(c.id)
+      queue.push(c.id)
+      const e = sessionFileById(root.dir, c.id)
+      if (e) descendants.push(e.file)
+    }
+  }
+  for (const f of descendants.reverse()) await safeTrash(f)
+  await safeTrash(entry.file)
+  invalidateIndex(root.dir)
+  return { root: root.id, id, trashed: true }
 }
 
 // subagent threads spawned by a session (separate rollouts linked via parent id)
@@ -413,6 +445,7 @@ const ROUTES = {
   'GET /api/projects': getProjects,
   'GET /api/sessions': getSessions,
   'GET /api/session': getSession,
+  'DELETE /api/session': deleteSession,
   'GET /api/subagents': getSubagents,
   'GET /api/raw': getRaw,
   'GET /api/stats': getStats,

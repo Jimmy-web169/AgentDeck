@@ -191,6 +191,39 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     loadProjects(root)
   }
 
+  // batch variant: trash several sessions sequentially (each delete may spawn a
+  // recycle helper — don't hammer them in parallel), then refresh once
+  const removeSessions = async (list) => {
+    const r = root
+    const slug = openSlug
+    const failed = []
+    for (const s of list) {
+      try {
+        await api.deleteSession(r, slug, s.id)
+      } catch (e) {
+        // 404 = already gone (e.g. trashed elsewhere between refreshes) — the
+        // desired end state holds, so fall through to the same cleanup
+        if (e.status !== 404) {
+          failed.push(s.title || s.id)
+          continue
+        }
+      }
+      if (activeRef.current?.id === s.id) {
+        setActive(null)
+        setSessionData(null)
+        setSubagents(null)
+        setRaw(null)
+      }
+      setOpenSessions((prev) => prev.filter((x) => !(x.root === r && x.slug === slug && x.id === s.id)))
+    }
+    // a long batch can outlive the user's navigation — only refresh what's on screen
+    if (rootRef.current === r) {
+      loadProjects(r)
+      if (openSlugRef.current === slug) loadSessions(r, slug)
+    }
+    if (failed.length) setError(`Failed to trash ${failed.length} session(s): ${failed.join(', ')}`)
+  }
+
   // add a session to the multi-session workspace (captures the current root)
   const addToWorkspace = (s) => {
     const entry = { root, slug: openSlug, id: s.id, title: s.title }
@@ -623,6 +656,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
         }}
         onAddSession={addToWorkspace}
         onDeleteSession={removeSession}
+        onDeleteSessions={removeSessions}
         onNewConversation={startNewConversation}
         onNewProject={startNewProject}
           />

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { ActivityIcon, TrashIcon } from './icons.jsx'
@@ -35,6 +35,7 @@ export default function Sidebar({
   onGlobalView,
   onAddSession,
   onDeleteSession,
+  onDeleteSessions,
   onNewConversation,
   onNewProject,
   providers,
@@ -49,8 +50,67 @@ export default function Sidebar({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [picking, setPicking] = useState(false)
   const [confirmDelId, setConfirmDelId] = useState(null) // session id pending delete confirmation
-  // a pending confirm shouldn't survive navigating away and back
-  useEffect(() => setConfirmDelId(null), [root, openSlug])
+  // batch selection mode (only offered when onDeleteSessions is provided)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState(() => new Set())
+  const [confirmBatch, setConfirmBatch] = useState(false)
+  const [batchBusy, setBatchBusy] = useState(false)
+  // bumped whenever the selection context changes, so a batch that outlives a
+  // navigation can tell its select-mode session is over (see runBatchDelete)
+  const batchEpoch = useRef(0)
+  // pending confirms / selections shouldn't survive navigating away and back
+  useEffect(() => {
+    batchEpoch.current++
+    setConfirmDelId(null)
+    setSelectMode(false)
+    setSelected(new Set())
+    setConfirmBatch(false)
+  }, [root, openSlug])
+
+  // selections count against the CURRENT list (stale ids from a live refresh
+  // don't inflate the number)
+  const selCount = sessions.filter((s) => selected.has(s.id)).length
+  // if a refresh empties the selection under an open confirm bar, retract it —
+  // otherwise it sits there offering to "trash 0"
+  useEffect(() => {
+    if (confirmBatch && selCount === 0) setConfirmBatch(false)
+  }, [confirmBatch, selCount])
+
+  const toggleSelected = (id) =>
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+
+  const exitSelectMode = () => {
+    setSelectMode(false)
+    setSelected(new Set())
+    setConfirmBatch(false)
+  }
+
+  const runBatchDelete = async () => {
+    if (batchBusy) return
+    const list = sessions.filter((s) => selected.has(s.id))
+    if (!list.length) {
+      setConfirmBatch(false)
+      return
+    }
+    // If the user navigates away mid-batch the [root, openSlug] effect resets
+    // the selection (and bumps the epoch); a fresh selection they start after
+    // that belongs to a NEW epoch and must not be wiped by this batch's finally.
+    const epoch = batchEpoch.current
+    setBatchBusy(true)
+    try {
+      await onDeleteSessions?.(list)
+    } finally {
+      // busy is global (blocks a second batch — the confirm UI shows
+      // "trashing…" instead of yes/no while it's set), the exit is epoch-scoped
+      setBatchBusy(false)
+      if (batchEpoch.current === epoch) exitSelectMode()
+    }
+  }
 
   // try the OS-native folder chooser first; fall back to the in-browser picker
   const newProjectFlow = async () => {
@@ -182,6 +242,59 @@ export default function Sidebar({
                       + New conversation
                     </button>
                   )}
+                  {/* batch select — enter/act/exit; sits under "+ New conversation".
+                      Counts derive from the CURRENT list (stale selections from a
+                      live refresh don't inflate them — see selCount above), and the
+                      bar stays mounted through SSE-triggered loading flickers while
+                      selecting. */}
+                  {onDeleteSessions && sessions.length > 0 && (selectMode || !loadingSessions) && (
+                      <div className="pl-7 pr-2 py-1 flex items-center gap-1.5 text-[11px]">
+                        {!selectMode ? (
+                          <button onClick={() => setSelectMode(true)} className="text-zinc-500 hover:text-zinc-200" title="Select multiple sessions to trash">
+                            ☐ select
+                          </button>
+                        ) : (
+                          <>
+                            <span className="text-zinc-400">{selCount} selected</span>
+                            <button
+                              onClick={() =>
+                                setSelected(selCount === sessions.length ? new Set() : new Set(sessions.map((s) => s.id)))
+                              }
+                              className="px-1.5 py-0.5 rounded bg-ink-700 text-zinc-400 hover:text-zinc-200"
+                            >
+                              {selCount === sessions.length ? 'none' : 'all'}
+                            </button>
+                            <span className="flex-1" />
+                            {batchBusy ? (
+                              <span className="text-zinc-500">trashing…</span>
+                            ) : confirmBatch ? (
+                              <>
+                                <span className="text-red-300">
+                                  trash {selCount}
+                                  {sessions.some((s) => selected.has(s.id) && (liveIds?.has(s.id) || (s.lastTs && Date.now() - new Date(s.lastTs).getTime() < 5 * 60 * 1000)))
+                                    ? ' (incl. active!)'
+                                    : ''}
+                                  ?
+                                </span>
+                                <button onClick={runBatchDelete} className="px-1.5 py-0.5 rounded bg-red-500/30 text-red-200">yes</button>
+                                <button onClick={() => setConfirmBatch(false)} className="px-1.5 py-0.5 rounded bg-ink-600 text-zinc-300">no</button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => setConfirmBatch(true)}
+                                  disabled={selCount === 0}
+                                  className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-40"
+                                >
+                                  Delete
+                                </button>
+                                <button onClick={exitSelectMode} className="px-1.5 py-0.5 rounded bg-ink-600 text-zinc-300">Cancel</button>
+                              </>
+                            )}
+                          </>
+                        )}
+                      </div>
+                  )}
                   {loadingSessions && <div className="px-7 py-2 text-[12px] text-zinc-600">loading…</div>}
                   {!loadingSessions &&
                     sessions.map((s) => {
@@ -190,13 +303,20 @@ export default function Sidebar({
                       // deleting a session something is still writing to leaves a truncated
                       // transcript behind — surface that in the confirm text
                       const recent = live || (s.lastTs && Date.now() - new Date(s.lastTs).getTime() < 5 * 60 * 1000)
+                      const checked = selected.has(s.id)
                       return (
                         <div
                           key={s.id}
-                          className={`group flex items-stretch hover:bg-ink-700/50 ${active ? 'bg-sky-500/10 border-l-2 border-sky-500' : ''}`}
+                          className={`group flex items-stretch hover:bg-ink-700/50 ${
+                            selectMode && checked ? 'bg-red-500/10' : active ? 'bg-sky-500/10 border-l-2 border-sky-500' : ''
+                          }`}
                         >
-                          <button onClick={() => onSelectSession(s)} className="flex-1 min-w-0 text-left pl-7 pr-2 py-1.5">
+                          <button
+                            onClick={() => (selectMode ? toggleSelected(s.id) : onSelectSession(s))}
+                            className="flex-1 min-w-0 text-left pl-7 pr-2 py-1.5"
+                          >
                             <div className="text-[12.5px] text-zinc-300 truncate flex items-center gap-1.5">
+                              {selectMode && <span className={`shrink-0 ${checked ? 'text-red-300' : 'text-zinc-600'}`}>{checked ? '☑' : '☐'}</span>}
                               {live && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />}
                               {s.isSubagent && <span className="shrink-0 text-violet-400" title={`subagent${s.agentRole ? ` · ${s.agentRole}` : ''}`}>⤷</span>}
                               <span className="truncate">{s.title}</span>
@@ -208,7 +328,7 @@ export default function Sidebar({
                               {s.hasSubagents && <span className="text-violet-400">· ⚇ subs</span>}
                             </div>
                           </button>
-                          {onDeleteSession && confirmDelId === s.id ? (
+                          {selectMode ? null : onDeleteSession && confirmDelId === s.id ? (
                             <span className="flex items-center gap-1 pr-1.5 shrink-0">
                               <span className="text-[10px] text-red-300">{recent ? 'active! trash?' : 'trash?'}</span>
                               <button
