@@ -7,6 +7,7 @@ import RawView from '../shared/RawView.jsx'
 import ResourcesView from './ResourcesView.jsx'
 import ChatComposer from '../shared/ChatComposer.jsx'
 import TerminalPanel from './TerminalPanel.jsx'
+import ErrorBoundary from '../shared/ErrorBoundary.jsx'
 
 // codex sessions are addressed by root+id (slug/cwd is only a grouping)
 const keyOf = (s) => `${s.root}|${s.id}`
@@ -137,19 +138,24 @@ export default function MultiSession({ openSessions, panes, paneKeys, setPaneKey
               )}
             </div>
             {entry ? (
-              <SessionPane
-                entry={entry}
-                version={sessionVersions[entry.id]}
-                live={live}
-                chatMode={chatMode}
-                onChatMode={onChatMode}
-                liveCount={liveCount}
-                onOpenManager={onOpenManager}
-                engine={engine}
-                runningKeys={runningKeys}
-                onTermChange={onTermChange}
-                onOpenSession={onOpenSession}
-              />
+              // per-pane boundary keyed by the pane's session: one crashed pane
+              // degrades to a card while the other panes stay live, and picking
+              // a different session in this pane clears the error.
+              <ErrorBoundary label="this pane" resetKey={k}>
+                <SessionPane
+                  entry={entry}
+                  version={sessionVersions[entry.id]}
+                  live={live}
+                  chatMode={chatMode}
+                  onChatMode={onChatMode}
+                  liveCount={liveCount}
+                  onOpenManager={onOpenManager}
+                  engine={engine}
+                  runningKeys={runningKeys}
+                  onTermChange={onTermChange}
+                  onOpenSession={onOpenSession}
+                />
+              </ErrorBoundary>
             ) : (
               <div className="flex-1 flex items-center justify-center text-zinc-600 text-sm text-center px-4">
                 Add sessions with ⊞ in the sidebar, then pick one here.

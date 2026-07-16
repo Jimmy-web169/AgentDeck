@@ -17,6 +17,7 @@ import LiveSessionsPanel from './components/shared/LiveSessionsPanel.jsx'
 import RootsManager from './components/shared/RootsManager.jsx'
 import RateLimitsBar from './components/codex/RateLimitsBar.jsx'
 import InfoDot from './components/shared/InfoDot.jsx'
+import ErrorBoundary from './components/shared/ErrorBoundary.jsx'
 import ContextMeter from './components/codex/ContextMeter.jsx'
 import useLiveChatStore, { keyOf as liveKeyOf } from './lib/store.codex.js'
 import useActiveSessions, { toManagerItems } from './lib/useActiveSessions.js'
@@ -591,6 +592,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     <div className="h-full flex">
       {!collapsed && (
         <div style={{ width: sidebarW }} className="shrink-0 h-full min-w-0">
+          <ErrorBoundary label="the session list" resetKey={`${root}|${openSlug || ''}`}>
           <Sidebar
             providers={providers}
             provider={provider}
@@ -618,6 +620,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
             onNewConversation={startNewConversation}
             onNewProject={startNewProject}
           />
+          </ErrorBoundary>
         </div>
       )}
       {!collapsed && <div onMouseDown={startDrag} className="w-1 shrink-0 cursor-col-resize bg-zinc-800 hover:bg-sky-500/60" title="Drag to resize sidebar" />}
@@ -712,6 +715,10 @@ export default function App({ active: appActive = true, provider, onProvider, pr
             />
           </div>
         ) : tab === 'conversation' ? (
+          // boundary sits above the scroller AND the composer/terminal, so a tab
+          // crash leaves the sidebar/top bar usable; keyed by the viewed session
+          // so opening another session clears a previous crash.
+          <ErrorBoundary label="this conversation" resetKey={`conv|${root}|${active?.id || ''}`}>
           <div className="flex-1 min-h-0 flex flex-col">
             <div ref={mainRef} onScroll={onMainScroll} className="flex-1 overflow-y-auto">
               {engine === 'terminal' ? (
@@ -764,20 +771,25 @@ export default function App({ active: appActive = true, provider, onProvider, pr
               )
             )}
           </div>
+          </ErrorBoundary>
         ) : tab === 'resources' || tab === 'config' ? (
           // two-pane master/detail — let ResourcesView own its panes' scrolling
           <div className="flex-1 min-h-0">
-            {tab === 'resources' && <ResourcesView key={`res-${root}`} root={root} scope="user" />}
-            {tab === 'config' && <ResourcesView key={`cfg-${root}-${openSlug}`} root={root} scope="project" slug={openSlug} />}
+            <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
+              {tab === 'resources' && <ResourcesView key={`res-${root}`} root={root} scope="user" />}
+              {tab === 'config' && <ResourcesView key={`cfg-${root}-${openSlug}`} root={root} scope="project" slug={openSlug} />}
+            </ErrorBoundary>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto">
-            {tab === 'subagents' && active && <SubagentsView root={root} parent={active} onOpenSession={openSessionById} />}
-            {tab === 'raw' && raw && <RawView records={raw.records} typeOf={CODEX_RAW_TYPE} />}
-            {tab === 'stats' && <Stats root={root} stats={stats} focus={statsFocus} onOpenSession={openSessionById} />}
-            {tab === 'history' && <HistoryView data={history} onOpenSession={openSessionById} />}
-            {tab === 'memory' && <MemoryView root={root} />}
-            {tab === 'plugins' && <PluginsView root={root} />}
+            <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
+              {tab === 'subagents' && active && <SubagentsView root={root} parent={active} onOpenSession={openSessionById} />}
+              {tab === 'raw' && raw && <RawView records={raw.records} typeOf={CODEX_RAW_TYPE} />}
+              {tab === 'stats' && <Stats root={root} stats={stats} focus={statsFocus} onOpenSession={openSessionById} />}
+              {tab === 'history' && <HistoryView data={history} onOpenSession={openSessionById} />}
+              {tab === 'memory' && <MemoryView root={root} />}
+              {tab === 'plugins' && <PluginsView root={root} />}
+            </ErrorBoundary>
           </div>
         )}
       </main>
