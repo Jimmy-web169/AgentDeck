@@ -4,8 +4,11 @@
   "description": "A local, provider-pluggable dashboard for CLI coding agents (Claude Code, OpenAI Codex, and more) — one UI, switch providers live.",
   "type": "module",
   "scripts": {
+    "stop": "node scripts/free-ports.mjs",
+    "predev": "node scripts/free-ports.mjs",
     "dev": "concurrently -n api,web -c green,blue \"node --watch server/index.js\" \"vite\"",
     "init:win": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup.ps1",
+    "preserver": "node scripts/free-ports.mjs 47841",
     "server": "node --watch server/index.js",
     "web": "vite",
     "build": "vite build",

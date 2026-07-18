@@ -38,8 +38,7 @@ build: ## compile the frontend into dist/
 install: ## install dependencies
 	npm install
 
-# free the API port first so `make all` / `make be` never hit EADDRINUSE
+# free the API port first so `make all` / `make be` never hit EADDRINUSE.
+# Uses a Node helper (not lsof) so it works on Windows too, where lsof is absent.
 stop: ## kill whatever is listening on the API port
-	@PID=$$(lsof -ti tcp:$(PORT) 2>/dev/null); \
-	if [ -n "$$PID" ]; then kill $$PID 2>/dev/null || true; echo "stopped :$(PORT) ($$PID)"; \
-	else echo "nothing on :$(PORT)"; fi
+	@node scripts/free-ports.mjs $(PORT)

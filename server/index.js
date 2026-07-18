@@ -220,6 +220,15 @@ const server = http.createServer(async (req, res) => {
   serveStatic(req, res)
 })
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`\n  Port ${PORT} is already in use.`)
+    console.error(`  Free it with:  npm run stop   (or: make stop)\n`)
+    process.exit(1)
+  }
+  throw err
+})
+
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`\n  AgentDeck API  →  http://localhost:${PORT}  (127.0.0.1 only)`)
   console.log(`  providers: ${Object.keys(PROVIDERS).join(', ')}`)

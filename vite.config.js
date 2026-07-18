@@ -10,6 +10,9 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: Number(process.env.AGENTDECK_WEB_PORT || 47842),
+    // Fail loudly if the web port is taken instead of walking to a random high
+    // port whose /api proxy then can't reach the backend. `predev` frees it first.
+    strictPort: true,
     proxy: {
       '/api': { target, changeOrigin: true },
       // SSE stream — must not buffer; http-proxy streams it through.
