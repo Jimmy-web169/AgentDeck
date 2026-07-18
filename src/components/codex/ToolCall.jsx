@@ -136,7 +136,9 @@ export default function ToolCall({ part }) {
   const result = part.result
   const err = result?.isError
   const exit = result?.meta && typeof result.meta.exit_code === 'number' ? result.meta.exit_code : null
-  const pretty = !raw && prettyInput(part.name, part.input)
+  // Input shows the raw-JSON block for every tool; apply_patch is the one
+  // exception — its colored diff is far more readable than JSON.
+  const pretty = !raw && part.name === 'apply_patch' && prettyInput(part.name, part.input)
   const outText = result ? (typeof result.content === 'string' ? result.content : JSON.stringify(result.content, null, 2)) : ''
   // JSON-looking output reads better (and parses faster) as plain text.
   const outAsMd = !raw && !err && MD_OUTPUT.has(part.name) && !/^[{[]/.test(outText.trimStart())
@@ -162,13 +164,16 @@ export default function ToolCall({ part }) {
         <div className="px-3 pb-3">
           <div className="flex items-center justify-between mt-1">
             <div className="text-[11px] uppercase tracking-wide text-zinc-500">input</div>
-            <button
-              onClick={() => setRaw(!raw)}
-              className="text-[10px] px-1.5 py-0.5 rounded bg-ink-600 text-zinc-400 hover:text-zinc-200"
-              title="toggle raw JSON view"
-            >
-              {raw ? 'pretty' : 'raw'}
-            </button>
+            {/* Everything but apply_patch always shows JSON — the toggle only exists where a diff view does. */}
+            {part.name === 'apply_patch' && (
+              <button
+                onClick={() => setRaw(!raw)}
+                className="text-[10px] px-1.5 py-0.5 rounded bg-ink-600 text-zinc-400 hover:text-zinc-200"
+                title="toggle raw JSON view"
+              >
+                {raw ? 'pretty' : 'raw'}
+              </button>
+            )}
           </div>
           {pretty || <Pre>{JSON.stringify(part.input ?? {}, null, 2)}</Pre>}
           {result && (
