@@ -7,6 +7,7 @@
 // recipe, which silently no-op'd on Windows (lsof isn't installed there) and left
 // the port held — the root cause of the "address already in use" loop.
 import { execSync } from 'node:child_process'
+import { createServer } from 'node:net'
 
 const isWin = process.platform === 'win32'
 
@@ -38,10 +39,33 @@ function pidsOnPort(port) {
   return [...pids]
 }
 
+// Resolves true if `port` can actually be bound, or the error code if not.
+// Catches Windows "phantom" reservations: Hyper-V/WSL2/Docker (HNS) reserves
+// port blocks at boot that reject binds with EADDRINUSE even though netstat
+// shows no listener — so pidsOnPort() finds nothing yet the server can't start.
+function canBind(port) {
+  return new Promise((resolve) => {
+    const srv = createServer()
+    srv.once('error', (e) => resolve(e.code || String(e)))
+    srv.listen(port, '127.0.0.1', () => srv.close(() => resolve(true)))
+  })
+}
+
 for (const port of ports) {
   const pids = pidsOnPort(port)
   if (pids.length === 0) {
-    console.log(`nothing on :${port}`)
+    const bind = await canBind(port)
+    if (bind === true) {
+      console.log(`nothing on :${port}`)
+    } else if (isWin && bind === 'EADDRINUSE') {
+      console.log(`:${port} is blocked by a Windows port reservation — no process is using it,`)
+      console.log(`  but Hyper-V/WSL2/Docker (HNS) has reserved a port block covering it.`)
+      console.log(`  Free it with:  wsl --shutdown   (quit Docker Desktop first), then retry.`)
+      console.log(`  If it still fails: reboot, or run "Restart-Service hns" as Administrator.`)
+      console.log(`  Prevent recurrence: run scripts/setup.ps1 once in an elevated PowerShell.`)
+    } else {
+      console.log(`:${port} has no listener but cannot be bound (${bind})`)
+    }
     continue
   }
   for (const pid of pids) {
