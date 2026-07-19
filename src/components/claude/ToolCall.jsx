@@ -1,12 +1,20 @@
 import { useState } from 'react'
 import { Pre, Field, MdBox, asText } from '../shared/ToolCallParts.jsx'
 
-// Collapsed header for shell tools: the command must stay visible (a benign
-// description must never mask what actually runs); description is appended.
+// Collapsed header fallback for shell tools. previewOf() prefers a human-facing
+// description when the tool provides one, otherwise the command stays visible.
 function shellPreview(i) {
-  const cmd = typeof i.command === 'string' ? i.command : ''
-  const desc = typeof i.description === 'string' ? i.description : ''
-  return cmd && desc ? `${cmd} — ${desc}` : cmd || desc
+  return typeof i.command === 'string' ? i.command : ''
+}
+
+function grepPreview(i) {
+  const pattern = typeof i.pattern === 'string' ? i.pattern : ''
+  if (!pattern) return ''
+
+  const path = typeof i.path === 'string' ? i.path : ''
+  const glob = typeof i.glob === 'string' ? i.glob : ''
+  const scope = path && glob ? `${path} (${glob})` : path || glob || 'workspace'
+  return `“${pattern}” in ${scope}`
 }
 
 // Per-tool accent + how to preview the input on the collapsed header.
@@ -16,7 +24,7 @@ const TOOL_META = {
   Read: { color: 'text-sky-300', badge: 'bg-sky-500/15', preview: (i) => i.file_path },
   Edit: { color: 'text-amber-300', badge: 'bg-amber-500/15', preview: (i) => i.file_path },
   Write: { color: 'text-amber-300', badge: 'bg-amber-500/15', preview: (i) => i.file_path },
-  Grep: { color: 'text-fuchsia-300', badge: 'bg-fuchsia-500/15', preview: (i) => i.pattern },
+  Grep: { color: 'text-fuchsia-300', badge: 'bg-fuchsia-500/15', preview: grepPreview },
   Glob: { color: 'text-fuchsia-300', badge: 'bg-fuchsia-500/15', preview: (i) => i.pattern },
   Task: { color: 'text-violet-300', badge: 'bg-violet-500/15', preview: (i) => i.description },
   Agent: { color: 'text-violet-300', badge: 'bg-violet-500/15', preview: (i) => i.description },
@@ -26,6 +34,9 @@ const TOOL_META = {
 }
 
 function previewOf(name, input) {
+  const desc = typeof input?.description === 'string' ? input.description.trim() : ''
+  if (desc) return desc.replace(/\s+/g, ' ').slice(0, 120)
+
   const m = TOOL_META[name]
   let s = ''
   try {
