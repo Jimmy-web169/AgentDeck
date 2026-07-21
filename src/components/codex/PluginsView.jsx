@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../../api.js'
+import { codexApi as api } from '../../api.js'
 
 // Installed Codex plugins (from plugins/cache/**/.codex-plugin/plugin.json),
 // with enabled-state from config.toml. Read-only.

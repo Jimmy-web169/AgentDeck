@@ -7,6 +7,7 @@ import {
   sessionsDir as codexSessionsDir,
   idFromFilename as codexIdFromFilename,
   cwdForId as codexCwdForId,
+  sessionFileById as codexSessionFileById,
   invalidateIndex as codexInvalidateIndex,
 } from './providers/codex/paths.js'
 // claude provider
@@ -58,10 +59,13 @@ export const PROVIDERS = {
         codexInvalidateIndex(rootDir) // a rollout changed → rebuild the cwd index next read
         const id = codexIdFromFilename(path.basename(absPath))
         let slug = null
+        let parentId = null
         try {
-          slug = codexCwdForId(rootDir, id)
+          const entry = codexSessionFileById(rootDir, id)
+          slug = entry?.cwd || codexCwdForId(rootDir, id)
+          parentId = entry?.parentId || null
         } catch {}
-        return { provider: 'codex', root: rootId, id, slug }
+        return { provider: 'codex', root: rootId, id, slug, parentId }
       },
     },
   },

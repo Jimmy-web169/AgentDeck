@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../../api.js'
+import { claudeApi as api } from '../../api.js'
 import Conversation from './Conversation.jsx'
 import SubagentsView from './SubagentsView.jsx'
 import RawView from '../shared/RawView.jsx'
@@ -8,6 +8,7 @@ import Resources from './Resources.jsx'
 import ChatComposer from '../shared/ChatComposer.jsx'
 import TerminalPanel from './TerminalPanel.jsx'
 import ErrorBoundary from '../shared/ErrorBoundary.jsx'
+import { getSessionVersion, isLiveAuthoritative, startFallbackPoll } from '../../lib/liveSync.js'
 
 const keyOf = (s) => `${s.root}|${s.slug}|${s.id}`
 
@@ -21,7 +22,7 @@ const PANE_TABS = [
 
 // A full per-session view (its own Conversation/Sub-agents/Raw/Memory/Config
 // tabs) embedded in a compare pane — reuses the single-session components.
-function SessionPane({ entry, version, live, chatMode, onChatMode, liveCount, onOpenManager, engine, runningKeys, onTermChange }) {
+function SessionPane({ entry, version, active, live, chatMode, onChatMode, liveCount, onOpenManager, engine, runningKeys, onTermChange }) {
   const [tab, setTab] = useState('conversation')
   const [conv, setConv] = useState(null)
   const [subs, setSubs] = useState(null)
@@ -45,18 +46,27 @@ function SessionPane({ entry, version, live, chatMode, onChatMode, liveCount, on
   // While a live chat is attached to this session, the store owns its transcript
   // (so re-entry mid-stream shows snapshot + overlay, no dup) — skip the fetch.
   useEffect(() => {
-    if (!entry) return
+    if (!entry || !active) return
     let c = false
     const go = (pr, set) => pr.then((d) => !c && set(d)).catch((e) => !c && setErr(e.message))
-    if (tab === 'conversation') {
-      if (!slice) go(api.session(entry.root, entry.slug, entry.id), setConv)
-    } else if (tab === 'subagents') go(api.subagents(entry.root, entry.slug, entry.id), setSubs)
-    else if (tab === 'raw') go(api.raw(entry.root, entry.slug, entry.id), setRaw)
-    else if (tab === 'memory') go(api.memory(entry.root, entry.slug), setMem)
+    const load = () => {
+      if (tab === 'conversation') {
+        if (!isLiveAuthoritative(slice)) go(api.session(entry.root, entry.slug, entry.id), setConv)
+      } else if (tab === 'subagents') go(api.subagents(entry.root, entry.slug, entry.id), setSubs)
+      else if (tab === 'raw') go(api.raw(entry.root, entry.slug, entry.id), setRaw)
+      else if (tab === 'memory') go(api.memory(entry.root, entry.slug), setMem)
+    }
+    load()
+    const stopPoll = ['conversation', 'subagents', 'raw'].includes(tab)
+      ? startFallbackPoll(load, FALLBACK_POLL_MS)
+      : () => {}
     return () => {
       c = true
+      stopPoll()
     }
-  }, [entry?.root, entry?.slug, entry?.id, tab, version, !!slice])
+  }, [active, entry?.root, entry?.slug, entry?.id, tab, version, slice?.ready])
+
+  const transcript = isLiveAuthoritative(slice) ? slice.transcript : conv || slice?.transcript
 
   return (
     <div className="flex-1 min-h-0 flex flex-col">
@@ -79,9 +89,9 @@ function SessionPane({ entry, version, live, chatMode, onChatMode, liveCount, on
         <div className="flex-1 min-h-0 flex flex-col">
           <div className="flex-1 min-h-0 overflow-y-auto">
             {err && <div className="p-4 text-[13px] text-red-300">{err}</div>}
-            {slice?.transcript || conv ? (
+            {transcript ? (
               <Conversation
-                data={slice?.transcript || conv}
+                data={transcript}
                 live={slice ? { items: slice.items, onPerm: (r, bh, scope, answers) => live.respondPerm(key, r, bh, scope, answers) } : null}
               />
             ) : (
@@ -93,7 +103,7 @@ function SessionPane({ entry, version, live, chatMode, onChatMode, liveCount, on
           ) : (
             <ChatComposer
               slice={slice}
-              onOpen={() => live.open(entry, slice?.transcript || conv)}
+              onOpen={() => live.open(entry, transcript)}
               onClose={() => { live.close(key); api.session(entry.root, entry.slug, entry.id).then(setConv).catch(() => {}) }}
               mode={chatMode}
               onMode={onChatMode}
@@ -107,7 +117,7 @@ function SessionPane({ entry, version, live, chatMode, onChatMode, liveCount, on
       ) : (
         <div className="flex-1 min-h-0 overflow-y-auto">
           {err && <div className="p-4 text-[13px] text-red-300">{err}</div>}
-          {tab === 'subagents' && (subs ? <SubagentsView data={subs} /> : <Loading />)}
+          {tab === 'subagents' && (subs ? <SubagentsView data={subs} version={version} active={active} /> : <Loading />)}
           {tab === 'raw' && (raw ? <RawView records={raw.records} /> : <Loading />)}
           {tab === 'memory' && <MemoryView data={mem} />}
         </div>
@@ -117,8 +127,9 @@ function SessionPane({ entry, version, live, chatMode, onChatMode, liveCount, on
 }
 
 const Loading = () => <div className="p-8 text-center text-zinc-600">Loading…</div>
+const FALLBACK_POLL_MS = 3000
 
-export default function MultiSession({ openSessions, panes, paneKeys, setPaneKey, onCloseSession, sessionVersions, rootLabels, live, chatMode, onChatMode, liveCount, onOpenManager, engine, runningKeys, onTermChange }) {
+export default function MultiSession({ openSessions, panes, paneKeys, setPaneKey, onCloseSession, sessionVersions, rootLabels, active = true, live, chatMode, onChatMode, liveCount, onOpenManager, engine, runningKeys, onTermChange }) {
   const byKey = (k) => openSessions.find((s) => keyOf(s) === k) || null
   // (the open-session list + split control live in the app top bar now; each
   //  pane picks its session below, so no separate strip is needed.)
@@ -152,7 +163,8 @@ export default function MultiSession({ openSessions, panes, paneKeys, setPaneKey
               <ErrorBoundary label="this pane" resetKey={k}>
                 <SessionPane
                   entry={entry}
-                  version={sessionVersions[entry.id]}
+                  version={getSessionVersion(sessionVersions, 'claude', entry.root, entry.id)}
+                  active={active}
                   live={live}
                   chatMode={chatMode}
                   onChatMode={onChatMode}

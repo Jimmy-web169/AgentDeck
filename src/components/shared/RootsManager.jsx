@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { api } from '../../api.js'
 import { FolderIcon } from './icons.jsx'
 import useEscToClose from '../../lib/useEscToClose.js'
 
@@ -8,6 +7,7 @@ import useEscToClose from '../../lib/useEscToClose.js'
 // (claude: hasProjects, codex: hasSessions).
 export default function RootsManager({
   roots,
+  apiClient,
   onClose,
   onChanged,
   rootStatusField = 'hasProjects',
@@ -27,7 +27,7 @@ export default function RootsManager({
     setBusy(true)
     setErr(null)
     try {
-      await api.addRoot(path.trim(), label.trim())
+      await apiClient.addRoot(path.trim(), label.trim())
       setPath('')
       setLabel('')
       await onChanged()
@@ -42,7 +42,7 @@ export default function RootsManager({
     setBusy(true)
     setErr(null)
     try {
-      await api.removeRoot(id)
+      await apiClient.removeRoot(id)
       await onChanged()
     } catch (e) {
       setErr(e.message)

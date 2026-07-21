@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api } from '../../api.js'
+import { codexApi as api } from '../../api.js'
 import useEscToClose from '../../lib/useEscToClose.js'
 
 // Normalize whatever the user typed (a bare ref, a skills.sh/GitHub URL, or a

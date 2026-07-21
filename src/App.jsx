@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { setProvider } from './api.js'
 import Dashboard from './components/shared/Dashboard.jsx'
 import { PROVIDER_LIST } from './providers/index.js'
 
@@ -17,9 +16,6 @@ export default function App() {
   const [view, setView] = useState(null) // null | 'dashboard'
   const [pendingOpen, setPendingOpen] = useState(null) // null | { provider, root, slug, id?, kind?, engine? }
   useEffect(() => localStorage.setItem('agentdeck_provider', provider), [provider])
-  // keep the api client's provider prefix in sync before children render/fetch
-  setProvider(provider)
-
   // Open a session anywhere (Dashboard card, unified Live panel): switch to its
   // provider, leave the dashboard, and hand the target to that app to consume
   // (it switches root/project/session, and engine + reconnect when given).

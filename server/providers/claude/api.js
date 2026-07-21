@@ -170,7 +170,9 @@ function getRaw(q) {
   const slug = q.get('slug')
   const id = q.get('id')
   if (!slug || !id) throw httpErr(400, 'missing slug/id')
-  return { root: root.id, slug, id, records: sessionRecords(findSessionFile(root.dir, slug, id)) }
+  const file = findSessionFile(root.dir, slug, id)
+  const fp = fingerprintOf(file)
+  return { root: root.id, slug, id, records: sessionRecords(file, fp), _etag: etagOf(fp) }
 }
 
 // Move a session to the OS trash (recoverable): its .jsonl transcript plus its

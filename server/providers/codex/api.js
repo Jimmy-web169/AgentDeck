@@ -215,7 +215,9 @@ function getRaw(q) {
   const root = resolveRoot(q.get('root'))
   const id = q.get('id')
   if (!id) throw httpErr(400, 'missing id')
-  return { root: root.id, id, records: sessionRecords(findFile(root.dir, id).file) }
+  const file = findFile(root.dir, id).file
+  const fp = fingerprintOf(file)
+  return { root: root.id, id, records: sessionRecords(file, fp), _etag: etagOf(fp) }
 }
 
 // --- stats -------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from '../api.js'
+import { claudeApi as api } from '../api.js'
+import { cancelReconnect, scheduleReconnect } from './liveSync.js'
 
 export const keyOf = (e) => `${e.root}|${e.slug}|${e.id}`
 
@@ -22,6 +23,7 @@ const emptyTranscript = (title) => ({
 export default function useLiveChatStore({ onTurnLogged } = {}) {
   const [sessions, setSessions] = useState({}) // key -> slice
   const wss = useRef(new Map()) // key -> WebSocket
+  const reconnects = useRef(new Map()) // key -> retry metadata
   const sessionsRef = useRef(sessions)
   useEffect(() => void (sessionsRef.current = sessions), [sessions])
   const onLogRef = useRef(onTurnLogged)
@@ -100,19 +102,32 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
     }
   }, [patch, patchAsst])
 
-  // open a live chat (idempotent). initialTranscript seeds the frozen base the
-  // overlay sits on top of, captured BEFORE the first web turn writes the jsonl.
-  const open = useCallback((entry, initialTranscript) => {
-    const key = keyOf(entry)
-    if (wss.current.has(key)) return key
-    setSessions((s) => ({
-      ...s,
-      [key]: { key, root: entry.root, slug: entry.slug, id: entry.id, title: entry.title, ready: false, streaming: false, error: null, account: null, items: [], asst: null, transcript: initialTranscript || null },
-    }))
+  const connect = useCallback((key, entry, params) => {
+    let meta = reconnects.current.get(key)
+    if (!meta) {
+      meta = { entry, params, attempt: 0, timer: null, closed: false, connectedOnce: false }
+      reconnects.current.set(key, meta)
+    } else {
+      meta.entry = entry
+      meta.params = params
+      meta.closed = false
+      if (meta.timer) clearTimeout(meta.timer)
+      meta.timer = null
+    }
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const qs = new URLSearchParams({ root: entry.root, slug: entry.slug, id: entry.id })
-    const ws = new WebSocket(`${proto}://${location.host}/chat/claude?${qs.toString()}`)
+    const ws = new WebSocket(`${proto}://${location.host}/chat/claude?${new URLSearchParams(params).toString()}`)
     wss.current.set(key, ws)
+    ws.onopen = () => {
+      const recovering = meta.connectedOnce
+      meta.connectedOnce = true
+      meta.attempt = 0
+      const sl = sessionsRef.current[key]
+      if (recovering && sl?.id && sl.slug) {
+        api.session(sl.root, sl.slug, sl.id).then((d) => patch(key, (s) => (
+          s.streaming ? s : { ...s, transcript: d, items: [], asst: null, streaming: false }
+        ))).catch(() => {})
+      }
+    }
     ws.onmessage = (e) => {
       let m
       try {
@@ -122,11 +137,35 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
       }
       handle(key, entry, m)
     }
-    ws.onclose = () => patch(key, (sl) => ({ ...sl, ready: false }))
+    ws.onclose = () => {
+      if (wss.current.get(key) === ws) wss.current.delete(key)
+      patch(key, (sl) => ({ ...sl, ready: false, streaming: false }))
+      if (meta.closed || !sessionsRef.current[key]) return
+      scheduleReconnect(meta, () => {
+        const sl = sessionsRef.current[key]
+        if (!sl || meta.closed) return
+        const retryEntry = { ...meta.entry, root: sl.root, slug: sl.slug, id: sl.id }
+        const retryParams = sl.id && sl.slug ? { root: sl.root, slug: sl.slug, id: sl.id } : meta.params
+        connect(key, retryEntry, retryParams)
+      })
+    }
     ws.onerror = () => patch(key, (sl) => ({ ...sl, error: 'connection error' }))
+    return ws
+  }, [handle, patch])
+
+  // open a live chat (idempotent). initialTranscript seeds the frozen base the
+  // overlay sits on top of, captured BEFORE the first web turn writes the jsonl.
+  const open = useCallback((entry, initialTranscript) => {
+    const key = keyOf(entry)
+    if (wss.current.has(key)) return key
+    setSessions((s) => ({
+      ...s,
+      [key]: { key, root: entry.root, slug: entry.slug, id: entry.id, title: entry.title, ready: false, streaming: false, error: null, account: null, items: [], asst: null, transcript: initialTranscript || null },
+    }))
+    connect(key, entry, { root: entry.root, slug: entry.slug, id: entry.id })
     if (!initialTranscript) api.session(entry.root, entry.slug, entry.id).then((d) => patch(key, (sl) => ({ ...sl, transcript: d }))).catch(() => {})
     return key
-  }, [handle, patch])
+  }, [connect, patch])
 
   // start a brand-new conversation under a project (no resume). The session id is
   // assigned by the backend on the first turn (session-created); until then the
@@ -140,25 +179,12 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
       ...s,
       [key]: { key, root: entry.root, slug: entry.slug || null, cwd: entry.cwd || null, id: null, title, isNew: true, ready: false, streaming: false, error: null, account: null, items: [], asst: null, transcript: emptyTranscript(title) },
     }))
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const params = { root: entry.root, new: '1' }
     if (entry.slug) params.slug = entry.slug
     if (entry.cwd) params.cwd = entry.cwd
-    const ws = new WebSocket(`${proto}://${location.host}/chat/claude?${new URLSearchParams(params).toString()}`)
-    wss.current.set(key, ws)
-    ws.onmessage = (e) => {
-      let m
-      try {
-        m = JSON.parse(e.data)
-      } catch {
-        return
-      }
-      handle(key, { root: entry.root, slug: entry.slug || null, id: null }, m)
-    }
-    ws.onclose = () => patch(key, (sl) => ({ ...sl, ready: false }))
-    ws.onerror = () => patch(key, (sl) => ({ ...sl, error: 'connection error' }))
+    connect(key, { root: entry.root, slug: entry.slug || null, id: null }, params)
     return key
-  }, [handle, patch])
+  }, [connect])
 
   const send = useCallback((key, message, mode) => {
     const ws = wss.current.get(key)
@@ -176,6 +202,11 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
   }, [patch])
 
   const close = useCallback((key) => {
+    const meta = reconnects.current.get(key)
+    if (meta) {
+      cancelReconnect(meta)
+      reconnects.current.delete(key)
+    }
     const ws = wss.current.get(key)
     if (ws) {
       try {
@@ -194,7 +225,12 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
   // close every connection when the app unmounts
   useEffect(() => {
     const map = wss.current
+    const retryMap = reconnects.current
     return () => {
+      for (const meta of retryMap.values()) {
+        cancelReconnect(meta)
+      }
+      retryMap.clear()
       for (const ws of map.values()) {
         try {
           ws.close()

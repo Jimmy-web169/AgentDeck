@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../../api.js'
+import { codexApi as api } from '../../api.js'
 import Markdown from '../shared/Markdown.jsx'
 import NewResourceForm from './NewResourceForm.jsx'
 import SkillImport from './SkillImport.jsx'

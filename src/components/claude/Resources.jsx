@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../../api.js'
+import { claudeApi as api } from '../../api.js'
 import SkillImport from './SkillImport.jsx'
 import NewResourceForm from './NewResourceForm.jsx'
 

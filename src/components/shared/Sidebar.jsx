@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { api } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { ActivityIcon, TrashIcon } from './icons.jsx'
 import PathPicker from './PathPicker.jsx'
@@ -18,6 +17,7 @@ function shortPath(cwd, slug) {
 // Subagent adornments (isSubagent / childCount) render only when present on the
 // session object, so codex data lights them up and claude data does not.
 export default function Sidebar({
+  apiClient,
   roots,
   root,
   onRoot,
@@ -117,7 +117,7 @@ export default function Sidebar({
     if (picking) return
     setPicking(true)
     try {
-      const r = await api.pickFolder()
+      const r = await apiClient.pickFolder()
       if (r?.ok && r.path) onNewProject(r.path)
       else if (!r?.cancelled) setPickerOpen(true) // native unavailable → fallback
     } catch {
@@ -378,6 +378,7 @@ export default function Sidebar({
 
       {pickerOpen && (
         <PathPicker
+          apiClient={apiClient}
           onPick={(p) => { setPickerOpen(false); onNewProject(p) }}
           onClose={() => setPickerOpen(false)}
         />

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api } from '../../api.js'
+import { claudeApi as api } from '../../api.js'
 import useEscToClose from '../../lib/useEscToClose.js'
 
 // Creation-only scaffolding. Fields come straight from the Claude Code docs.

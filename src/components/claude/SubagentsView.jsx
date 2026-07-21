@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api } from '../../api.js'
+import { claudeApi as api } from '../../api.js'
 import useEscToClose from '../../lib/useEscToClose.js'
 import Conversation from './Conversation.jsx'
 import { fmtTokens } from '../../lib/format.js'

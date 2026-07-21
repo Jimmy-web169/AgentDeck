@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { api } from '../../api.js'
 import { fmtTokens } from '../../lib/format.js'
 
 const sumTokens = (t = {}) => (t.input || 0) + (t.output || 0) + (t.cacheCreate || 0) + (t.cacheRead || 0)
@@ -84,7 +83,7 @@ function DrillRow({ name, cwd, count, countLabel, toolCalls, total, max, onClick
   )
 }
 
-export default function Stats({ stats, root, focus, onOpenSession }) {
+export default function Stats({ stats, root, focus, onOpenSession, apiClient }) {
   const [path, setPath] = useState({ slug: null, sid: null })
   const [sessionsBySlug, setSessionsBySlug] = useState({})
 
@@ -98,7 +97,7 @@ export default function Stats({ stats, root, focus, onOpenSession }) {
       return
     }
     if (sessionsBySlug[focus.slug] === undefined) {
-      api
+      apiClient
         .sessions(root, focus.slug)
         .then((d) => setSessionsBySlug((m) => ({ ...m, [focus.slug]: d.sessions })))
         .catch(() => setSessionsBySlug((m) => ({ ...m, [focus.slug]: [] })))
@@ -112,7 +111,7 @@ export default function Stats({ stats, root, focus, onOpenSession }) {
 
   const goProject = (slug) => {
     if (sessionsBySlug[slug] === undefined) {
-      api.sessions(root, slug).then((d) => setSessionsBySlug((m) => ({ ...m, [slug]: d.sessions }))).catch(() => setSessionsBySlug((m) => ({ ...m, [slug]: [] })))
+      apiClient.sessions(root, slug).then((d) => setSessionsBySlug((m) => ({ ...m, [slug]: d.sessions }))).catch(() => setSessionsBySlug((m) => ({ ...m, [slug]: [] })))
     }
     setPath({ slug, sid: null })
   }

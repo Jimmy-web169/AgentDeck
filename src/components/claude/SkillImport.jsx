@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api } from '../../api.js'
+import { claudeApi as api } from '../../api.js'
 import useEscToClose from '../../lib/useEscToClose.js'
 
 // Normalize whatever the user typed (a bare ref or a full `npx skills add ...`

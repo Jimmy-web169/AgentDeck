@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from './api.js'
+import { codexApi as api } from './api.js'
 import Sidebar from './components/shared/Sidebar.jsx'
 import Conversation from './components/codex/Conversation.jsx'
 import RawView from './components/shared/RawView.jsx'
@@ -22,6 +22,7 @@ import ContextMeter from './components/codex/ContextMeter.jsx'
 import useLiveChatStore, { keyOf as liveKeyOf } from './lib/store.codex.js'
 import useActiveSessions, { toManagerItems } from './lib/useActiveSessions.js'
 import { ActivityIcon } from './components/shared/icons.jsx'
+import { bumpSessionVersions, isLiveAuthoritative, subscribeToPageResume } from './lib/liveSync.js'
 
 const LIVE_MS = 8000
 
@@ -92,7 +93,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const [openSessions, setOpenSessions] = useState([]) // [{ root, id, title, cwd }]
   const [panes, setPanes] = useState(1)
   const [paneKeys, setPaneKeys] = useState([]) // key (`root|id`) shown in each pane
-  const [sessionVersions, setSessionVersions] = useState({}) // id -> bump counter for live refetch
+  const [sessionVersions, setSessionVersions] = useState({}) // provider|root|id -> live refetch counter
 
   const rootRef = useRef(null)
   const activeRef = useRef(null)
@@ -137,6 +138,8 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     loadProjects(root)
     setOpenSlug(null)
     setSessions([])
+    loadedSessionsFor.current = null
+    sessionsReqId.current++ // drop in-flight session lists from the old root
     setActive(null)
     setSessionData(null)
     setStats(null)
@@ -145,13 +148,29 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   }, [root, loadProjects, appActive])
 
   // ---- sessions ----
+  // The list-replacing "loading…" placeholder belongs to a project switch only;
+  // background refreshes (SSE bursts run ~1/s during activity) keep the previous
+  // rows on screen, or the whole sidebar collapses and re-expands every second.
+  // reqId makes the newest call own both the list and the loading flag, so a
+  // slow stale response can't overwrite a newer project's sessions.
+  const loadedSessionsFor = useRef(null) // `${root}|${slug}` the current list is for
+  const sessionsReqId = useRef(0)
   const loadSessions = useCallback((r, slug) => {
-    setLoadingSessions(true)
+    const key = `${r}|${slug}`
+    const isRefresh = loadedSessionsFor.current === key
+    const reqId = ++sessionsReqId.current
+    if (!isRefresh) setLoadingSessions(true)
     api
       .sessions(r, slug)
-      .then((d) => setSessions(d.sessions))
+      .then((d) => {
+        if (sessionsReqId.current !== reqId) return
+        loadedSessionsFor.current = key
+        setSessions(d.sessions)
+      })
       .catch((e) => setError(e.message))
-      .finally(() => setLoadingSessions(false))
+      .finally(() => {
+        if (!isRefresh && sessionsReqId.current === reqId) setLoadingSessions(false)
+      })
   }, [])
 
   const openProject = (slug) => {
@@ -170,15 +189,18 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     setRaw(null)
     setTab('conversation')
     stickBottom.current = true
-    if (liveSessionsRef.current[liveKeyOf({ root, id: s.id })]) return // live store owns it
+    if (isLiveAuthoritative(liveSessionsRef.current[liveKeyOf({ root, id: s.id })])) return
     api.session(root, s.id).then((d) => setSessionData(d)).catch((e) => setError(e.message))
   }
 
   const refetchActive = useCallback(() => {
-    if (liveSessionsRef.current[activeKeyRef.current]) return // live store owns this transcript
+    if (isLiveAuthoritative(liveSessionsRef.current[activeKeyRef.current])) return
     const a = activeRef.current
     if (!a) return
     api.session(rootRef.current, a.id).then((d) => setSessionData(d)).catch(() => {})
+    if (tabRef.current === 'raw') {
+      api.raw(rootRef.current, a.id).then(setRaw).catch(() => {})
+    }
   }, [])
 
   // ---- continue-conversation chat (persistent store) ----
@@ -211,6 +233,18 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     const t = setInterval(refetchActive, 3000)
     return () => clearInterval(t)
   }, [appActive, active, refetchActive])
+
+  useEffect(() => {
+    if (!appActive) return
+    return subscribeToPageResume(() => {
+      const r = rootRef.current
+      const slug = openSlugRef.current
+      refetchActive()
+      if (!r) return
+      loadProjects(r)
+      if (slug) loadSessions(r, slug)
+    })
+  }, [appActive, loadProjects, loadSessions, refetchActive])
 
   // move a session to the OS trash (recoverable), then clear it everywhere it
   // might be open — the active pane, and the multi-session workspace
@@ -333,7 +367,11 @@ export default function App({ active: appActive = true, provider, onProvider, pr
 
   const viewKey = draftKey || activeKey
   const viewSlice = viewKey ? live.sessions[viewKey] : null
-  const convData = viewSlice?.transcript || (draftKey ? null : sessionData)
+  const convData = isLiveAuthoritative(viewSlice)
+    ? viewSlice.transcript
+    : draftKey
+      ? viewSlice?.transcript
+      : sessionData || viewSlice?.transcript
 
   const startNewConversation = useCallback((slug) => {
     const r = rootRef.current
@@ -477,7 +515,16 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   useEffect(() => {
     if (!appActive) return
     const es = new EventSource('/events')
-    es.onopen = () => setConn('live')
+    es.onopen = () => {
+      setConn('live')
+      const r = rootRef.current
+      const slug = openSlugRef.current
+      refetchActive()
+      if (r) {
+        loadProjects(r)
+        if (slug) loadSessions(r, slug)
+      }
+    }
     es.onerror = () => setConn('reconnecting')
     es.onmessage = (e) => {
       let msg
@@ -488,17 +535,12 @@ export default function App({ active: appActive = true, provider, onProvider, pr
       }
       if (msg.type === 'hello') return setConn('live')
       if (msg.type !== 'change') return
+      const providerChanges = (msg.changes || []).filter((c) => c.provider === 'codex')
+      if (!providerChanges.length) return
       setLastEvent(Date.now())
-      // bump per-session versions for EVERY changed id (across roots) so live
-      // multi-session panes refetch — do this before the current-root filter.
-      setSessionVersions((prev) => {
-        let changed = false
-        const next = { ...prev }
-        for (const c of msg.changes) if (c.id) { next[c.id] = (next[c.id] || 0) + 1; changed = true }
-        return changed ? next : prev
-      })
+      setSessionVersions((prev) => bumpSessionVersions(prev, providerChanges))
       const r = rootRef.current
-      const relevant = msg.changes.filter((c) => c.root === r)
+      const relevant = providerChanges.filter((c) => c.root === r)
       if (!relevant.length) return
 
       setLiveIds((prev) => {
@@ -539,7 +581,11 @@ export default function App({ active: appActive = true, provider, onProvider, pr
         loadProjects(rootRef.current)
       }, 400)
     }
-    return () => es.close()
+    return () => {
+      es.close()
+      if (refetchTimer.current) clearTimeout(refetchTimer.current)
+      if (listTimer.current) clearTimeout(listTimer.current)
+    }
   }, [refetchActive, loadSessions, loadProjects, appActive])
 
   // ---- auto-scroll on live tail ----
@@ -594,6 +640,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
         <div style={{ width: sidebarW }} className="shrink-0 h-full min-w-0">
           <ErrorBoundary label="the session list" resetKey={`${root}|${openSlug || ''}`}>
           <Sidebar
+            apiClient={api}
             providers={providers}
             provider={provider}
             onProvider={onProvider}
@@ -696,6 +743,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
         {multiMode ? (
           <div className="flex-1 min-h-0">
             <MultiSession
+              active={appActive}
               openSessions={openSessions}
               panes={panes}
               paneKeys={paneKeys}
@@ -759,8 +807,8 @@ export default function App({ active: appActive = true, provider, onProvider, pr
               active && (activeSlice?.transcript || sessionData) && (
                 <ChatComposer
                   slice={activeSlice}
-                  contextSummary={activeSlice?.transcript?.summary || sessionData?.summary}
-                  onOpen={() => live.open({ root, id: active.id, title: active.title, slug: openSlug }, activeSlice?.transcript || sessionData)}
+                  contextSummary={convData?.summary}
+                  onOpen={() => live.open({ root, id: active.id, title: active.title, slug: openSlug }, convData)}
                   onClose={() => { live.close(activeKey); api.session(root, active.id).then(setSessionData).catch(() => {}) }}
                   mode={chatMode}
                   onMode={setChatMode}
@@ -796,6 +844,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
 
       {showRoots && (
         <RootsManager
+          apiClient={api}
           roots={roots}
           rootStatusField="hasSessions"
           onClose={() => setShowRoots(false)}

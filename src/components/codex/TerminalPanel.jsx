@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api } from '../../api.js'
+import { codexApi as api } from '../../api.js'
 import OpenAppButtons from '../shared/OpenAppButtons.jsx'
 import ResizeHandle from '../shared/ResizeHandle.jsx'
 import ContextMeter from './ContextMeter.jsx'

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../../api.js'
+import { claudeApi as api } from '../../api.js'
 import Markdown from '../shared/Markdown.jsx'
 
 // last two path segments of a cwd/slug, for the project picker labels

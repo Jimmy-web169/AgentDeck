@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from '../api.js'
+import { codexApi as api } from '../api.js'
+import { cancelReconnect, scheduleReconnect } from './liveSync.js'
 
 export const keyOf = (e) => `${e.root}|${e.id}`
 
@@ -21,6 +22,7 @@ const emptyTranscript = (title) => ({
 export default function useLiveChatStore({ onTurnLogged } = {}) {
   const [sessions, setSessions] = useState({}) // key -> slice
   const wss = useRef(new Map()) // key -> WebSocket
+  const reconnects = useRef(new Map()) // key -> retry metadata
   const sessionsRef = useRef(sessions)
   useEffect(() => void (sessionsRef.current = sessions), [sessions])
   const onLogRef = useRef(onTurnLogged)
@@ -83,9 +85,31 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
   }, [patch, upsertItem])
 
   const connect = useCallback((key, entry, params) => {
+    let meta = reconnects.current.get(key)
+    if (!meta) {
+      meta = { entry, params, attempt: 0, timer: null, closed: false, connectedOnce: false }
+      reconnects.current.set(key, meta)
+    } else {
+      meta.entry = entry
+      meta.params = params
+      meta.closed = false
+      if (meta.timer) clearTimeout(meta.timer)
+      meta.timer = null
+    }
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     const ws = new WebSocket(`${proto}://${location.host}/chat/codex?${new URLSearchParams(params).toString()}`)
     wss.current.set(key, ws)
+    ws.onopen = () => {
+      const recovering = meta.connectedOnce
+      meta.connectedOnce = true
+      meta.attempt = 0
+      const sl = sessionsRef.current[key]
+      if (recovering && sl?.id) {
+        api.session(sl.root, sl.id).then((d) => patch(key, (s) => (
+          s.streaming ? s : { ...s, transcript: d, items: [], streaming: false }
+        ))).catch(() => {})
+      }
+    }
     ws.onmessage = (e) => {
       let m
       try {
@@ -95,7 +119,18 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
       }
       handle(key, entry, m)
     }
-    ws.onclose = () => patch(key, (sl) => ({ ...sl, ready: false }))
+    ws.onclose = () => {
+      if (wss.current.get(key) === ws) wss.current.delete(key)
+      patch(key, (sl) => ({ ...sl, ready: false, streaming: false }))
+      if (meta.closed || !sessionsRef.current[key]) return
+      scheduleReconnect(meta, () => {
+        const sl = sessionsRef.current[key]
+        if (!sl || meta.closed) return
+        const retryEntry = { ...meta.entry, root: sl.root, id: sl.id, slug: sl.slug }
+        const retryParams = sl.id ? { root: sl.root, id: sl.id } : meta.params
+        connect(key, retryEntry, retryParams)
+      })
+    }
     ws.onerror = () => patch(key, (sl) => ({ ...sl, error: 'connection error' }))
     return ws
   }, [handle, patch])
@@ -139,6 +174,11 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
   }, [patch])
 
   const close = useCallback((key) => {
+    const meta = reconnects.current.get(key)
+    if (meta) {
+      cancelReconnect(meta)
+      reconnects.current.delete(key)
+    }
     const ws = wss.current.get(key)
     if (ws) {
       try {
@@ -157,7 +197,12 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
   // close every connection when the app unmounts
   useEffect(() => {
     const map = wss.current
+    const retryMap = reconnects.current
     return () => {
+      for (const meta of retryMap.values()) {
+        cancelReconnect(meta)
+      }
+      retryMap.clear()
       for (const ws of map.values()) {
         try {
           ws.close()

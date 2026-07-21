@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api } from '../../api.js'
+import { claudeApi as api } from '../../api.js'
 import ResizeHandle from '../shared/ResizeHandle.jsx'
 import OpenAppButtons from '../shared/OpenAppButtons.jsx'
 import { getTermView, setTermView } from '../../lib/termView.js'

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../../api.js'
+import { codexApi as api } from '../../api.js'
 import Markdown from '../shared/Markdown.jsx'
 
 // Codex auto-generated per-conversation memories (from memories_1.sqlite).

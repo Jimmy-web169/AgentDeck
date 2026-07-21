@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../../api.js'
+import { codexApi as api } from '../../api.js'
 import { fmtTokens, fmtRelative, fmtTime, totalTokens } from '../../lib/format.js'
 
 function Card({ label, value, sub }) {

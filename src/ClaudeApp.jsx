@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { api } from './api.js'
+import { claudeApi as api } from './api.js'
 import Sidebar from './components/shared/Sidebar.jsx'
 import Conversation from './components/claude/Conversation.jsx'
 import RawView from './components/shared/RawView.jsx'
@@ -20,6 +20,14 @@ import { ActivityIcon } from './components/shared/icons.jsx'
 import RateLimitsBar from './components/claude/RateLimitsBar.jsx'
 import InfoDot from './components/shared/InfoDot.jsx'
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx'
+import {
+  bumpSessionVersions,
+  createDebounceWithMaxWait,
+  getSessionVersion,
+  hasSubagentsNow,
+  isLiveAuthoritative,
+  subscribeToPageResume,
+} from './lib/liveSync.js'
 
 const LIVE_MS = 8000
 
@@ -76,7 +84,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('cm_collapsed') === '1')
   const [multiMode, setMultiMode] = useState(false)
   const [openSessions, setOpenSessions] = useState([]) // [{root, slug, id, title}] — root per entry
-  const [sessionVersions, setSessionVersions] = useState({}) // id -> bump count (live refetch)
+  const [sessionVersions, setSessionVersions] = useState({}) // provider|root|id -> live refetch counter
   const [panes, setPanes] = useState(2) // multi-session split count
   const [paneKeys, setPaneKeys] = useState([]) // which open session each pane shows
   // continue-conversation chat: default permission mode persists; live chats are
@@ -94,7 +102,6 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const tabRef = useRef(tab)
   const mainRef = useRef(null)
   const stickBottom = useRef(true)
-  const refetchTimer = useRef(null)
   const liveTimers = useRef(new Map())
   const liveSessionsRef = useRef({}) // mirror of live.sessions for refs-based callbacks
   const activeKeyRef = useRef(null)
@@ -131,6 +138,8 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     loadProjects(root)
     setOpenSlug(null)
     setSessions([])
+    loadedSessionsFor.current = null
+    sessionsReqId.current++ // drop in-flight session lists from the old root
     setActive(null)
     setSessionData(null)
     setSubagents(null)
@@ -141,13 +150,29 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   }, [root, loadProjects, appActive])
 
   // ---- sessions ----
+  // The list-replacing "loading…" placeholder belongs to a project switch only;
+  // background refreshes (SSE bursts run ~1/s during activity) keep the previous
+  // rows on screen, or the whole sidebar collapses and re-expands every second.
+  // reqId makes the newest call own both the list and the loading flag, so a
+  // slow stale response can't overwrite a newer project's sessions.
+  const loadedSessionsFor = useRef(null) // `${root}|${slug}` the current list is for
+  const sessionsReqId = useRef(0)
   const loadSessions = useCallback((r, slug) => {
-    setLoadingSessions(true)
+    const key = `${r}|${slug}`
+    const isRefresh = loadedSessionsFor.current === key
+    const reqId = ++sessionsReqId.current
+    if (!isRefresh) setLoadingSessions(true)
     api
       .sessions(r, slug)
-      .then((d) => setSessions(d.sessions))
+      .then((d) => {
+        if (sessionsReqId.current !== reqId) return
+        loadedSessionsFor.current = key
+        setSessions(d.sessions)
+      })
       .catch((e) => setError(e.message))
-      .finally(() => setLoadingSessions(false))
+      .finally(() => {
+        if (!isRefresh && sessionsReqId.current === reqId) setLoadingSessions(false)
+      })
   }, [])
 
   const openProject = (slug) => {
@@ -168,7 +193,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     setTab('conversation')
     stickBottom.current = true
     // if this session has a live chat, the store owns its transcript — don't refetch
-    if (liveSessionsRef.current[liveKeyOf({ root, slug: openSlug, id: s.id })]) return
+    if (isLiveAuthoritative(liveSessionsRef.current[liveKeyOf({ root, slug: openSlug, id: s.id })])) return
     api.session(root, openSlug, s.id).then((d) => setSessionData(d)).catch((e) => setError(e.message))
   }
 
@@ -259,7 +284,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   }, [openSessions, panes])
 
   const refetchActive = useCallback(() => {
-    if (liveSessionsRef.current[activeKeyRef.current]) return // live store owns this session's transcript
+    if (isLiveAuthoritative(liveSessionsRef.current[activeKeyRef.current])) return
     const a = activeRef.current
     const r = rootRef.current
     const slug = openSlugRef.current
@@ -267,6 +292,9 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     api.session(r, slug, a.id).then((d) => setSessionData(d)).catch(() => {})
     if (tabRef.current === 'subagents') {
       api.subagents(r, slug, a.id).then((d) => setSubagents({ ...d, _for: a.id })).catch(() => {})
+    }
+    if (tabRef.current === 'raw') {
+      api.raw(r, slug, a.id).then(setRaw).catch(() => {})
     }
   }, [])
 
@@ -300,6 +328,18 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     const t = setInterval(refetchActive, 3000)
     return () => clearInterval(t)
   }, [appActive, active, refetchActive])
+
+  useEffect(() => {
+    if (!appActive) return
+    return subscribeToPageResume(() => {
+      const r = rootRef.current
+      const slug = openSlugRef.current
+      refetchActive()
+      if (!r) return
+      loadProjects(r)
+      if (slug) loadSessions(r, slug)
+    })
+  }, [appActive, loadProjects, loadSessions, refetchActive])
 
   const activeKey = active && openSlug ? liveKeyOf({ root, slug: openSlug, id: active.id }) : null
   useEffect(() => void (activeKeyRef.current = activeKey), [activeKey])
@@ -349,7 +389,11 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   // over the selected session; both render the same way (transcript + overlay).
   const viewKey = draftKey || activeKey
   const viewSlice = viewKey ? live.sessions[viewKey] : null
-  const convData = viewSlice?.transcript || (draftKey ? null : sessionData)
+  const convData = isLiveAuthoritative(viewSlice)
+    ? viewSlice.transcript
+    : draftKey
+      ? viewSlice?.transcript
+      : sessionData || viewSlice?.transcript
 
   const startNewConversation = useCallback((slug) => {
     const r = rootRef.current
@@ -513,7 +557,27 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   useEffect(() => {
     if (!appActive) return
     const es = new EventSource('/events')
-    es.onopen = () => setConn('live')
+    let pendingActive = false
+    let pendingOpenProject = false
+    let pendingProjects = false
+    const scheduleRefresh = createDebounceWithMaxWait(() => {
+      const r = rootRef.current
+      const slug = openSlugRef.current
+      if (pendingActive) refetchActive()
+      if (pendingOpenProject && r && slug) loadSessions(r, slug)
+      if (pendingProjects && r) loadProjects(r)
+      pendingActive = pendingOpenProject = pendingProjects = false
+    }, { waitMs: 300, maxWaitMs: 1000 })
+    es.onopen = () => {
+      setConn('live')
+      const r = rootRef.current
+      const slug = openSlugRef.current
+      refetchActive()
+      if (r) {
+        loadProjects(r)
+        if (slug) loadSessions(r, slug)
+      }
+    }
     es.onerror = () => setConn('reconnecting')
     es.onmessage = (e) => {
       let msg
@@ -524,16 +588,12 @@ export default function App({ active: appActive = true, provider, onProvider, pr
       }
       if (msg.type === 'hello') return setConn('live')
       if (msg.type !== 'change') return
+      const providerChanges = (msg.changes || []).filter((c) => c.provider === 'claude')
+      if (!providerChanges.length) return
       setLastEvent(Date.now())
-      // bump version for every changed session id (any root) so multi-session
-      // panes — including cross-folder ones — refetch live.
-      setSessionVersions((v) => {
-        const n = { ...v }
-        for (const c of msg.changes) if (c.id) n[c.id] = (n[c.id] || 0) + 1
-        return n
-      })
+      setSessionVersions((prev) => bumpSessionVersions(prev, providerChanges))
       const r = rootRef.current
-      const relevant = msg.changes.filter((c) => c.root === r)
+      const relevant = providerChanges.filter((c) => c.root === r)
       if (!relevant.length) return
 
       setLiveIds((prev) => {
@@ -562,14 +622,15 @@ export default function App({ active: appActive = true, provider, onProvider, pr
       const slug = openSlugRef.current
       const hitsActive = a && relevant.some((c) => c.slug === slug && c.id === a.id)
       const hitsOpenProject = slug && relevant.some((c) => c.slug === slug)
-      if (refetchTimer.current) clearTimeout(refetchTimer.current)
-      refetchTimer.current = setTimeout(() => {
-        if (hitsActive) refetchActive()
-        if (hitsOpenProject) loadSessions(rootRef.current, slug)
-        loadProjects(rootRef.current)
-      }, 300)
+      pendingActive ||= !!hitsActive
+      pendingOpenProject ||= !!hitsOpenProject
+      pendingProjects = true
+      scheduleRefresh()
     }
-    return () => es.close()
+    return () => {
+      scheduleRefresh.cancel()
+      es.close()
+    }
   }, [refetchActive, loadSessions, loadProjects, appActive])
 
   // ---- auto-scroll on live tail ----
@@ -624,7 +685,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const rootLabel = roots.find((r) => r.id === root)?.label || ''
   const disabledTab = (t) =>
     (t.need === 'session' && !active) ||
-    (t.need === 'subagents' && !(active && active.hasSubagents)) ||
+    (t.need === 'subagents' && !hasSubagentsNow(active, sessions)) ||
     (t.need === 'project' && !openSlug)
 
   return (
@@ -633,6 +694,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
         <div style={{ width: sidebarW }} className="shrink-0 h-full min-w-0">
           <ErrorBoundary label="the session list" resetKey={`${root}|${openSlug || ''}`}>
           <Sidebar
+        apiClient={api}
         providers={providers}
         provider={provider}
         onProvider={onProvider}
@@ -754,6 +816,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
         {multiMode ? (
           <div className="flex-1 min-h-0">
             <MultiSession
+              active={appActive}
               openSessions={openSessions}
               panes={panes}
               paneKeys={paneKeys}
@@ -814,7 +877,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
               active && (activeSlice?.transcript || sessionData) && (
                 <ChatComposer
                   slice={activeSlice}
-                  onOpen={() => live.open({ root, slug: openSlug, id: active.id, title: active.title }, activeSlice?.transcript || sessionData)}
+                  onOpen={() => live.open({ root, slug: openSlug, id: active.id, title: active.title }, convData)}
                   onClose={() => { live.close(activeKey); api.session(root, openSlug, active.id).then(setSessionData).catch(() => {}) }}
                   mode={chatMode}
                   onMode={setChatMode}
@@ -828,10 +891,10 @@ export default function App({ active: appActive = true, provider, onProvider, pr
         ) : (
           <div className="flex-1 overflow-y-auto">
             <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
-              {tab === 'subagents' && <SubagentsView key={(active && active.id) || 'none'} data={subagents} version={(active && sessionVersions[active.id]) || 0} active={appActive} />}
+              {tab === 'subagents' && <SubagentsView key={(active && active.id) || 'none'} data={subagents} version={active ? getSessionVersion(sessionVersions, 'claude', root, active.id) : 0} active={appActive} />}
               {tab === 'raw' && raw && <RawView records={raw.records} />}
               {tab === 'memory' && <MemoryView root={root} projects={projects} />}
-              {tab === 'stats' && <Stats stats={stats} root={root} focus={statsFocus} onOpenSession={(slug, s) => jumpToSession({ root, slug, id: s.id, title: s.title })} />}
+              {tab === 'stats' && <Stats apiClient={api} stats={stats} root={root} focus={statsFocus} onOpenSession={(slug, s) => jumpToSession({ root, slug, id: s.id, title: s.title })} />}
               {tab === 'resources' && root && <Resources key={`res-${root}`} root={root} />}
               {tab === 'config' && root && openSlug && <Resources key={`cfg-${root}-${openSlug}`} root={root} slug={openSlug} />}
               {tab === 'history' && <HistoryView data={history} />}
@@ -843,6 +906,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
 
       {showRoots && (
         <RootsManager
+          apiClient={api}
           roots={roots}
           onClose={() => setShowRoots(false)}
           onChanged={async () => {

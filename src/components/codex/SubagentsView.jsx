@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { api } from '../../api.js'
+import { codexApi as api } from '../../api.js'
 import useEscToClose from '../../lib/useEscToClose.js'
 import Conversation from './Conversation.jsx'
 import ContextMeter from './ContextMeter.jsx'
 import { fmtTokens } from '../../lib/format.js'
+import { getSessionVersion } from '../../lib/liveSync.js'
 
 // Codex subagents are independent top-level rollouts linked to a parent via
 // session_meta. This view lists a parent's children (with context%, turns,
@@ -72,10 +73,12 @@ export default function SubagentsView({ root, parent, versions = {}, active = tr
   }, [root, parent?.id])
 
   // Codex subagents are independent rollouts, so SSE change events carry each
-  // child's own session id — sum the known children's version bumps to know
-  // when the list's turns/tokens/context% went stale. Newly-spawned children
-  // aren't in the sum yet; the slow fallback poll picks those up.
-  const listVersion = data?.children ? data.children.reduce((n, c) => n + (versions[c.id] || 0), 0) : 0
+  // Child changes also bump the parent version on the server event, so a newly
+  // spawned child invalidates this list before it is present in `data`.
+  const parentVersion = getSessionVersion(versions, 'codex', root, parent?.id)
+  const listVersion = parentVersion + (data?.children
+    ? data.children.reduce((n, c) => n + getSessionVersion(versions, 'codex', root, c.id), 0)
+    : 0)
   const lastListVersion = useRef(listVersion)
   const lastListFetchAt = useRef(0)
   useEffect(() => {
@@ -111,14 +114,14 @@ export default function SubagentsView({ root, parent, versions = {}, active = tr
     }
   }, [active, root, parent?.id, listVersion])
 
-  const txVersion = (tx?.c && versions[tx.c.id]) || 0
+  const txVersion = tx?.c ? getSessionVersion(versions, 'codex', root, tx.c.id) : 0
   const lastTxVersion = useRef(txVersion)
   const lastTxFetchAt = useRef(0)
 
   const open = (c) => {
     // the initial fetch already reflects the current version — sync the ref so
     // the effect doesn't immediately refetch what we just loaded
-    lastTxVersion.current = versions[c.id] || 0
+    lastTxVersion.current = getSessionVersion(versions, 'codex', root, c.id)
     setTx({ c, loading: true })
     api
       .session(root, c.id)
