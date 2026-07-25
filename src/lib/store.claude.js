@@ -42,7 +42,42 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
     })
   }, [])
 
+  // Streaming deltas can arrive dozens of times per second; committing each one
+  // to React state re-renders (and re-parses markdown for) the in-flight message
+  // on every token. Buffer them and flush at most every FLUSH_MS.
+  const FLUSH_MS = 80
+  const deltaBuf = useRef(new Map()) // key -> { text, thinking }
+  const deltaTimer = useRef(new Map()) // key -> timeout id
+  const flushDeltas = useCallback((key) => {
+    const t = deltaTimer.current.get(key)
+    if (t) {
+      clearTimeout(t)
+      deltaTimer.current.delete(key)
+    }
+    const buf = deltaBuf.current.get(key)
+    deltaBuf.current.delete(key)
+    if (!buf) return
+    patchAsst(key, (a) => ({ ...a, text: a.text + buf.text, thinking: (a.thinking || '') + buf.thinking }))
+  }, [patchAsst])
+  const bufferDelta = useCallback((key, field, text) => {
+    const buf = deltaBuf.current.get(key) || { text: '', thinking: '' }
+    buf[field] += text
+    deltaBuf.current.set(key, buf)
+    if (!deltaTimer.current.has(key)) {
+      deltaTimer.current.set(
+        key,
+        setTimeout(() => {
+          deltaTimer.current.delete(key)
+          flushDeltas(key)
+        }, FLUSH_MS)
+      )
+    }
+  }, [flushDeltas])
+
   const handle = useCallback((key, entry, m) => {
+    // any non-delta event must see the fully-applied text (e.g. a tool_use ends
+    // the current assistant item) — flush pending buffered deltas first.
+    if (m.type !== 'delta' && m.type !== 'thinking') flushDeltas(key)
     switch (m.type) {
       case 'ready':
         patch(key, (sl) => ({ ...sl, ready: true, error: null, account: m.account || null }))
@@ -60,13 +95,13 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
         })
         break
       case 'delta':
-        patchAsst(key, (a) => ({ ...a, text: a.text + m.text }))
+        bufferDelta(key, 'text', m.text)
         break
       case 'text':
         patchAsst(key, (a) => ({ ...a, text: a.text || m.text }))
         break
       case 'thinking':
-        patchAsst(key, (a) => ({ ...a, thinking: (a.thinking || '') + m.text }))
+        bufferDelta(key, 'thinking', m.text)
         break
       case 'tool_use':
         patch(key, (sl) => ({ ...sl, items: [...sl.items, { role: 'tool', id: m.id, name: m.name, input: m.input }], asst: null }))
@@ -100,7 +135,7 @@ export default function useLiveChatStore({ onTurnLogged } = {}) {
         patch(key, (sl) => ({ ...sl, error: m.error, streaming: false }))
         break
     }
-  }, [patch, patchAsst])
+  }, [patch, patchAsst, bufferDelta, flushDeltas])
 
   const connect = useCallback((key, entry, params) => {
     let meta = reconnects.current.get(key)

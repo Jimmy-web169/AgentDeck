@@ -773,12 +773,12 @@ export default function App({ active: appActive = true, provider, onProvider, pr
                 termDraft ? (
                   <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
                 ) : sessionData ? (
-                  <Conversation data={sessionData} onOpenSession={openSessionById} />
+                  <Conversation key={active?.id} data={sessionData} onOpenSession={openSessionById} />
                 ) : (
                   <Empty active={active} />
                 )
               ) : convData ? (
-                <Conversation data={convData} live={viewSlice ? { items: viewSlice.items } : null} onOpenSession={openSessionById} />
+                <Conversation key={viewKey || active?.id} data={convData} live={viewSlice ? { items: viewSlice.items } : null} onOpenSession={openSessionById} />
               ) : (
                 <Empty active={active} />
               )}

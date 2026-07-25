@@ -4,7 +4,22 @@ import fs from 'node:fs'
  * Parse a Claude Code session .jsonl into raw records.
  * Each line is one JSON event; tolerate malformed/truncated trailing lines.
  */
+// Guard against a pathologically large transcript exhausting memory (we read
+// the whole file at once). 128 MB is far beyond any real session — same
+// protection the codex parser has.
+const MAX_TRANSCRIPT_BYTES = 128 * 1024 * 1024
+
 export function readRecords(file) {
+  try {
+    const { size } = fs.statSync(file)
+    if (size > MAX_TRANSCRIPT_BYTES) {
+      const e = new Error(`transcript too large to parse (${Math.round(size / 1e6)} MB)`)
+      e.status = 413
+      throw e
+    }
+  } catch (e) {
+    if (e.status) throw e // surface our own size error; ignore stat races
+  }
   const text = fs.readFileSync(file, 'utf8')
   const out = []
   for (const line of text.split('\n')) {
