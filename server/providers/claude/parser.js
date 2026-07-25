@@ -149,7 +149,7 @@ export function buildTimeline(records) {
       })
     }
     // ignored for the main timeline (still available in raw view):
-    // ai-title, mode, permission-mode, last-prompt, file-history-snapshot, queue-operation
+    // ai-title, custom-title, mode, permission-mode, last-prompt, file-history-snapshot, queue-operation
   }
   return events
 }
@@ -232,7 +232,8 @@ function systemEvent(rec) {
 // ---- session summary (list view) -------------------------------------------
 
 export function summarize(records, id) {
-  let title = null
+  let customTitle = null
+  let aiTitle = null
   let firstPrompt = null
   let firstTs = null
   let lastTs = null
@@ -251,8 +252,10 @@ export function summarize(records, id) {
     }
     if (rec.isSidechain) hasSidechain = true
 
-    if (rec.type === 'ai-title' && rec.aiTitle) {
-      title = rec.aiTitle
+    if (rec.type === 'custom-title' && rec.customTitle) {
+      customTitle = rec.customTitle
+    } else if (rec.type === 'ai-title' && rec.aiTitle) {
+      aiTitle = rec.aiTitle
     } else if (rec.type === 'assistant') {
       assistantTurns++
       if (rec.message?.model) models.add(rec.message.model)
@@ -278,7 +281,7 @@ export function summarize(records, id) {
 
   return {
     id,
-    title: title || firstPrompt || '(untitled session)',
+    title: customTitle || aiTitle || firstPrompt || '(untitled session)',
     firstPrompt: firstPrompt || '',
     firstTs,
     lastTs,
