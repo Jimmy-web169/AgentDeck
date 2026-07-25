@@ -15,6 +15,7 @@ import {
 } from './paths.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
 import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../shared/parseCache.js'
+import { withOversizeFallback } from '../../shared/transcriptGuard.js'
 
 // All transcript reads below go through the fingerprint cache: a stat per
 // request revalidates, so results are exactly as fresh as parsing every time.
@@ -25,6 +26,11 @@ import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../share
 const sessionRecords = (file, fp) => cachedRecords(file, readRecords, fp)
 const sessionSummary = (file, id, fp) => cachedDerived(file, 'summary', () => summarize(sessionRecords(file, fp), id), fp)
 const sessionTimeline = (file, fp) => cachedDerived(file, 'timeline', () => buildTimeline(sessionRecords(file, fp)), fp)
+// One over-the-cap transcript must not take a whole list/stats endpoint down
+// with it: degrade THAT entry to a summary-shaped stub (summarize of zero
+// records keeps the exact shape) so every other session stays visible. Opening
+// the oversized session itself still 413s via the single-session handlers.
+const oversizeStub = (id, e) => ({ ...summarize([], id), title: `(transcript too large — ${Math.round((e.bytes || 0) / 1e6)} MB)`, oversized: true })
 import { discoverRuns, discoverPlainAgents } from './runs.js'
 import { inventory, readResource, writeResource, deleteResource } from './resources.js'
 import { safeTrash } from '../../shared/trash.js'
@@ -127,7 +133,10 @@ function getSessions(q) {
       try {
         fp = fingerprintOf(f.file)
       } catch {}
-      const s = { ...sessionSummary(f.file, f.id, fp || undefined) }
+      const s = withOversizeFallback(
+        () => ({ ...sessionSummary(f.file, f.id, fp || undefined) }),
+        (e) => oversizeStub(f.id, e)
+      )
       s.mtime = fp ? fp.mtimeMs : 0
       s.hasSubagents = s.hasSidechain || sessionHasSubagents(root.dir, slug, f.id)
       parts.push(`${f.id}:${fp ? fp.key : '?'}:${s.hasSubagents ? 1 : 0}`)
@@ -265,7 +274,10 @@ function getStats(q) {
       try {
         fp = fingerprintOf(f.file)
       } catch {}
-      const s = sessionSummary(f.file, f.id, fp || undefined)
+      const s = withOversizeFallback(
+        () => sessionSummary(f.file, f.id, fp || undefined),
+        (e) => oversizeStub(f.id, e) // counts as a session, contributes zeros
+      )
       const mtime = fp ? fp.mtimeMs : 0
       if (mtime > proj.lastActivity) {
         proj.lastActivity = mtime

@@ -194,6 +194,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     stickBottom.current = true
     // if this session has a live chat, the store owns its transcript — don't refetch
     if (isLiveAuthoritative(liveSessionsRef.current[liveKeyOf({ root, slug: openSlug, id: s.id })])) return
+    if (s.oversized) return // fetch would only 413 — Empty explains via active.oversized
     api.session(root, openSlug, s.id).then((d) => setSessionData(d)).catch((e) => setError(e.message))
   }
 
@@ -432,7 +433,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     setActive({ id: e.id, title: e.title })
     setSessionData(null)
     stickBottom.current = true
-    api.session(e.root, e.slug, e.id).then(setSessionData).catch(() => {})
+    api.session(e.root, e.slug, e.id).then(setSessionData).catch((err) => setError(err.message))
   }, [loadSessions])
 
   // Session → Stats: jump to this session's token stats (mirror of Stats' "Open
@@ -455,7 +456,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
       setActive({ id: e.id, title: e.title })
       setSessionData(null)
       stickBottom.current = true
-      api.session(e.root, e.slug, e.id).then(setSessionData).catch(() => {})
+      api.session(e.root, e.slug, e.id).then(setSessionData).catch((err) => setError(err.message))
     }
   }, [root, loadSessions])
 
@@ -932,6 +933,17 @@ export default function App({ active: appActive = true, provider, onProvider, pr
 }
 
 function Empty({ active }) {
+  if (active?.oversized) {
+    return (
+      <div className="h-full flex items-center justify-center text-center text-zinc-600 px-6">
+        <div>
+          <div className="flex justify-center mb-3 text-amber-400/80 text-3xl">⚠</div>
+          <div className="text-sm text-zinc-400">{active.title}</div>
+          <div className="text-[12px] mt-1 text-zinc-600">This transcript exceeds the parse limit, so it can't be displayed. Other sessions are unaffected.</div>
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="h-full flex items-center justify-center text-center text-zinc-600">
       <div>

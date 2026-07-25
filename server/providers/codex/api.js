@@ -21,6 +21,7 @@ import {
 import { safeTrash } from '../../shared/trash.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
 import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../shared/parseCache.js'
+import { withOversizeFallback } from '../../shared/transcriptGuard.js'
 
 // Rollout reads go through the shared fingerprint cache (same discipline as
 // the claude provider): one stat per file per request — taken BEFORE any
@@ -30,6 +31,11 @@ import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../share
 const sessionRecords = (file, fp) => cachedRecords(file, readRecords, fp)
 const sessionSummary = (file, id, fp) => cachedDerived(file, 'summary', () => summarize(sessionRecords(file, fp), id), fp)
 const sessionTimeline = (file, fp) => cachedDerived(file, 'timeline', () => buildTimeline(sessionRecords(file, fp)), fp)
+// One over-the-cap rollout must not take a whole list/stats endpoint down with
+// it: degrade THAT entry to a summary-shaped stub (summarize of zero records
+// keeps the exact shape) so every other session stays visible. Opening the
+// oversized session itself still 413s via the single-session handlers.
+const oversizeStub = (id, e) => ({ ...summarize([], id), title: `(transcript too large — ${Math.round((e.bytes || 0) / 1e6)} MB)`, oversized: true })
 
 const sha1 = (s) => crypto.createHash('sha1').update(s).digest('hex')
 import { inventory, createResource, deleteResource } from './resources.js'
@@ -94,7 +100,10 @@ function getSessions(q) {
       try {
         fp = fingerprintOf(f.file)
       } catch {}
-      const s = { ...sessionSummary(f.file, f.id, fp || undefined) }
+      const s = withOversizeFallback(
+        () => ({ ...sessionSummary(f.file, f.id, fp || undefined) }),
+        (e) => oversizeStub(f.id, e)
+      )
       s.mtime = f.mtimeMs
       s.isSubagent = f.isSubagent
       s.parentId = f.parentId
@@ -246,7 +255,10 @@ function getStats(q) {
   for (const proj of listProjects(root.dir)) {
     const acc = { slug: proj.slug, cwd: proj.cwd, sessions: proj.sessionCount, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: proj.lastActivity }
     for (const f of sessionFiles(root.dir, proj.slug)) {
-      const s = sessionSummary(f.file, f.id)
+      const s = withOversizeFallback(
+        () => sessionSummary(f.file, f.id),
+        (e) => oversizeStub(f.id, e) // counts as a session, contributes zeros
+      )
       sessions++
       userTurns += s.userTurns
       toolCalls += s.toolCalls
