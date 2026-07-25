@@ -319,6 +319,7 @@ export default function Sidebar({
                               {selectMode && <span className={`shrink-0 ${checked ? 'text-red-300' : 'text-zinc-600'}`}>{checked ? '☑' : '☐'}</span>}
                               {live && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />}
                               {s.isSubagent && <span className="shrink-0 text-violet-400" title={`subagent${s.agentRole ? ` · ${s.agentRole}` : ''}`}>⤷</span>}
+                              {s.oversized && <span className="shrink-0 text-amber-400" title="Transcript exceeds the parse limit — it can't be opened, but other sessions are unaffected">⚠</span>}
                               <span className="truncate">{s.title}</span>
                             </div>
                             <div className="flex items-center gap-2 text-[10.5px] text-zinc-600">
