@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readRecords } from './parser.js'
+import { withOversizeFallback } from '../../shared/transcriptGuard.js'
 import { projectsDir, assertInside, listProjectSlugs } from './paths.js'
 
 // Parse `export const meta = { ... }` from a workflow script. meta is a pure
@@ -70,7 +71,13 @@ function summarizeAgentFile(file, id) {
   try {
     mtime = fs.statSync(file).mtimeMs
   } catch {}
-  const recs = readRecords(file)
+  // an over-the-cap agent transcript degrades to an empty-but-listed agent
+  // instead of 413ing the whole run/subagent listing
+  let oversized = false
+  const recs = withOversizeFallback(() => readRecords(file), () => {
+    oversized = true
+    return []
+  })
   const tokens = { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 }
   let model = null
   let firstTs = null
@@ -93,7 +100,7 @@ function summarizeAgentFile(file, id) {
       }
     }
   }
-  return { id, label: firstLabel(recs), model, tokens, firstTs, lastTs, mtime, activity: lastActivity(recs), endTurn }
+  return { id, label: oversized ? '(transcript too large)' : firstLabel(recs), model, tokens, firstTs, lastTs, mtime, activity: lastActivity(recs), endTurn, oversized }
 }
 
 // Best-effort phase inference from an agent's first-line label. phase↔agent is
@@ -168,7 +175,7 @@ export function discoverPlainAgents(rootDir, slug, sessionId) {
 
 function aggregateRun(runDir, scriptMeta) {
   const journal = fs.existsSync(path.join(runDir, 'journal.jsonl'))
-    ? readRecords(path.join(runDir, 'journal.jsonl'))
+    ? withOversizeFallback(() => readRecords(path.join(runDir, 'journal.jsonl')), () => [])
     : []
   const started = new Set()
   const results = new Map()
