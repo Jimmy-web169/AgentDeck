@@ -14,8 +14,9 @@ import {
   expandHome,
 } from './paths.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
+import { forkLines } from './fork.js'
 import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../shared/parseCache.js'
-import { withOversizeFallback } from '../../shared/transcriptGuard.js'
+import { withOversizeFallback, guardTranscriptSize } from '../../shared/transcriptGuard.js'
 
 // All transcript reads below go through the fingerprint cache: a stat per
 // request revalidates, so results are exactly as fresh as parsing every time.
@@ -151,6 +152,37 @@ function findSessionFile(rootDir, slug, id) {
   const found = sessionFiles(rootDir, slug).find((f) => f.id === id)
   if (!found) throw httpErr(404, 'session not found')
   return found.file
+}
+
+// Fork a session: copy its transcript into a NEW session id under the same
+// project, keeping everything strictly BEFORE the record whose uuid is `cut`
+// (a user prompt — resuming the fork replays the shared history and diverges
+// from there). No `cut` = full copy (branch from the end). The original file
+// is never touched; kept records get their sessionId rewritten so
+// `claude --resume <newId>` (CLI and Agent SDK alike) picks the fork up.
+function postFork(_q, body) {
+  const root = resolveRoot(body?.root)
+  const slug = body?.slug
+  const id = body?.id
+  if (!slug || !id) throw httpErr(400, 'missing slug/id')
+  const file = findSessionFile(root.dir, slug, id)
+  guardTranscriptSize(file, 'session')
+  const fp = fingerprintOf(file)
+  const newId = crypto.randomUUID()
+  let kept
+  try {
+    kept = forkLines(fs.readFileSync(file, 'utf8').split('\n'), body?.cut || null, newId)
+  } catch (e) {
+    throw httpErr(e.code === 'CUT_NOT_FOUND' ? 404 : 400, e.message)
+  }
+  // a trailing custom-title record (same shape /rename writes) labels the fork
+  // AND stamps a fresh lastTs, so it sorts as recent in the session list
+  const title = sessionSummary(file, id, fp).title
+  kept.push(JSON.stringify({ type: 'custom-title', customTitle: `${title} (fork)`, sessionId: newId, timestamp: new Date().toISOString() }))
+  const dst = path.join(root.dir, 'projects', slug, `${newId}.jsonl`)
+  assertInside(root.dir, dst)
+  fs.writeFileSync(dst, kept.join('\n') + '\n')
+  return { root: root.id, slug, id: newId, forkedFrom: id }
 }
 
 function getSession(q) {
@@ -688,6 +720,7 @@ const ROUTES = {
   'GET /api/sessions': getSessions,
   'GET /api/session': getSession,
   'DELETE /api/session': deleteSession,
+  'POST /api/fork': postFork,
   'GET /api/raw': getRaw,
   'GET /api/subagents': getSubagents,
   'GET /api/subagent': getSubagent,

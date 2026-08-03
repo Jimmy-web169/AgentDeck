@@ -20,8 +20,9 @@ import {
 } from './paths.js'
 import { safeTrash } from '../../shared/trash.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
+import { forkLines } from './fork.js'
 import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../shared/parseCache.js'
-import { withOversizeFallback } from '../../shared/transcriptGuard.js'
+import { withOversizeFallback, guardTranscriptSize } from '../../shared/transcriptGuard.js'
 
 // Rollout reads go through the shared fingerprint cache (same discipline as
 // the claude provider): one stat per file per request — taken BEFORE any
@@ -150,6 +151,42 @@ function getSession(q) {
     timeline: sessionTimeline(entry.file, fp),
     _etag: etagOf(fp, childSig),
   }
+}
+
+// --- fork --------------------------------------------------------------------
+// Copy a rollout into a NEW session id, keeping everything strictly before the
+// N-th real user prompt (1-based `cut`; see fork.js for the counting rules).
+// No `cut` = full copy (branch from the end). The new file gets today's date
+// dir, a fresh rollout filename and a rewritten session_meta id, so
+// `codex resume <newId>` picks the fork up. The original is never touched.
+function postFork(_q, body) {
+  const root = resolveRoot(body?.root)
+  const id = body?.id
+  const cut = Number.isInteger(body?.cut) && body.cut > 0 ? body.cut : null
+  if (!id) throw httpErr(400, 'missing id')
+  const entry = findFile(root.dir, id)
+  guardTranscriptSize(entry.file, 'rollout')
+  const fp = fingerprintOf(entry.file)
+  const newId = crypto.randomUUID()
+  let out
+  try {
+    out = forkLines(fs.readFileSync(entry.file, 'utf8').split('\n'), cut, newId)
+  } catch (e) {
+    throw httpErr(e.code === 'CUT_NOT_FOUND' ? 404 : 400, e.message)
+  }
+  // a trailing thread_name_updated event (same shape codex writes) labels the
+  // fork AND stamps a fresh lastTs, so it sorts as recent in the session list
+  const title = sessionSummary(entry.file, id, fp).title
+  out.push(JSON.stringify({ timestamp: new Date().toISOString(), type: 'event_msg', payload: { type: 'thread_name_updated', thread_name: `${title} (fork)` } }))
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  const dir = path.join(root.dir, 'sessions', String(now.getFullYear()), pad(now.getMonth() + 1), pad(now.getDate()))
+  fs.mkdirSync(dir, { recursive: true })
+  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
+  const dst = path.join(dir, `rollout-${stamp}-${newId}.jsonl`)
+  fs.writeFileSync(dst, out.join('\n') + '\n')
+  invalidateIndex(root.dir)
+  return { root: root.id, id: newId, slug: entry.cwd || null, forkedFrom: id }
 }
 
 // Move a session to the OS trash (recoverable): its rollout .jsonl plus every
@@ -502,6 +539,7 @@ const ROUTES = {
   'GET /api/sessions': getSessions,
   'GET /api/session': getSession,
   'DELETE /api/session': deleteSession,
+  'POST /api/fork': postFork,
   'GET /api/subagents': getSubagents,
   'GET /api/raw': getRaw,
   'GET /api/stats': getStats,

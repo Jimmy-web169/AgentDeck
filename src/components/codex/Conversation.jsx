@@ -1,24 +1,40 @@
-import { memo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import Markdown from '../shared/Markdown.jsx'
 import ToolCall from './ToolCall.jsx'
 import Thinking from '../shared/Thinking.jsx'
 import { BotIcon } from '../shared/icons.jsx'
+import CopyButton from '../shared/CopyButton.jsx'
+import InfoDot from '../shared/InfoDot.jsx'
 import { fmtTime, fmtTokens, totalTokens } from '../../lib/format.js'
 import ContextMeter from './ContextMeter.jsx'
 
-function UserMsg({ ev }) {
+const assistantText = (ev) => ev.parts.filter((p) => p.kind === 'text').map((p) => p.text).join('\n\n')
+
+function UserMsg({ ev, onEdit }) {
   return (
-    <div className="flex justify-end">
+    <div className="group flex flex-col items-end">
       <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-ink-500 px-4 py-2.5">
         <div className="md whitespace-pre-wrap break-words text-[15px] leading-7">{ev.text}</div>
+      </div>
+      <div className="mt-0.5 flex items-center gap-3 pr-1">
+        {onEdit && (
+          <button
+            onClick={() => onEdit(ev)}
+            title="Edit this prompt and resend on a fork (the original session is untouched)"
+            className="text-[11px] text-zinc-500 hover:text-sky-300 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+          >
+            ✎ edit & resend
+          </button>
+        )}
+        <CopyButton text={ev.text} title="Copy this prompt" />
       </div>
     </div>
   )
 }
 
-function AssistantMsg({ ev }) {
+function AssistantMsg({ ev, onFork }) {
   return (
-    <div className="flex gap-3">
+    <div className="group flex gap-3">
       <div className="mt-1 shrink-0 w-7 h-7 rounded-full bg-ink-600 border border-zinc-600 flex items-center justify-center text-zinc-300">
         <BotIcon className="w-4 h-4" />
       </div>
@@ -35,6 +51,16 @@ function AssistantMsg({ ev }) {
         <div className="mt-1 flex items-center gap-3 text-[11px] text-zinc-600">
           {ev.model && <span className="font-mono">{ev.model}</span>}
           {ev.ts && <span>{fmtTime(ev.ts)}</span>}
+          {ev.parts.some((p) => p.kind === 'text') && <CopyButton text={() => assistantText(ev)} title="Copy this reply" />}
+          {onFork && (
+            <button
+              onClick={() => onFork(ev)}
+              title="Fork a new session from this reply (keeps the history up to here)"
+              className="text-[11px] text-zinc-500 hover:text-sky-300 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+            >
+              ⑂ fork from here
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -99,9 +125,25 @@ function LiveItem({ it }) {
 // render only the tail by default so returning to a conversation stays instant.
 const INITIAL_TAIL = 40
 
-function Conversation({ data, live, onOpenSession }) {
+function Conversation({ data, live, onOpenSession, onEdit, onFork }) {
   const { summary, timeline } = data
   const children = data.children || []
+  // fork cuts at turn boundaries, so only the LAST assistant bubble of each
+  // turn gets the button — a mid-turn (tool-call) bubble would fork identically
+  // and just muddle where the cut lands
+  const turnEnds = useMemo(() => {
+    const s = new Set()
+    let last = -1
+    timeline.forEach((ev, i) => {
+      if (ev.kind === 'assistant') last = i
+      if (ev.kind === 'user') {
+        if (last >= 0) s.add(last)
+        last = -1
+      }
+    })
+    if (last >= 0) s.add(last)
+    return s
+  }, [timeline])
   const [startIdx, setStartIdx] = useState(() => Math.max(0, timeline.length - INITIAL_TAIL))
   const visible = startIdx > 0 ? timeline.slice(startIdx) : timeline
   return (
@@ -116,7 +158,21 @@ function Conversation({ data, live, onOpenSession }) {
             <span key={m} className="font-mono">{m}</span>
           ))}
           {totalTokens(summary.tokens) > 0 && (
-            <span>Σ ↑{fmtTokens(summary.tokens.input)} ↓{fmtTokens(summary.tokens.output)} ⚡{fmtTokens(summary.tokens.cacheRead)} · {fmtTokens(totalTokens(summary.tokens))} total</span>
+            <span className="inline-flex items-center gap-1.5">
+              Σ ↑{fmtTokens(summary.tokens.input)} ↓{fmtTokens(summary.tokens.output)} ⚡{fmtTokens(summary.tokens.cacheRead)} · {fmtTokens(totalTokens(summary.tokens))} total
+              <InfoDot
+                align="left"
+                text={
+                  <>
+                    Session token totals:<br />
+                    <b>↑</b> input — prompts + context sent to the model<br />
+                    <b>↓</b> output — text the model generated<br />
+                    <b>⚡</b> cache read — context re-served from the prompt cache instead of being reprocessed (much cheaper than fresh input)<br />
+                    <b>total</b> — all of the above combined
+                  </>
+                }
+              />
+            </span>
           )}
           <ContextMeter summary={summary} />
         </div>
@@ -150,8 +206,8 @@ function Conversation({ data, live, onOpenSession }) {
         )}
         {visible.map((ev, i) => {
           const k = startIdx + i
-          if (ev.kind === 'user') return <UserMsg key={k} ev={ev} />
-          if (ev.kind === 'assistant') return <AssistantMsg key={k} ev={ev} />
+          if (ev.kind === 'user') return <UserMsg key={k} ev={ev} onEdit={onEdit} />
+          if (ev.kind === 'assistant') return <AssistantMsg key={k} ev={ev} onFork={turnEnds.has(k) ? onFork : undefined} />
           if (ev.kind === 'system') return <SystemMsg key={k} ev={ev} />
           return null
         })}

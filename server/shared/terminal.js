@@ -145,6 +145,18 @@ export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
 
   const cliArgs = resumeId ? config.resumeArgs(resumeId) : []
 
+  // Claude marks child processes with CLAUDE_CODE_CHILD_SESSION / CLAUDECODE and
+  // — when it sees them (own env OR `tmux show-environment -g`) — silently stops
+  // writing transcripts to disk, which kills AgentDeck's whole read-the-jsonl
+  // model. A stale CLAUDE_CONFIG_DIR redirects them to another root entirely.
+  // Scrub every such marker so a terminal spawned from a claude-launched dev
+  // server (or a polluted tmux server) still behaves like a first-class session.
+  const env = { ...process.env }
+  for (const k of ['CLAUDE_CODE_CHILD_SESSION', 'CLAUDECODE', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_PID', 'CLAUDE_CONFIG_DIR', 'CODEX_HOME']) {
+    delete env[k]
+  }
+  env[config.envKey] = configDir
+
   // Inside tmux when available (persistent, attachable); otherwise run the CLI
   // directly (ttyd's child). `tmux new-session -A` attaches an existing session
   // or creates one; `-e` pins the tracked home's login env for first creation.
@@ -152,6 +164,15 @@ export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
   const tmuxName = tmux ? tmuxSessionName(key) : null
   let command
   if (tmux) {
+    // claude consults the tmux SERVER's global env (`show-environment -g`) for
+    // the child-session marker — pane env can't override that, so scrub the
+    // global itself. A leftover global marker is always pollution (a real child
+    // session carries it in its own process env), so unsetting is safe.
+    try {
+      execFileSync(tmux, ['set-environment', '-gu', 'CLAUDE_CODE_CHILD_SESSION'], { stdio: 'ignore', timeout: 2000 })
+    } catch {
+      // no tmux server yet (first session), or var already absent — both fine
+    }
     // stash enough metadata on the tmux session itself (base64 JSON in a session
     // env var) that listLiveTmux can rebuild the Live-now entry — including after
     // a server restart, when the in-memory `sessions` map is gone.
@@ -185,7 +206,7 @@ export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
     : [ttyd, '-p', String(port), '-i', '127.0.0.1', '-W', ...(config.checkOrigin ? ['-O'] : []), '-t', `titleFixed=${config.title}`, ...command]
   const proc = spawn(front[0], front.slice(1), {
     cwd: fs.existsSync(cwd) ? cwd : undefined,
-    env: { ...process.env, [config.envKey]: configDir }, // pin the tracked home's login/config
+    env, // scrubbed above, with the tracked home's config dir pinned
     stdio: 'ignore',
   })
   const entry = { proc, port, url: `http://localhost:${port}`, meta: meta || {}, tmuxName }

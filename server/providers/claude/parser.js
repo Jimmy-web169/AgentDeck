@@ -23,7 +23,7 @@ export function readRecords(file) {
 
 // ---- helpers ----------------------------------------------------------------
 
-const STRIP_TAGS = /<(command-name|command-message|command-args|local-command-stdout|system-reminder)[\s\S]*?<\/\1>/g
+const STRIP_TAGS = /<(command-name|command-message|command-args|local-command-stdout|local-command-caveat|system-reminder)[\s\S]*?<\/\1>/g
 
 // Internal protocol/meta attachments — noise in a conversation view (Raw keeps them).
 const NOISE_ATTACHMENTS = new Set([
@@ -83,7 +83,7 @@ function isToolResultCarrier(rec) {
 function isMetaUser(rec) {
   const text = contentToText(rec.message?.content)
   const stripped = text.replace(STRIP_TAGS, '').trim()
-  return stripped.length === 0 && /<command-name>|<local-command-stdout>/.test(text)
+  return stripped.length === 0 && /<command-name>|<local-command-stdout>|<local-command-caveat>/.test(text)
 }
 
 // ---- timeline ---------------------------------------------------------------

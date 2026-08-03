@@ -89,6 +89,13 @@ export function createApi(provider) {
   subagent: (root, slug, session, run, agent) => get('subagent', run ? { root, slug, session, run, agent } : { root, slug, session, agent }),
   // claude: (root,slug) · codex: (root)
   memory: (root, slug) => get('memory', slug !== undefined ? { root, slug } : { root }),
+  // fork a session into a new id, keeping history up to (excluding) a cut point —
+  // claude: (root, slug, id, cutUuid?) · codex: (root, id, cutUserOrdinal?);
+  // omit the cut to branch from the end (full copy)
+  fork: (root, a, b, c) =>
+    provider === 'codex'
+      ? request('POST', 'fork', { body: { root, id: a, cut: b ?? null } })
+      : request('POST', 'fork', { body: { root, slug: a, id: b, cut: c ?? null } }),
   // move a session to the OS trash — claude: (root,slug,id) incl. sub-agent
   // sidecar · codex: (root,id) incl. child subagent rollouts
   deleteSession: (root, a, b) =>

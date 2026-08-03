@@ -19,9 +19,17 @@ export const MODES = [
 // - `modes` is the permission/sandbox-mode list (default MODES).
 // - `contextMeter` is an optional rendered node (e.g. codex's ContextMeter) shown
 //   in the status row; default none. ChatComposer itself imports no provider code.
-export default function ChatComposer({ slice, onOpen, onClose, mode, onMode, onSend, onOpenTool, modes = MODES, contextMeter = null }) {
+export default function ChatComposer({ slice, onOpen, onClose, mode, onMode, onSend, onOpenTool, modes = MODES, contextMeter = null, prefill = null, onPrefillUsed }) {
   const [input, setInput] = useState('')
   const taRef = useRef(null)
+  // an "edit & resend" fork seeds the composer with the prompt being revised
+  useEffect(() => {
+    if (prefill) {
+      setInput(prefill)
+      onPrefillUsed?.()
+      taRef.current?.focus()
+    }
+  }, [prefill])
   const [taH, setTaH] = useState(() => Number(localStorage.getItem('cm_composerH')) || 0) // 0 = compact/auto
   useEffect(() => localStorage.setItem('cm_composerH', String(taH)), [taH])
   const ready = slice?.ready

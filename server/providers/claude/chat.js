@@ -147,13 +147,17 @@ export function makeChatWss() {
       let sawStreamText = false
       let turnSessionId = currentId // confirmed: resume appends to the same id; track in case a future fork changes it
       send({ type: 'turn-start' })
+      // scrub inherited claude child-session markers: with them present, the
+      // spawned claude stops persisting transcripts (see shared/terminal.js)
+      const env = { ...process.env, CLAUDE_CONFIG_DIR: root.dir } // env REPLACES — must spread
+      for (const k of ['CLAUDE_CODE_CHILD_SESSION', 'CLAUDECODE', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_PID']) delete env[k]
       try {
         for await (const m of query({
           prompt: message,
           options: {
             resume: currentId || undefined, // undefined = start a new session
             cwd,
-            env: { ...process.env, CLAUDE_CONFIG_DIR: root.dir }, // env REPLACES — must spread
+            env,
             permissionMode: PERM_MODES[mode] || 'plan',
             pathToClaudeCodeExecutable: claude,
             includePartialMessages: true,

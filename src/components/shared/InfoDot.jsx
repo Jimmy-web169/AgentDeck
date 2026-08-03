@@ -14,10 +14,15 @@ export default function InfoDot({ text, align = 'right', className = '' }) {
   const open = () => {
     const r = btnRef.current?.getBoundingClientRect()
     if (!r) return
+    // clamp to the viewport: the bubble is up to BUBBLE_W wide, so pull it back
+    // from whichever edge it would spill over (narrow windows, dots near edges)
+    const BUBBLE_W = 256 // w-64
+    const MARGIN = 8
+    const maxOffset = Math.max(MARGIN, window.innerWidth - BUBBLE_W - MARGIN)
     setPos(
       align === 'left'
-        ? { top: r.bottom + 6, left: r.left }
-        : { top: r.bottom + 6, right: window.innerWidth - r.right }
+        ? { top: r.bottom + 6, left: Math.min(Math.max(MARGIN, r.left), maxOffset) }
+        : { top: r.bottom + 6, right: Math.min(Math.max(MARGIN, window.innerWidth - r.right), maxOffset) }
     )
   }
   const close = () => setPos(null)
@@ -42,7 +47,7 @@ export default function InfoDot({ text, align = 'right', className = '' }) {
       {pos && (
         <span
           style={pos}
-          className="fixed z-50 w-64 rounded-md border border-zinc-700 bg-ink-800 px-3 py-2 text-[11px] font-normal leading-relaxed text-zinc-300 shadow-xl normal-case tracking-normal"
+          className="fixed z-50 w-64 max-w-[calc(100vw-16px)] rounded-md border border-zinc-700 bg-ink-800 px-3 py-2 text-[11px] font-normal leading-relaxed text-zinc-300 shadow-xl normal-case tracking-normal whitespace-normal break-words"
         >
           {text}
         </span>

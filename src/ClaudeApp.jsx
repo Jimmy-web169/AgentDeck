@@ -95,8 +95,10 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const [engine, setEngine] = useState(() => localStorage.getItem('cm_engine') || 'sdk') // 'sdk' | 'terminal'; in-app toggle persists, .env is just the first-run default
   const [termDraft, setTermDraft] = useState(null) // terminal-mode new conversation target { slug? cwd? }
   const [terminals, setTerminals] = useState([]) // running ttyd terminals (terminal mode) — for the manager
+  const [prefill, setPrefill] = useState(null) // seed the composer after an "edit & resend" fork
 
   const rootRef = useRef(null)
+  const convDataRef = useRef(null) // rendered timeline, for edit/fork cut-point lookups
   const activeRef = useRef(null)
   const openSlugRef = useRef(null)
   const tabRef = useRef(tab)
@@ -395,6 +397,81 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     : draftKey
       ? viewSlice?.transcript
       : sessionData || viewSlice?.transcript
+  convDataRef.current = convData
+
+  // ---- fork / edit-resend -----------------------------------------------------
+  // Both actions branch a session server-side (POST /api/fork copies the .jsonl
+  // up to the cut point under a new id; the original is untouched), then open the
+  // fork like any other session. In sdk engine we auto-attach a live chat so the
+  // composer is ready (prefilled with the prompt being revised for edit).
+  const forkConversation = useCallback(async (cutUuid, prefillText) => {
+    const r = rootRef.current
+    const slug = openSlugRef.current
+    const cur = activeRef.current
+    if (!r || !slug || !cur) return
+    try {
+      const res = await api.fork(r, slug, cur.id, cutUuid)
+      loadSessions(r, slug)
+      setMultiMode(false)
+      setTab('conversation')
+      setDraftKey(null)
+      setTermDraft(null)
+      setSessionData(null)
+      stickBottom.current = true
+      const d = await api.session(r, slug, res.id)
+      setActive({ id: res.id, title: d.summary.title })
+      setSessionData(d)
+      if (engineRef.current !== 'terminal') {
+        live.open({ root: r, slug, id: res.id, title: d.summary.title }, d)
+        if (prefillText) setPrefill(prefillText)
+      }
+    } catch (e) {
+      setError(e.message)
+    }
+  }, [live, loadSessions])
+
+  // edit & resend is a composer flow — it always lands in the sdk engine so the
+  // revised prompt sits in an input box ready to send (a tmux pane can't be
+  // seeded with text). engineRef is bumped synchronously so forkConversation's
+  // post-await engine check doesn't race the state effect.
+  const ensureSdkEngine = useCallback(() => {
+    if (engineRef.current === 'sdk') return
+    localStorage.setItem('cm_engine', 'sdk')
+    setTermDraft(null)
+    setEngine('sdk')
+    engineRef.current = 'sdk'
+  }, [])
+
+  const editResend = useCallback((ev) => {
+    ensureSdkEngine()
+    const tl = convDataRef.current?.timeline || []
+    const i = tl.indexOf(ev)
+    // forking is only worth it when a real exchange precedes this prompt —
+    // leading meta records (slash-command envelopes etc.) don't count
+    const hasPrior = i > 0 && tl.slice(0, i).some((e) => e.kind === 'assistant')
+    if (!hasPrior) {
+      // editing the very first prompt — nothing to keep, so it's just a new
+      // conversation with the old prompt seeded for revision
+      const r = rootRef.current
+      const slug = openSlugRef.current
+      if (!r || !slug) return
+      setMultiMode(false)
+      setTab('conversation')
+      stickBottom.current = true
+      setDraftKey(live.openNew({ root: r, slug, title: 'New conversation' }))
+      setPrefill(ev.text)
+      return
+    }
+    forkConversation(ev.uuid, ev.text)
+  }, [forkConversation, live, ensureSdkEngine])
+
+  const forkFromReply = useCallback((ev) => {
+    const tl = convDataRef.current?.timeline || []
+    const i = tl.indexOf(ev)
+    if (i < 0) return
+    const next = tl.slice(i + 1).find((e) => e.kind === 'user' && e.uuid)
+    forkConversation(next ? next.uuid : null, null)
+  }, [forkConversation])
 
   const startNewConversation = useCallback((slug) => {
     const r = rootRef.current
@@ -846,7 +923,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
                 termDraft ? (
                   <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
                 ) : sessionData ? (
-                  <Conversation key={active?.id} data={sessionData} />
+                  <Conversation key={active?.id} data={sessionData} onEdit={editResend} onFork={forkFromReply} />
                 ) : (
                   <Empty active={active} />
                 )
@@ -855,6 +932,8 @@ export default function App({ active: appActive = true, provider, onProvider, pr
                   key={viewKey || active?.id}
                   data={convData}
                   live={viewSlice ? { items: viewSlice.items, onPerm: (r, bh, scope, answers) => live.respondPerm(viewKey, r, bh, scope, answers) } : null}
+                  onEdit={draftKey ? undefined : editResend}
+                  onFork={draftKey ? undefined : forkFromReply}
                 />
               ) : (
                 <Empty active={active} />
@@ -874,6 +953,8 @@ export default function App({ active: appActive = true, provider, onProvider, pr
                 onMode={setChatMode}
                 onSend={(t) => live.send(draftKey, t, chatMode)}
                 onOpenTool={(what) => api.open(viewSlice?.root || root, viewSlice?.slug || openSlug, viewSlice?.id || null, what, viewSlice?.cwd)}
+                prefill={prefill}
+                onPrefillUsed={() => setPrefill(null)}
               />
             ) : (
               active && (activeSlice?.transcript || sessionData) && (
@@ -885,6 +966,8 @@ export default function App({ active: appActive = true, provider, onProvider, pr
                   onMode={setChatMode}
                   onSend={(t) => live.send(activeKey, t, chatMode)}
                   onOpenTool={(what) => api.open(root, openSlug, active.id, what)}
+                  prefill={prefill}
+                  onPrefillUsed={() => setPrefill(null)}
                 />
               )
             )}
