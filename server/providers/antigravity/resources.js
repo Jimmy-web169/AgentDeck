@@ -65,7 +65,9 @@ function skillsIn(dir, source) {
       for (let j = i + 1; j < lines.length && /^\s+\S/.test(lines[j]); j++) cont.push(lines[j].trim())
       return cont.join(' ')
     }
-    out.push({ name: field('name') || name, description: field('description').slice(0, 200), dir: path.join(dir, name), source })
+    // the body after the frontmatter, capped — the right pane previews it like Codex's skills
+    const body = fm ? head.slice(fm[0].length).trim() : head
+    out.push({ name: field('name') || name, description: field('description').slice(0, 200), dir: path.join(dir, name), source, content: body.slice(0, 8000) })
   }
   return out
 }
