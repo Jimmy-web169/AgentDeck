@@ -226,6 +226,14 @@ export default function App() {
     [openTarget, setScope]
   )
 
+  // a Home tab switches page in place
+  const updateHome = useCallback((patch) => {
+    const cur = stateRef.current
+    const tab = cur.tabs.find((t) => t.key === cur.activeKey)
+    if (!tab || !isHome(tab.target)) return
+    commit({ ...cur, tabs: cur.tabs.map((t) => (t.key === tab.key ? { ...t, target: { ...HOME, ...(t.target || {}), ...patch } } : t)) })
+  }, [])
+
   // scope changes (rail / folder chips): on a provider tab they navigate the
   // tab to that folder; on Home they just re-scope the Home pages
   const onScope = useCallback(
@@ -522,7 +530,7 @@ export default function App() {
             )
           })}
           <div className="absolute inset-0" style={{ display: showHome ? 'block' : 'none' }}>
-            <HomeView providers={PROVIDER_LIST} visible={showHome} target={showHome ? activeTarget : null} scope={scope} index={index} live={live} termKeys={termKeys} onOpen={openSession} onSearch={() => setSearchOpen(true)} />
+            <HomeView providers={PROVIDER_LIST} visible={showHome} target={showHome ? activeTarget : null} scope={scope} index={index} live={live} termKeys={termKeys} onOpen={openSession} onNavigate={updateHome} onOpenHome={openHome} onSearch={() => setSearchOpen(true)} />
           </div>
         </div>
       </div>

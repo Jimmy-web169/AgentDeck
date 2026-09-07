@@ -81,6 +81,26 @@ export function CheckSquareIcon({ className = 'w-4 h-4' }) {
   )
 }
 
+// stacked sheets — a workspace (group of projects)
+export function LayersIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="m12 4 8 4-8 4-8-4 8-4z" />
+      <path d="m4 12 8 4 8-4" />
+      <path d="m4 16 8 4 8-4" />
+    </svg>
+  )
+}
+
+export function PencilIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="M4 20h4l10-10-4-4L4 16v4z" />
+      <path d="m13 7 4 4" />
+    </svg>
+  )
+}
+
 export function TerminalIcon({ className = 'w-4 h-4' }) {
   return (
     <svg viewBox="0 0 24 24" className={className} {...base}>

@@ -37,8 +37,10 @@ Per provider, in one UI:
   Stats / History / Plugins / Resources, and tracked-folder management.
 - **Memory per project** — a Memory tab next to Config for both providers
   (Claude's `memory/*.md`, Codex's per-thread memories filtered to the project).
-- **Pins** — pin projects or sessions you're working on; they lead the sidebar,
-  the quick switcher and Home.
+- **Pins and Workspaces** — pin projects or sessions you're working on (they
+  lead the sidebar, the quick switcher and Home), and group projects from any
+  provider or folder under a named workspace; the sidebar suggests one when the
+  same folder shows up under several providers.
 - **Live updates** — the UI lights up the moment an agent writes to disk
   (file-watching + Server-Sent Events).
 - **Tabs** — a Chrome-style tab strip across providers and tracked folders:

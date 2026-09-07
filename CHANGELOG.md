@@ -27,10 +27,16 @@ its real terminal.
   one add form) opens from the "+" next to the folder chips.
 - **One sidebar for everything.** A provider rail (one square per provider,
   so more providers just add rows) plus one sidebar the shell owns: the
-  provider's folders as chips, the Home pages, and that folder's projects and
-  sessions from the cross-provider index — identical whether the tab shows
-  Home or a session. Clicking there navigates the current tab; Ctrl/middle-
-  click opens a new one.
+  provider's folders as chips, then Workspaces, Pinned and the folder's
+  projects/sessions from the cross-provider index — identical whether the tab
+  shows Home or a session. Clicking there navigates the current tab;
+  Ctrl/middle-click opens a new one. The Home page switch (Activity / Stats /
+  History / Plugins / Resources) sits in Home's own header.
+- **Workspaces**: name a group of projects from any provider or folder (the
+  same repo under Claude Code and Codex, say) and browse their sessions in
+  place; the sidebar suggests groups for folders it sees under several
+  providers. Pinned projects expand in place too, and Pinned / Workspaces
+  show every provider at once — no rail switch needed.
 - **Memory is project-level** for both providers: a Memory tab next to Config
   (Claude: `projects/<slug>/memory/*.md`; Codex: the memories of that
   project's threads, filtered by cwd).

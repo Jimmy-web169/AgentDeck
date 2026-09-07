@@ -2,16 +2,18 @@ import { useEffect, useMemo, useState } from 'react'
 import { createApi } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
-import { homeViewLabel, normalizeView } from '../../lib/tabs.js'
+import { HOME_VIEWS, homeViewLabel, normalizeView } from '../../lib/tabs.js'
 import { providerColor, providerLabel } from '../../lib/providerColors.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import useActiveSessions, { toManagerItems } from '../../lib/useActiveSessions.js'
 import { PinIcon, SearchIcon, TerminalIcon } from './shellIcons.jsx'
-import { ShortcutList } from './ShortcutHints.jsx'
+import { ShortcutChips } from './ShortcutHints.jsx'
 
-// Home pages — the main area when a tab points at Home. Page navigation and
-// the provider · folder scope live in the shell's sidebar; this is content:
+// Home pages — the main area when a tab points at Home. The page switch is in
+// this header (these pages are about the whole deck, not a session, so they
+// don't belong in the session sidebar); the provider · folder scope for the
+// per-folder pages comes from the shell's sidebar.
 //   Activity   what is going on across every provider: running terminals,
 //              the latest sessions, pinned items, recent projects, shortcuts
 //   Stats / History / Plugins / Resources   for the sidebar's scope
@@ -150,7 +152,13 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
   const activeToday = latest.filter((s) => s.lastTs && new Date(s.lastTs).getTime() > today).length
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+    <div className="max-w-6xl mx-auto px-6 py-5">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-5 px-3 py-2 rounded-lg border border-zinc-800 bg-ink-900/60">
+        <span className="text-[10.5px] uppercase tracking-wide text-zinc-500">Keyboard</span>
+        <ShortcutChips />
+        <span className="ml-auto text-[10.5px] text-zinc-600">full list: the ? in the tab strip</span>
+      </div>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-7">
         <Section title="Live now" count={`${shownLive.length} running terminal${shownLive.length === 1 ? '' : 's'}`}>
           {shownLive.length === 0 ? (
@@ -248,12 +256,6 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
           )}
         </Section>
 
-        <Section title="Keyboard">
-          <Panel className="p-3">
-            <ShortcutList />
-          </Panel>
-        </Section>
-
         <div className="flex flex-wrap items-center gap-1.5 text-[10.5px] text-zinc-600">
           <span className="uppercase tracking-wide">tracked</span>
           {providers.map((p) => (
@@ -262,6 +264,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
             </span>
           ))}
         </div>
+      </div>
       </div>
     </div>
   )
@@ -353,7 +356,7 @@ function Folders({ providers, index }) {
   )
 }
 
-export default function HomeView({ providers = [], visible = true, target, scope, index, live, termKeys, onOpen, onSearch }) {
+export default function HomeView({ providers = [], visible = true, target, scope, index, live, termKeys, onOpen, onNavigate, onOpenHome, onSearch }) {
   const view = normalizeView(target?.view)
   const scopeInfo = scope ? index.scopes.find((s) => s.provider === scope.provider && s.root === scope.root) : null
   const providerCfg = scope ? providers.find((p) => p.id === scope.provider) : null
@@ -363,14 +366,27 @@ export default function HomeView({ providers = [], visible = true, target, scope
   return (
     <div className="h-full flex flex-col bg-ink-950">
       <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-zinc-800 bg-ink-900/70">
-        <span className="text-[13px] font-medium text-zinc-100">{homeViewLabel(view)}</span>
+        <div className="flex items-center gap-0.5 rounded-md bg-ink-800 border border-zinc-800 p-0.5">
+          {HOME_VIEWS.filter((v) => v.nav !== false).map((v) => (
+            <button
+              key={v.k}
+              onClick={(e) => (e.ctrlKey || e.metaKey ? onOpenHome?.({ view: v.k }, { newTab: true }) : onNavigate?.({ view: v.k, focus: null }))}
+              onMouseDown={(e) => e.button === 1 && e.preventDefault()}
+              onAuxClick={(e) => e.button === 1 && onOpenHome?.({ view: v.k }, { newTab: true })}
+              title={`${v.label} · Ctrl+click opens in a new tab`}
+              className={`h-7 px-3 rounded text-[12.5px] transition-colors ${view === v.k ? 'bg-ink-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-100 hover:bg-ink-700'}`}
+            >
+              {v.label}
+            </button>
+          ))}
+        </div>
+        {view === 'folders' && <span className="text-[13px] font-medium text-zinc-100">Folders</span>}
         {scoped && scopeInfo && (
           <span className="text-[12px] text-zinc-500 flex items-center gap-1.5">
             <span className={`w-1.5 h-1.5 rounded-full ${providerColor(providers, scope.provider).dot}`} />
             {providerLabel(providers, scope.provider)} · {scopeInfo.rootLabel}
           </span>
         )}
-        {view === 'activity' && <span className="text-[12px] text-zinc-600">every provider, every folder</span>}
         <span className="flex-1" />
         <button onClick={onSearch} title="Search projects & sessions  (Ctrl+K)" className="flex items-center gap-2 h-8 px-3 rounded-md bg-ink-800 border border-zinc-700 text-[12px] text-zinc-300 hover:text-zinc-100 hover:bg-ink-700">
           <SearchIcon className="w-3.5 h-3.5" />
