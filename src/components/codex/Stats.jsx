@@ -13,13 +13,23 @@ function Card({ label, value, sub }) {
   )
 }
 
+const BAR_LIMIT = 10
+
+// top-N bars with a "show all" toggle, so a home with 40 tools still fits on one screen
 function Bars({ counts, color = 'bg-emerald-500/40' }) {
+  const [all, setAll] = useState(false)
   const entries = Object.entries(counts || {}).sort((a, b) => b[1] - a[1])
   const max = entries.length ? entries[0][1] : 1
   if (!entries.length) return <div className="text-[12px] text-zinc-600">none</div>
+  const shown = all ? entries : entries.slice(0, BAR_LIMIT)
   return (
     <div className="space-y-1">
-      {entries.map(([k, v]) => (
+      {entries.length > BAR_LIMIT && (
+        <button onClick={() => setAll((a) => !a)} className="text-[11px] text-sky-400 hover:text-sky-300">
+          {all ? 'top 10' : `show all ${entries.length}`}
+        </button>
+      )}
+      {shown.map(([k, v]) => (
         <div key={k} className="flex items-center gap-2 text-[12px]">
           <span className="w-40 truncate font-mono text-zinc-400" title={k}>{k}</span>
           <div className="flex-1 h-3 bg-ink-800 rounded overflow-hidden">
@@ -103,7 +113,7 @@ export default function Stats({ root, stats, focus, onOpenSession }) {
   if (!stats) return <div className="p-6 text-zinc-600 text-sm">Loading…</div>
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6 space-y-6">
+    <div className="mx-auto max-w-6xl px-6 py-6 space-y-6">
       {/* breadcrumb */}
       <div className="flex items-center gap-2 text-[13px]">
         <Crumb onClick={() => { setProj(null); setSess(null) }} last={!proj}>All projects</Crumb>

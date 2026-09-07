@@ -20,16 +20,22 @@ its real terminal.
   prompt), ← comes back to the row you left; Enter opens a project's live or
   newest session; Ctrl+Enter opens in a new tab. Pinned and recent sessions on
   the empty query.
-- **Home** (the logo): Overview (running terminals, pinned items, recent
-  projects across providers), Stats, History, Memory, Plugins, Resources per
-  tracked folder, and Folders to manage tracked folders for every provider.
+- **Home** (the AgentDeck wordmark in the tab strip): Overview (running
+  terminals, pinned items, recent projects across providers), Stats, History,
+  Memory, Plugins, Resources per tracked folder, and Folders — one list of
+  every provider's tracked folders and one add form.
+- **One sidebar for everything.** The shell owns the sidebar, so Home and a
+  session tab share the same column: a provider · folder scope (segmented
+  switch + folder chips), the Home pages, and that folder's projects and
+  sessions from the cross-provider index. Clicking there navigates the
+  current tab; Ctrl/middle-click opens a new one.
 - **Pins** for projects and sessions — from the sidebar, the quick switcher or
   Home; pinned items sit at the top of the sidebar and the switcher.
 - `#/provider/root/slug/id` and `#/home/<view>` deep links.
 - Keyboard-shortcut hints: a "?" popover in the tab strip and chips in empty
   states; theme toggle in the tab strip.
-- One scope menu (provider · folder) replaces the two native selects in the
-  sidebar; batch-select and pin are proper icon buttons.
+- Batch-select and pin are proper icon buttons; Stats uses the full width
+  with the tool list folded to its top 10.
 
 ### Changed
 - **Terminal only.** Continuing a conversation always runs the real CLI in

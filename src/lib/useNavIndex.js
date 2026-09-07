@@ -127,7 +127,12 @@ export default function useNavIndex(providers, { enabled = true } = {}) {
             firstPrompt: s.firstPrompt || '',
             lastTs: s.lastTs || null,
             toolCalls: s.toolCalls || 0,
+            userTurns: s.userTurns || 0,
             oversized: !!s.oversized,
+            isSubagent: !!s.isSubagent,
+            agentRole: s.agentRole || null,
+            childCount: s.childCount || 0,
+            hasSubagents: !!s.hasSubagents,
           }))
       )
       .catch(() => [])

@@ -14,14 +14,27 @@ function Tile({ label, value }) {
   )
 }
 
+const BAR_LIMIT = 10
+
+// top-N bars with a "show all" toggle, so a folder with 40 tools still fits on one screen
 function BarList({ title, data, color }) {
+  const [all, setAll] = useState(false)
   const entries = Object.entries(data || {}).sort((a, b) => b[1] - a[1])
   const max = entries.length ? entries[0][1] : 1
+  const shown = all ? entries : entries.slice(0, BAR_LIMIT)
   return (
     <div>
-      <div className="text-[12px] uppercase tracking-wide text-zinc-500 mb-2">{title}</div>
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-[12px] uppercase tracking-wide text-zinc-500">{title}</span>
+        <span className="text-[11px] text-zinc-600">· {entries.length}</span>
+        {entries.length > BAR_LIMIT && (
+          <button onClick={() => setAll((a) => !a)} className="ml-auto text-[11px] text-sky-400 hover:text-sky-300">
+            {all ? 'top 10' : `show all ${entries.length}`}
+          </button>
+        )}
+      </div>
       <div className="space-y-1.5">
-        {entries.map(([k, v]) => (
+        {shown.map(([k, v]) => (
           <div key={k} className="flex items-center gap-2">
             <span className="w-32 shrink-0 text-[12.5px] text-zinc-300 truncate font-mono">{k}</span>
             <div className="flex-1 bg-ink-900 rounded h-4 overflow-hidden">
@@ -39,32 +52,32 @@ function BarList({ title, data, color }) {
 // reusable stats panel — used at folder / project / session level
 function StatBlock({ tokens, sessions, userTurns, toolCalls, toolCounts, models }) {
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
         {sessions != null && <Tile label="sessions" value={sessions} />}
         <Tile label="user prompts" value={userTurns ?? 0} />
         <Tile label="tool calls" value={toolCalls ?? 0} />
         <Tile label="total tokens" value={fmtTokens(sumTokens(tokens))} />
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Tile label="input" value={fmtTokens(tokens?.input)} />
         <Tile label="output" value={fmtTokens(tokens?.output)} />
         <Tile label="cache read" value={fmtTokens(tokens?.cacheRead)} />
         <Tile label="cache create" value={fmtTokens(tokens?.cacheCreate)} />
       </div>
-      <div className="pt-2">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <BarList title="Tool usage" data={toolCounts} color="bg-emerald-500/70" />
-      </div>
-      {models?.length > 0 && (
-        <div className="pt-1">
+        <div>
           <div className="text-[12px] uppercase tracking-wide text-zinc-500 mb-2">Models</div>
-          <div className="flex flex-wrap gap-1.5">
-            {models.map((m) => (
-              <span key={m} className="text-[11px] font-mono px-2 py-1 rounded bg-ink-700 text-violet-200">{m}</span>
-            ))}
-          </div>
+          {models?.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {models.map((m) => (
+                <span key={m} className="text-[11px] font-mono px-2 py-1 rounded bg-ink-700 text-violet-200">{m}</span>
+              ))}
+            </div>
+          ) : (
+            <div className="text-[12px] text-zinc-600">none</div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -122,7 +135,7 @@ export default function Stats({ stats, root, focus, onOpenSession, apiClient }) 
   const session = path.sid && sessions ? sessions.find((s) => s.id === path.sid) : null
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6 space-y-6">
+    <div className="mx-auto max-w-6xl px-6 py-6 space-y-6">
       {/* breadcrumb */}
       <div className="flex items-center gap-1.5 text-[13px] flex-wrap">
         <button onClick={() => setPath({ slug: null, sid: null })} className={path.slug ? 'text-sky-400 hover:underline' : 'text-zinc-100 font-semibold'}>Folder</button>

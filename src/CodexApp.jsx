@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { codexApi as api } from './api.js'
-import Sidebar from './components/shared/Sidebar.jsx'
 import Conversation from './components/codex/Conversation.jsx'
 import RawView from './components/shared/RawView.jsx'
 import ResourcesView from './components/codex/ResourcesView.jsx'
 import SubagentsView from './components/codex/SubagentsView.jsx'
-import SidebarRail from './components/shared/SidebarRail.jsx'
 import { ShortcutChips } from './components/shared/ShortcutHints.jsx'
 import TerminalPanel from './components/codex/TerminalPanel.jsx'
 import LiveSessionsPanel from './components/shared/LiveSessionsPanel.jsx'
@@ -14,7 +12,6 @@ import InfoDot from './components/shared/InfoDot.jsx'
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx'
 import useActiveSessions, { toManagerItems } from './lib/useActiveSessions.js'
 import { ActivityIcon } from './components/shared/icons.jsx'
-import { ChevronLeftIcon, PanelLeftIcon } from './components/shared/shellIcons.jsx'
 import { projectName } from './lib/paths.js'
 import { bumpSessionVersions, subscribeToPageResume } from './lib/liveSync.js'
 
@@ -27,10 +24,8 @@ const CODEX_RAW_TYPE = (rec) => {
   return rec?.payload?.type || 'other'
 }
 
-// Session/project-scoped tabs. `need: 'session'` requires an open session;
-// `need: 'project'` only requires an open project (cwd group) — e.g. Config,
-// which shows that project's project-scoped .codex/ config. Home-wide views
-// (stats, history, memory, plugins, resources) live on Home.
+// The Codex provider's main area (see ClaudeApp.jsx for the shape). Codex is
+// id-addressed: a session is opened by id and its project (cwd) derived.
 const SESSION_TABS = [
   { k: 'conversation', need: 'session', label: 'Conversation' },
   { k: 'subagents', need: 'session', label: 'Sub-agents' },
@@ -39,44 +34,24 @@ const SESSION_TABS = [
 ]
 const VIEWS = new Set(SESSION_TABS.map((t) => t.k))
 
-export default function App({
-  active: appActive = true,
-  provider,
-  providers,
-  scopes,
-  onScope,
-  onOpenHome,
-  onOpenSession,
-  pendingOpen,
-  onConsumedPending,
-  onNavigate,
-  onOpenSearch,
-  onSessionRemoved,
-}) {
+export default function App({ active: appActive = true, providers, scopes, onOpenHome, onOpenSession, pendingOpen, onConsumedPending, onNavigate }) {
   const [roots, setRoots] = useState([])
   const [root, setRoot] = useState(null)
   const [projects, setProjects] = useState([])
   const [openSlug, setOpenSlug] = useState(null)
   const [sessions, setSessions] = useState([])
-  const [loadingSessions, setLoadingSessions] = useState(false)
   const [active, setActive] = useState(null)
   const [sessionData, setSessionData] = useState(null)
   const [raw, setRaw] = useState(null)
   const [usage, setUsage] = useState(null)
   const [tab, setTab] = useState('conversation')
-  const [liveIds, setLiveIds] = useState(() => new Set())
   const [conn, setConn] = useState('connecting')
   const [lastEvent, setLastEvent] = useState(0)
   const [error, setError] = useState(null)
   const [showLive, setShowLive] = useState(false)
-  const [sidebarW, setSidebarW] = useState(() => {
-    const v = Number(localStorage.getItem('cxm_sidebarW'))
-    return v >= 220 && v <= 600 ? v : 320
-  })
-  const [collapsed, setCollapsed] = useState(() => localStorage.getItem('cxm_collapsed') === '1')
   const [termDraft, setTermDraft] = useState(null)
   const [terminals, setTerminals] = useState([])
-  const [sessionVersions, setSessionVersions] = useState({}) // provider|root|id -> live refetch counter
+  const [sessionVersions, setSessionVersions] = useState({})
 
   const rootRef = useRef(null)
   const activeRef = useRef(null)
@@ -87,11 +62,10 @@ export default function App({
   const stickBottom = useRef(true)
   const refetchTimer = useRef(null)
   const listTimer = useRef(null)
-  const liveTimers = useRef(new Map())
   const rootsRef = useRef([])
   const projectsRef = useRef([])
   const onNavigateRef = useRef(onNavigate)
-  const openSeq = useRef(0) // stale by-id fetches (see openSessionById) must not override a newer selection
+  const openSeq = useRef(0)
 
   useEffect(() => void (rootRef.current = root), [root])
   useEffect(() => void (activeRef.current = active), [active])
@@ -102,11 +76,6 @@ export default function App({
   useEffect(() => void (projectsRef.current = projects), [projects])
   useEffect(() => void (onNavigateRef.current = onNavigate), [onNavigate])
 
-  // ---- shell sync: describe "where this app is" for the tab strip ----
-  // Called on user navigation inside this app (sidebar click, view change, new
-  // conversation); the shell updates the active tab — including `view`, so a
-  // tab remembers whether it was on Raw or Config. `opts.newTab` asks for a
-  // new tab instead (Ctrl/middle-click).
   const targetOf = useCallback(({ slug, id, title, draft, cwd, view } = {}) => {
     const r = rootRef.current
     const proj = slug ? projectsRef.current.find((p) => p.slug === slug) : null
@@ -145,7 +114,6 @@ export default function App({
     setRoot((cur) => (cur && d.roots.some((r) => r.id === cur) ? cur : d.default || d.roots[0]?.id || null))
     return d
   }, [])
-
   useEffect(() => {
     if (!appActive) return
     reloadRoots().catch((e) => setError(e.message))
@@ -162,63 +130,30 @@ export default function App({
     api.projects(r).then((d) => setProjects(d.projects)).catch((e) => setError(e.message))
   }, [])
 
-  const shownRootRef = useRef(null) // the folder whose selection is on screen
+  const shownRootRef = useRef(null)
   useEffect(() => {
     if (!appActive) return
     if (!root) return
     loadProjects(root)
-    // re-shown by the shell (a tab switch) with the same folder: keep what's on
-    // screen — only an actual folder change resets the selection below
     if (shownRootRef.current === root) return
     shownRootRef.current = root
     setOpenSlug(null)
     setSessions([])
-    loadedSessionsFor.current = null
-    sessionsReqId.current++ // drop in-flight session lists from the old root
     setActive(null)
     setSessionData(null)
     setTermDraft(null)
   }, [root, loadProjects, appActive])
 
-  // ---- sessions ----
-  const loadedSessionsFor = useRef(null) // `${root}|${slug}` the current list is for
-  const sessionsReqId = useRef(0)
   const loadSessions = useCallback((r, slug) => {
-    const key = `${r}|${slug}`
-    const isRefresh = loadedSessionsFor.current === key
-    const reqId = ++sessionsReqId.current
-    if (!isRefresh) setLoadingSessions(true)
     api
       .sessions(r, slug)
-      .then((d) => {
-        if (sessionsReqId.current !== reqId) return
-        loadedSessionsFor.current = key
-        setSessions(d.sessions)
-      })
+      .then((d) => setSessions(d.sessions))
       .catch((e) => setError(e.message))
-      .finally(() => {
-        if (!isRefresh && sessionsReqId.current === reqId) setLoadingSessions(false)
-      })
   }, [])
 
   const openProject = (slug) => {
     setOpenSlug(slug)
     if (slug) loadSessions(root, slug)
-  }
-
-  const selectSession = (s, { view } = {}) => {
-    const v = view && VIEWS.has(view) ? view : 'conversation'
-    openSeq.current++
-    setTermDraft(null)
-    setActive(s)
-    setSessionData(null)
-    setRaw(null)
-    setTab(v)
-    tabRef.current = v
-    stickBottom.current = true
-    report({ slug: openSlug, id: s.id, title: s.title, view: v })
-    if (s.oversized) return // fetch would only 413 — Empty explains via active.oversized
-    api.session(root, s.id).then((d) => setSessionData(d)).catch((e) => setError(e.message))
   }
 
   const refetchActive = useCallback(() => {
@@ -228,7 +163,7 @@ export default function App({
     if (tabRef.current === 'raw') api.raw(rootRef.current, a.id).then(setRaw).catch(() => {})
   }, [])
 
-  // ---- terminals: keep the running list fresh for auto-reattach ----
+  // ---- terminals ----
   const refreshTerminals = useCallback(() => {
     api.terminals().then((d) => setTerminals(d.terminals || [])).catch(() => {})
   }, [])
@@ -257,54 +192,6 @@ export default function App({
     })
   }, [appActive, loadProjects, loadSessions, refetchActive])
 
-  // move a session to the OS trash (recoverable), then clear it everywhere it
-  // might be open — the active pane, and any tab showing it (via the shell)
-  const removeSession = async (s) => {
-    try {
-      await api.deleteSession(root, s.id)
-    } catch (e) {
-      setError(e.message)
-      return
-    }
-    if (activeRef.current?.id === s.id) {
-      setActive(null)
-      setSessionData(null)
-      setRaw(null)
-    }
-    onSessionRemoved?.('codex', { root, slug: openSlug, id: s.id })
-    if (openSlug) loadSessions(root, openSlug)
-    loadProjects(root)
-  }
-
-  const removeSessions = async (list) => {
-    const r = root
-    const slug = openSlug
-    const failed = []
-    for (const s of list) {
-      try {
-        await api.deleteSession(r, s.id)
-      } catch (e) {
-        if (e.status !== 404) {
-          failed.push(s.title || s.id)
-          continue
-        }
-      }
-      if (activeRef.current?.id === s.id) {
-        setActive(null)
-        setSessionData(null)
-        setRaw(null)
-      }
-      onSessionRemoved?.('codex', { root: r, slug, id: s.id })
-    }
-    if (rootRef.current === r) {
-      loadProjects(r)
-      if (slug && openSlugRef.current === slug) loadSessions(r, slug)
-    }
-    if (failed.length) setError(`Failed to trash ${failed.length} session(s): ${failed.join(', ')}`)
-  }
-
-  // Unified Live source (server-side, cross-provider, persistent) — same list as
-  // the Live button and Home.
   const activeSessions = useActiveSessions(providers, { enabled: appActive })
   const liveCount = activeSessions.count
   const managerItems = toManagerItems(activeSessions)
@@ -320,29 +207,8 @@ export default function App({
       .catch(refreshTerminals)
   }
 
-  const startNewConversation = useCallback((slug) => {
-    const r = rootRef.current
-    if (!r || !slug) return
-    setTab('conversation')
-    tabRef.current = 'conversation'
-    stickBottom.current = true
-    setTermDraft({ root: r, slug, title: 'New conversation' })
-    report({ slug, draft: true, title: 'New conversation', view: 'conversation' })
-  }, [report])
-
-  const startNewProject = useCallback((cwd) => {
-    const r = rootRef.current
-    if (!r || !cwd) return
-    setTab('conversation')
-    tabRef.current = 'conversation'
-    stickBottom.current = true
-    const title = cwd.replace(/[/\\]+$/, '').split(/[/\\]/).filter(Boolean).slice(-1)[0] || 'New project'
-    setTermDraft({ root: r, cwd, title })
-    report({ cwd, draft: true, title: 'New conversation', view: 'conversation' })
-  }, [report])
-
   // open a session by its id (sub-agent links, the shell): fetch it, then sync
-  // the sidebar to its project (cwd) so the session list shows it selected.
+  // to its project (cwd)
   const openSessionById = useCallback(
     (id, { view } = {}) => {
       const r = rootRef.current
@@ -357,7 +223,7 @@ export default function App({
       api
         .session(r, id)
         .then((d) => {
-          if (openSeq.current !== my) return // something newer was opened meanwhile
+          if (openSeq.current !== my) return
           setSessionData(d)
           setActive({ id, title: d.summary.title })
           setOpenSlug(d.slug)
@@ -369,7 +235,6 @@ export default function App({
     [loadSessions, report]
   )
 
-  // Session → Stats: this session's token stats live on Home › Stats
   const viewSessionStats = () => {
     if (!active) return
     const slug = openSlug || sessionData?.slug
@@ -377,8 +242,6 @@ export default function App({
     onOpenHome?.({ view: 'stats', scope: { provider: 'codex', root }, focus: { slug, id: active.id } })
   }
 
-  // ---- tell the shell where this app is whenever it's on screen without being
-  // steered by it (first paint, scope switch) so the tab label matches ----
   useEffect(() => {
     if (!appActive || pendingOpen || !root) return
     report(currentTarget(tabRef.current))
@@ -399,12 +262,11 @@ export default function App({
       onConsumedPending?.()
     }
     const view = VIEWS.has(pendingOpen.view) ? pendingOpen.view : null
-    // 1. switch root if needed (reloads projects/sessions async)
     if (pendingOpen.root && root !== pendingOpen.root) {
+      if (!rootsRef.current.some((r) => r.id === pendingOpen.root)) reloadRoots().catch(() => {})
       setRoot(pendingOpen.root)
       return
     }
-    // 2. a "new conversation" draft: show it and let TerminalPanel reattach
     if (!pendingOpen.id && (pendingOpen.draft || pendingOpen.kind === 'tmux' || pendingOpen.newConversation) && (pendingOpen.slug || pendingOpen.cwd)) {
       if (pendingOpen.slug && openSlug !== pendingOpen.slug) openProject(pendingOpen.slug)
       openSeq.current++
@@ -421,9 +283,6 @@ export default function App({
       done()
       return
     }
-    // 3. open the target. Codex is id-addressed — open by id: it fetches the
-    //    session, derives its project (cwd) and loads the sidebar list. Fall
-    //    back to the project view when there's no id.
     if (pendingOpen.id) {
       if (!active || active.id !== pendingOpen.id) openSessionById(pendingOpen.id, { view })
       else if (view && tabRef.current !== view) {
@@ -432,8 +291,6 @@ export default function App({
       }
     } else {
       if (pendingOpen.slug && openSlug !== pendingOpen.slug) openProject(pendingOpen.slug)
-      // a folder- or project-level tab shows no session: clear whatever another
-      // tab left on screen so each tab's content matches its label
       if (activeRef.current || termDraftRef.current) {
         openSeq.current++
         setActive(null)
@@ -451,15 +308,13 @@ export default function App({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appActive, pendingOpen, root, openSlug, sessions, active])
 
-  // ---- lazy tab data ----
   useEffect(() => {
     if (tab === 'raw' && active && (!raw || raw.id !== active.id)) {
       api.raw(root, active.id).then(setRaw).catch((e) => setError(e.message))
     }
-    // 'config' (ResourcesView) self-fetches and manages its own user/project scope
   }, [tab, active, root, raw])
 
-  // ---- account usage limits for the top bar (5-hour / weekly) ----
+  // ---- account usage limits (5-hour / weekly) ----
   const loadUsage = useCallback(() => {
     const r = rootRef.current
     if (!r) return
@@ -511,29 +366,6 @@ export default function App({
       const r = rootRef.current
       const relevant = providerChanges.filter((c) => c.root === r)
       if (!relevant.length) return
-
-      setLiveIds((prev) => {
-        const next = new Set(prev)
-        for (const c of relevant) {
-          if (!c.id) continue
-          next.add(c.id)
-          const old = liveTimers.current.get(c.id)
-          if (old) clearTimeout(old)
-          liveTimers.current.set(
-            c.id,
-            setTimeout(() => {
-              setLiveIds((p) => {
-                const n = new Set(p)
-                n.delete(c.id)
-                return n
-              })
-              liveTimers.current.delete(c.id)
-            }, LIVE_MS)
-          )
-        }
-        return next
-      })
-
       const a = activeRef.current
       const slug = openSlugRef.current
       const hitsActive = a && relevant.some((c) => c.id === a.id)
@@ -555,7 +387,6 @@ export default function App({
     }
   }, [refetchActive, loadSessions, loadProjects, appActive])
 
-  // ---- auto-scroll on live tail ----
   const onMainScroll = () => {
     const el = mainRef.current
     if (!el) return
@@ -567,157 +398,88 @@ export default function App({
     }
   }, [sessionData, tab])
 
-  // persist + drag-to-resize the sidebar
-  useEffect(() => localStorage.setItem('cxm_sidebarW', String(sidebarW)), [sidebarW])
-  useEffect(() => localStorage.setItem('cxm_collapsed', collapsed ? '1' : '0'), [collapsed])
-  useEffect(() => {
-    if (!appActive) return
-    const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.code === 'KeyB') {
-        e.preventDefault()
-        setCollapsed((c) => !c)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [appActive])
-  const startDrag = (e) => {
-    e.preventDefault()
-    const startX = e.clientX
-    const startW = sidebarW
-    document.body.style.userSelect = 'none'
-    const move = (ev) => setSidebarW(Math.min(600, Math.max(220, startW + ev.clientX - startX)))
-    const up = () => {
-      document.body.style.userSelect = ''
-      window.removeEventListener('mousemove', move)
-      window.removeEventListener('mouseup', up)
-    }
-    window.addEventListener('mousemove', move)
-    window.addEventListener('mouseup', up)
-  }
-
   const sinceEvent = lastEvent ? Math.round((Date.now() - lastEvent) / 1000) : null
   const disabledTab = (t) => (t.need === 'session' && !active) || (t.need === 'project' && !openSlug)
-  const scope = { provider: 'codex', root }
 
   return (
-    <div className="h-full flex">
-      {!collapsed && (
-        <div style={{ width: sidebarW }} className="shrink-0 h-full min-w-0">
-          <ErrorBoundary label="the session list" resetKey={`${root}|${openSlug || ''}`}>
-            <Sidebar
-              apiClient={api}
-              providers={providers}
-              scopes={scopes}
-              scope={scope}
-              onScope={(s) => (s.provider === 'codex' ? setRoot(s.root) : onScope?.(s))}
-              onManageFolders={() => onOpenHome?.({ view: 'folders' })}
-              projects={projects}
-              openSlug={openSlug}
-              onOpenProject={openProject}
-              sessions={sessions}
-              activeSession={active}
-              onSelectSession={(s, opts) => (opts?.newTab ? report({ slug: openSlug, id: s.id, title: s.title, view: 'conversation' }, { newTab: true }) : selectSession(s))}
-              onOpenTarget={(p, opts) => onOpenSession?.('codex', { root: p.root, rootLabel: p.rootLabel, slug: p.slug, id: p.id, title: p.title, project: p.project, cwd: p.cwd }, opts)}
-              onDeleteSession={removeSession}
-              onDeleteSessions={removeSessions}
-              loadingSessions={loadingSessions}
-              liveIds={liveIds}
-              onNewConversation={startNewConversation}
-              onNewProject={startNewProject}
-            />
-          </ErrorBoundary>
-        </div>
-      )}
-      {collapsed && <SidebarRail onHome={() => onOpenHome?.()} onSearch={onOpenSearch} onExpand={() => setCollapsed(false)} />}
-      {!collapsed && (
-        <div onMouseDown={startDrag} className="relative w-1 shrink-0 cursor-col-resize bg-zinc-800 hover:bg-sky-500/60 after:absolute after:inset-y-0 after:-left-1.5 after:-right-1.5 after:content-['']" title="Drag to resize sidebar" />
-      )}
-
-      <main className="flex-1 flex flex-col min-w-0">
-        <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-zinc-800 bg-ink-900/70 overflow-x-auto whitespace-nowrap [&>*]:shrink-0">
-          <button onClick={() => setCollapsed((c) => !c)} title={`${collapsed ? 'Show' : 'Hide'} sidebar  (⌘/Ctrl+B)`} className="w-7 h-7 -ml-1 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-100 hover:bg-ink-700 shrink-0">
-            {collapsed ? <PanelLeftIcon /> : <ChevronLeftIcon />}
-          </button>
-          <div className="flex gap-1 items-center">
-            {SESSION_TABS.map((t) => (
-              <button key={t.k} onClick={() => changeTab(t.k)} disabled={disabledTab(t)} className={`text-[13px] px-3 py-1.5 rounded-md ${tab === t.k ? 'bg-ink-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'} disabled:opacity-30 disabled:cursor-not-allowed`}>
-                {t.label}
-              </button>
-            ))}
-            {active && (
-              <button onClick={viewSessionStats} title="This session's token stats (Home › Stats)" className="ml-1 text-[13px] px-3 py-1.5 rounded-md text-sky-400/90 hover:text-sky-300 hover:bg-ink-700/40">
-                Stats →
-              </button>
-            )}
-          </div>
-          <div className="flex-1" />
-          <div className="flex items-center gap-1.5">
-            <RateLimitsBar usage={usage?.rateLimits} ts={usage?.ts} />
-            <InfoDot text="Codex writes usage (5h / weekly) into each session's rollout log, so this is the newest snapshot from disk — not live. It reflects your quota at the moment of the last session activity; if the window has since reset, your real remaining quota is higher (the meter shows ↺ when that reading's window has already reset)." />
-          </div>
-          {liveCount > 0 && (
-            <button onClick={() => setShowLive(true)} title="Manage running terminals" className="flex items-center gap-1.5 text-[12px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Live ({liveCount})
+    <main className="h-full flex flex-col min-w-0">
+      <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-zinc-800 bg-ink-900/70 overflow-x-auto whitespace-nowrap [&>*]:shrink-0">
+        <div className="flex gap-1 items-center">
+          {SESSION_TABS.map((t) => (
+            <button key={t.k} onClick={() => changeTab(t.k)} disabled={disabledTab(t)} className={`text-[13px] px-3 py-1.5 rounded-md ${tab === t.k ? 'bg-ink-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-200'} disabled:opacity-30 disabled:cursor-not-allowed`}>
+              {t.label}
+            </button>
+          ))}
+          {active && (
+            <button onClick={viewSessionStats} title="This session's token stats (Home › Stats)" className="ml-1 text-[13px] px-3 py-1.5 rounded-md text-sky-400/90 hover:text-sky-300 hover:bg-ink-700/40">
+              Stats →
             </button>
           )}
-          <a href="https://developers.openai.com/codex" target="_blank" rel="noreferrer" className="text-[12px] text-zinc-500 hover:text-sky-400" title="Codex documentation">docs ↗</a>
-          <div className="flex items-center gap-2 text-[12px]">
-            <span className={`w-2 h-2 rounded-full ${conn === 'live' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-            <span className="text-zinc-500">
-              {conn === 'live' ? 'live' : 'reconnecting'}
-              {sinceEvent != null && conn === 'live' ? ` · ${sinceEvent}s ago` : ''}
-            </span>
-          </div>
         </div>
-
-        {error && (
-          <div className="m-4 text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded p-3 flex justify-between shrink-0">
-            <span>{error}</span>
-            <button onClick={() => setError(null)} className="text-red-400">×</button>
-          </div>
+        <div className="flex-1" />
+        <div className="flex items-center gap-1.5">
+          <RateLimitsBar usage={usage?.rateLimits} ts={usage?.ts} />
+          <InfoDot text="Codex writes usage (5h / weekly) into each session's rollout log, so this is the newest snapshot from disk — not live. It reflects your quota at the moment of the last session activity; if the window has since reset, your real remaining quota is higher (the meter shows ↺ when that reading's window has already reset)." />
+        </div>
+        {liveCount > 0 && (
+          <button onClick={() => setShowLive(true)} title="Manage running terminals" className="flex items-center gap-1.5 text-[12px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            Live ({liveCount})
+          </button>
         )}
+        <a href="https://developers.openai.com/codex" target="_blank" rel="noreferrer" className="text-[12px] text-zinc-500 hover:text-sky-400" title="Codex documentation">docs ↗</a>
+        <div className="flex items-center gap-2 text-[12px]">
+          <span className={`w-2 h-2 rounded-full ${conn === 'live' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+          <span className="text-zinc-500">
+            {conn === 'live' ? 'live' : 'reconnecting'}
+            {sinceEvent != null && conn === 'live' ? ` · ${sinceEvent}s ago` : ''}
+          </span>
+        </div>
+      </div>
 
-        {tab === 'conversation' ? (
-          <ErrorBoundary label="this conversation" resetKey={`conv|${root}|${active?.id || ''}`}>
-            <div className="flex-1 min-h-0 flex flex-col">
-              <div ref={mainRef} onScroll={onMainScroll} className="flex-1 overflow-y-auto">
-                {termDraft ? (
-                  <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
-                ) : sessionData ? (
-                  <Conversation key={active?.id} data={sessionData} onOpenSession={openSessionById} />
-                ) : (
-                  <Empty active={active} />
-                )}
-              </div>
-              {termDraft ? (
-                <TerminalPanel root={termDraft.root} slug={termDraft.slug} cwd={termDraft.cwd} title={termDraft.title} isNew runningKeys={runningTermKeys} onClose={() => setTermDraft(null)} onChange={refreshTerminals} onOpenTool={(what) => api.open(termDraft.root, null, what, termDraft.cwd, termDraft.slug)} />
-              ) : active ? (
-                <TerminalPanel root={root} id={active.id} title={active.title} contextSummary={sessionData?.summary} runningKeys={runningTermKeys} onChange={refreshTerminals} onOpenTool={(what) => api.open(root, active.id, what)} />
-              ) : null}
-            </div>
-          </ErrorBoundary>
-        ) : tab === 'config' ? (
-          <div className="flex-1 min-h-0">
-            <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
-              <ResourcesView key={`cfg-${root}-${openSlug}`} root={root} scope="project" slug={openSlug} />
-            </ErrorBoundary>
-          </div>
-        ) : (
-          <div className="flex-1 overflow-y-auto">
-            <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
-              {tab === 'subagents' && active && <SubagentsView key={active.id} root={root} parent={active} versions={sessionVersions} active={appActive} onOpenSession={openSessionById} />}
-              {tab === 'raw' && raw && <RawView records={raw.records} typeOf={CODEX_RAW_TYPE} />}
-            </ErrorBoundary>
-          </div>
-        )}
-      </main>
-
-      {showLive && (
-        <LiveSessionsPanel items={managerItems} providers={providers} title="Live sessions" onEnter={onManagerEnter} onClose={onManagerClose} onClosePanel={() => setShowLive(false)} />
+      {error && (
+        <div className="m-4 text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded p-3 flex justify-between shrink-0">
+          <span>{error}</span>
+          <button onClick={() => setError(null)} className="text-red-400">×</button>
+        </div>
       )}
-    </div>
+
+      {tab === 'conversation' ? (
+        <ErrorBoundary label="this conversation" resetKey={`conv|${root}|${active?.id || ''}`}>
+          <div className="flex-1 min-h-0 flex flex-col">
+            <div ref={mainRef} onScroll={onMainScroll} className="flex-1 overflow-y-auto">
+              {termDraft ? (
+                <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
+              ) : sessionData ? (
+                <Conversation key={active?.id} data={sessionData} onOpenSession={openSessionById} />
+              ) : (
+                <Empty active={active} />
+              )}
+            </div>
+            {termDraft ? (
+              <TerminalPanel root={termDraft.root} slug={termDraft.slug} cwd={termDraft.cwd} title={termDraft.title} isNew runningKeys={runningTermKeys} onClose={() => setTermDraft(null)} onChange={refreshTerminals} onOpenTool={(what) => api.open(termDraft.root, null, what, termDraft.cwd, termDraft.slug)} />
+            ) : active ? (
+              <TerminalPanel root={root} id={active.id} title={active.title} contextSummary={sessionData?.summary} runningKeys={runningTermKeys} onChange={refreshTerminals} onOpenTool={(what) => api.open(root, active.id, what)} />
+            ) : null}
+          </div>
+        </ErrorBoundary>
+      ) : tab === 'config' ? (
+        <div className="flex-1 min-h-0">
+          <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
+            <ResourcesView key={`cfg-${root}-${openSlug}`} root={root} scope="project" slug={openSlug} />
+          </ErrorBoundary>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto">
+          <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
+            {tab === 'subagents' && active && <SubagentsView key={active.id} root={root} parent={active} versions={sessionVersions} active={appActive} onOpenSession={openSessionById} />}
+            {tab === 'raw' && raw && <RawView records={raw.records} typeOf={CODEX_RAW_TYPE} />}
+          </ErrorBoundary>
+        </div>
+      )}
+
+      {showLive && <LiveSessionsPanel items={managerItems} providers={providers} title="Live sessions" onEnter={onManagerEnter} onClose={onManagerClose} onClosePanel={() => setShowLive(false)} />}
+    </main>
   )
 }
 

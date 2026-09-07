@@ -110,8 +110,9 @@ export default function TabStrip({
 
   return (
     <div className="h-9 shrink-0 flex items-stretch bg-ink-900 border-b border-zinc-800 select-none" role="tablist">
-      <button onClick={onHome} title="Dashboard" className="shrink-0 w-9 flex items-center justify-center text-emerald-400 hover:text-emerald-300 hover:bg-ink-800">
+      <button onClick={onHome} title="Home" className="shrink-0 flex items-center gap-2 pl-3 pr-3.5 text-emerald-400 hover:bg-ink-800 group/logo">
         <ActivityIcon className="w-[18px] h-[18px]" />
+        <span className="hidden sm:inline text-[13px] font-semibold tracking-tight text-zinc-200 group-hover/logo:text-zinc-100">AgentDeck</span>
       </button>
 
       <div ref={scrollRef} onWheel={onWheel} className="flex-1 min-w-0 flex items-end overflow-x-auto no-scrollbar pt-1 px-0.5 gap-px">
