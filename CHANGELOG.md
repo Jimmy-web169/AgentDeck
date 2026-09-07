@@ -91,9 +91,21 @@ its real terminal.
   tmux/ttyd/node-pty) + `check:privacy` (no home paths, e-mails or keys in what git
   ships; LICENSE present). CI (`.github/workflows/ci.yml`) runs tests and the build
   on Ubuntu, Windows and macOS. `RELEASE-CHECKLIST.md` lists the manual steps.
-- `PROVIDER-SPEC.md` — a draft contract for providers: the normalized core
-  components, the shared route table, known claude/codex misalignments, a
-  format-drift probe design and MCP-config normalization. For discussion.
+- `PROVIDER-SPEC.md` + `spec/` — a draft protocol for providers: the normalized
+  core components, a JSON-Schema-validated YAML descriptor per provider
+  (`spec/providers/claude.yaml`, `codex.yaml`: paths, record→timeline rules, token
+  fields, capabilities graded per feature, drift probe), the shared route table,
+  known claude/codex misalignments and MCP-config normalization. For discussion.
+- **Inline sub-agent threads.** A Conversation shows, under the tool call that
+  spawned a sub-agent (Claude `Agent`/`Task`, Codex `spawn_agent`), a collapsible
+  block with the agent's status, elapsed time, tool-call and token counts;
+  "show thread" renders the child transcript in place (lazy, kept once the agent
+  has finished), "Open in Sub-agents" jumps to the existing modal focused on that
+  agent. Nested agents inside a thread show headers only. The link comes from
+  what the CLIs write to disk — Claude's `agent-<id>.meta.json` `toolUseId`
+  (now on `GET /api/subagents`), Codex's `thread_spawn.agent_path` (now on
+  `children[]`) — so an unlinked call renders as before. Preferences ›
+  Conversation turns it off; the Sub-agents tab is unchanged either way.
 
 ### Changed
 - The "+" next to the folder chips opens a centered **Tracked folders** dialog

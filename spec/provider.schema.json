@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentdeck.dev/spec/provider/v1.schema.json",
+  "title": "AgentDeck provider descriptor",
+  "description": "Declarative description of one AI-coding CLI: where it keeps its data, how records map onto AgentDeck's normalized components, what it can do, and how to detect that its on-disk format changed. Code hooks (server/providers/<id>/) handle what a declaration cannot; this file is what a human or an AI reads first.",
+  "type": "object",
+  "required": ["spec", "id", "label", "cli", "roots", "sessions", "timeline", "tokens", "capabilities", "probe"],
+  "additionalProperties": false,
+  "properties": {
+    "spec": { "const": "agentdeck/provider/v1" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "label": { "type": "string" },
+    "accent": { "type": "string", "description": "Tailwind hue used for this provider's dot/chips (emerald, sky, violet…)" },
+    "docs": { "type": "string" },
+    "status": { "enum": ["stable", "draft", "experimental"] },
+
+    "cli": {
+      "type": "object",
+      "required": ["bin", "version", "resume"],
+      "additionalProperties": false,
+      "properties": {
+        "bin": { "type": "string", "description": "binary on PATH; the server also checks the usual install dirs" },
+        "version": { "$ref": "#/$defs/argv" },
+        "update": { "$ref": "#/$defs/argv", "description": "the CLI's own updater, run by `make update`" },
+        "resume": { "$ref": "#/$defs/argv", "description": "argv to reopen a session; `{id}` is substituted" },
+        "new": { "$ref": "#/$defs/argv", "description": "argv to start a fresh session in `{cwd}`" },
+        "env_home": { "type": "string", "description": "env var that points the CLI at a data home (CLAUDE_CONFIG_DIR, CODEX_HOME)" },
+        "check_origin": { "type": "boolean", "description": "whether the terminal bridge must verify the request origin for this CLI" }
+      }
+    },
+
+    "roots": {
+      "type": "object",
+      "required": ["default_dirs", "probe"],
+      "additionalProperties": false,
+      "properties": {
+        "default_dirs": { "type": "array", "items": { "type": "string" }, "description": "`~` allowed; the first existing one is seeded on first run" },
+        "probe": { "$ref": "#/$defs/pathTest", "description": "what makes a directory a data home of this CLI" },
+        "label_default": { "enum": ["home-relative", "basename"] }
+      }
+    },
+
+    "projects": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": { "enum": ["directory", "index", "transcript"], "description": "directory = one dir per project; index = a summaries file; transcript = group sessions by the cwd found in each file" },
+        "glob": { "type": "string" },
+        "slug": { "enum": ["dirname", "cwd", "id"], "description": "opaque to the UI; only `cwd` is compared across providers" },
+        "cwd": { "$ref": "#/$defs/fieldRef" }
+      }
+    },
+
+    "sessions": {
+      "type": "object",
+      "required": ["glob", "id", "format"],
+      "additionalProperties": false,
+      "properties": {
+        "glob": { "type": "string", "description": "relative to the root; `{slug}` allowed" },
+        "id": { "enum": ["filename_stem", "field"] },
+        "id_field": { "type": "string" },
+        "format": { "enum": ["jsonl", "json", "sqlite", "protobuf", "pbtxt"] },
+        "envelope": { "type": "string", "description": "for wrapped records: the key holding the payload (codex: `payload`)" },
+        "kind_field": { "type": "string", "description": "record field that says what a line is (`type`)" },
+        "timestamp": { "$ref": "#/$defs/fieldRef" },
+        "title": { "type": "array", "items": { "type": "string" }, "description": "ordered sources: named title records first, then `first_prompt`" },
+        "head_bytes": { "type": "integer", "description": "how much of the file yields cwd/meta without a full read" },
+        "excludes": { "type": "array", "items": { "type": "string" }, "description": "globs of files that live beside sessions but are not sessions (sidecars)" }
+      }
+    },
+
+    "timeline": {
+      "type": "object",
+      "required": ["map", "parts"],
+      "additionalProperties": false,
+      "properties": {
+        "map": {
+          "type": "array",
+          "description": "ordered rules: the first rule whose `when` matches a record decides its normalized kind",
+          "items": {
+            "type": "object",
+            "required": ["when", "kind"],
+            "additionalProperties": false,
+            "properties": {
+              "when": { "type": "object", "additionalProperties": true, "description": "field → expected value (or list of values)" },
+              "kind": { "enum": ["user", "assistant", "system", "attachment", "meta", "ignore"] },
+              "text": { "type": "string" },
+              "model": { "type": "string" },
+              "usage": { "type": "string" },
+              "parts": { "type": "string", "description": "path of the array whose items become parts" },
+              "note": { "type": "string" }
+            }
+          }
+        },
+        "parts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "text": { "$ref": "#/$defs/partRule" },
+            "thinking": { "$ref": "#/$defs/partRule" },
+            "tool_use": { "$ref": "#/$defs/partRule" },
+            "tool_result": {
+              "type": "object",
+              "allOf": [{ "$ref": "#/$defs/partRule" }],
+              "properties": { "pair_by": { "enum": ["id", "adjacency"] }, "id_field": { "type": "string" } }
+            }
+          }
+        },
+        "noise": { "type": "array", "items": { "type": "string" }, "description": "regexes / tag names stripped from user text (system-reminder wrappers, env blocks…)" }
+      }
+    },
+
+    "tokens": {
+      "type": "object",
+      "required": ["input", "output", "total"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "enum": ["per_message", "cumulative_event"], "description": "per_message = sum over assistant messages; cumulative_event = take the last counter record" },
+        "input": { "type": ["string", "null"] },
+        "output": { "type": ["string", "null"] },
+        "cache_read": { "type": ["string", "null"] },
+        "cache_create": { "type": ["string", "null"] },
+        "reasoning": { "type": ["string", "null"] },
+        "total": { "type": "string", "description": "a field path, or `sum` — the provider computes it, the UI never re-derives it" }
+      }
+    },
+
+    "subagents": {
+      "type": "object",
+      "required": ["model"],
+      "additionalProperties": false,
+      "properties": {
+        "model": { "enum": ["none", "nested", "independent-sessions"], "description": "nested = sidecar files under the parent; independent-sessions = children are sessions linked by a parent id" },
+        "glob": { "type": "string" },
+        "parent_link": { "$ref": "#/$defs/fieldRef" },
+        "spawn_tool": { "type": "string", "description": "tool name in the parent transcript that starts a child" },
+        "link_rule": { "type": "string", "description": "how a spawn tool call is matched to a child (id in result text, adjacency, timestamps)" },
+        "groups": { "type": "string", "description": "optional grouping (claude workflow runs)" }
+      }
+    },
+
+    "memory": {
+      "type": "object",
+      "required": ["scope", "writable"],
+      "additionalProperties": false,
+      "properties": {
+        "scope": { "enum": ["none", "project", "thread", "user"] },
+        "path": { "type": "string" },
+        "format": { "enum": ["markdown", "sqlite", "json"] },
+        "writable": { "type": "boolean" }
+      }
+    },
+
+    "mcp": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["scope", "path", "format"],
+        "additionalProperties": false,
+        "properties": {
+          "scope": { "enum": ["user", "project", "plugin"] },
+          "path": { "type": "string" },
+          "format": { "enum": ["json", "toml", "yaml"] },
+          "key": { "type": "string", "description": "container key (`mcpServers`, `mcp_servers`)" },
+          "transport": { "type": "object", "description": "how the file spells transports → normalized stdio|http|sse|ws", "additionalProperties": { "type": "string" } },
+          "fields": { "type": "object", "description": "file field → McpServer field (enabled_tools→toolAllow, serverUrl→url…)", "additionalProperties": { "type": "string" } }
+        }
+      }
+    },
+
+    "instructions": { "type": "array", "items": { "type": "object", "required": ["kind", "paths"], "properties": { "kind": { "type": "string" }, "paths": { "type": "array", "items": { "type": "string" } } } } },
+    "skills": { "type": "object", "properties": { "paths": { "type": "array", "items": { "type": "string" } } } },
+    "plugins": { "type": "object", "properties": { "path": { "type": "string" }, "format": { "type": "string" } } },
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source": { "enum": ["none", "status_line_bridge", "transcript_event", "api"] },
+        "path": { "type": "string" },
+        "windows": { "type": "array", "items": { "type": "string" } },
+        "pct_field": { "type": "string" },
+        "reset_field": { "type": "string" }
+      }
+    },
+    "history": { "type": "object", "properties": { "path": { "type": "string" }, "fields": { "type": "object", "additionalProperties": { "type": "string" } } } },
+
+    "capabilities": {
+      "type": "object",
+      "description": "what the UI may show for this provider; every key is required so a gap is explicit",
+      "required": ["projects", "sessions", "timeline", "tool_calls", "subagents", "memory", "mcp", "skills", "plugins", "usage_limits", "context_meter", "resume", "new_session", "delete_session", "history"],
+      "additionalProperties": false,
+      "properties": {
+        "projects": { "$ref": "#/$defs/cap" }, "sessions": { "$ref": "#/$defs/cap" }, "timeline": { "$ref": "#/$defs/cap" },
+        "tool_calls": { "$ref": "#/$defs/cap" }, "subagents": { "$ref": "#/$defs/cap" }, "memory": { "$ref": "#/$defs/cap" },
+        "mcp": { "$ref": "#/$defs/cap" }, "skills": { "$ref": "#/$defs/cap" }, "plugins": { "$ref": "#/$defs/cap" },
+        "usage_limits": { "$ref": "#/$defs/cap" }, "context_meter": { "$ref": "#/$defs/cap" }, "resume": { "$ref": "#/$defs/cap" },
+        "new_session": { "$ref": "#/$defs/cap" }, "delete_session": { "$ref": "#/$defs/cap" }, "history": { "$ref": "#/$defs/cap" }
+      }
+    },
+
+    "probe": {
+      "type": "object",
+      "description": "format-drift detection: sampled at startup and hourly, fingerprinted, compared with the stored baseline",
+      "required": ["sample", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "sample": { "type": "object", "required": ["glob", "newest"], "properties": { "glob": { "type": "string" }, "newest": { "type": "integer" }, "head": { "type": "integer" }, "tail": { "type": "integer" } } },
+        "required": { "type": "array", "items": { "type": "string" }, "description": "dotted paths that must appear in at least one sampled record" },
+        "enums": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } }, "description": "observed values must be a subset; a new value is `drift`" },
+        "types": { "type": "object", "additionalProperties": { "enum": ["string", "number", "boolean", "object", "array"] } },
+        "sidecars": { "type": "array", "items": { "type": "string" } },
+        "version_field": { "type": "string", "description": "a field carrying the CLI version, if records have one" }
+      }
+    },
+
+    "hooks": {
+      "type": "object",
+      "description": "code modules that implement what the declaration cannot; paths relative to server/providers/<id>/",
+      "additionalProperties": { "type": "string" }
+    },
+    "known_unknowns": { "type": "array", "items": { "type": "string" } }
+  },
+
+  "$defs": {
+    "argv": { "type": "array", "items": { "type": "string" } },
+    "fieldRef": {
+      "type": "object",
+      "required": ["source", "field"],
+      "additionalProperties": false,
+      "properties": {
+        "source": { "enum": ["transcript_head", "record", "index", "filename", "sidecar"] },
+        "field": { "type": "string" },
+        "when": { "type": "object", "additionalProperties": true }
+      }
+    },
+    "pathTest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "exists": { "type": "string" }, "glob": { "type": "string" } }
+    },
+    "partRule": {
+      "type": "object",
+      "properties": {
+        "when": { "type": "object", "additionalProperties": true },
+        "text": { "type": "string" }, "id": { "type": "string" }, "name": { "type": "string" }, "input": { "type": "string" }, "output": { "type": "string" }, "is_error": { "type": "string" },
+        "note": { "type": "string" }
+      }
+    },
+    "cap": {
+      "type": "object",
+      "required": ["level"],
+      "additionalProperties": false,
+      "properties": {
+        "level": { "enum": ["full", "partial", "read-only", "none", "unknown"] },
+        "note": { "type": "string" }
+      }
+    }
+  }
+}

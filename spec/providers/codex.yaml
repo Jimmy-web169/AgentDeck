@@ -1,0 +1,165 @@
+# AgentDeck provider descriptor — OpenAI Codex CLI
+# Draft 2026-09-07: written from DATA-MODEL.md and server/providers/codex/*.
+# Not yet loaded by the server (see PROVIDER-SPEC.md §"Descriptor layer").
+spec: agentdeck/provider/v1
+id: codex
+label: Codex
+accent: sky
+docs: https://developers.openai.com/codex
+status: stable
+
+cli:
+  bin: codex
+  version: [--version]
+  update: [update]
+  resume: [resume, "{id}"]
+  new: []
+  env_home: CODEX_HOME
+  check_origin: true
+
+roots:
+  default_dirs: ["~/.codex"]
+  probe: { exists: sessions }
+  label_default: home-relative
+
+projects:
+  from: transcript              # no project dirs: sessions are grouped by the cwd in their header
+  glob: "sessions/**/rollout-*.jsonl"
+  slug: cwd                     # the slug IS the cwd string
+  cwd: { source: transcript_head, field: payload.cwd, when: { type: session_meta } }
+
+sessions:
+  glob: "sessions/*/*/*/rollout-*.jsonl"      # sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl
+  id: field
+  id_field: payload.id                        # UUID, also the tail of the filename
+  format: jsonl
+  envelope: payload                           # every line: { timestamp, type, payload }
+  kind_field: type
+  timestamp: { source: record, field: timestamp }
+  title: [thread_name_updated, first_prompt]
+  head_bytes: 65536
+
+timeline:
+  map:
+    - when: { type: session_meta }
+      kind: meta
+      note: cwd, cli_version, model, source.subagent.thread_spawn.parent_thread_id
+    - when: { type: turn_context }
+      kind: meta
+      note: model + reasoning effort for the turn
+    - when: { type: event_msg, "payload.type": user_message }
+      kind: user
+      text: payload.message
+    - when: { type: response_item, "payload.type": message, "payload.role": user }
+      kind: user
+      text: payload.content                   # [{type:input_text}] — duplicates event_msg/user_message on newer CLIs; the parser keeps one layer
+    - when: { type: response_item, "payload.type": message, "payload.role": assistant }
+      kind: assistant
+      model: turn_context.payload.model       # not on the record; carried from the last turn_context
+      parts: payload.content                  # [{type:output_text}]
+      note: no per-turn usage exists — see tokens (cumulative token_count events)
+    - when: { type: response_item, "payload.type": [reasoning, function_call, custom_tool_call, function_call_output, custom_tool_call_output] }
+      kind: assistant
+      note: folded into the open assistant turn as thinking / tool_use / tool_result parts
+    - when: { type: event_msg, "payload.type": [agent_message, agent_reasoning, token_count, thread_name_updated, task_started, task_complete] }
+      kind: meta
+    - when: { type: event_msg, "payload.type": turn_aborted }
+      kind: system
+      text: payload.type
+  parts:
+    text: { when: { "payload.type": output_text }, text: text }
+    thinking: { when: { "payload.type": reasoning }, text: "payload.summary[].text" }
+    tool_use: { when: { "payload.type": [function_call, custom_tool_call] }, id: payload.call_id, name: payload.name, input: payload.arguments }
+    tool_result:
+      when: { "payload.type": [function_call_output, custom_tool_call_output] }
+      pair_by: id
+      id_field: payload.call_id
+      output: payload.output
+      note: output may be a JSON string { output, metadata:{ exit_code, duration_seconds } }
+  noise:
+    - "<environment_context>…</environment_context>"
+    - "<user_instructions>…</user_instructions>"
+
+tokens:
+  source: cumulative_event                    # event_msg/token_count carries running totals; take the last one
+  input: payload.info.total_token_usage.input_tokens
+  output: payload.info.total_token_usage.output_tokens
+  cache_read: payload.info.total_token_usage.cached_input_tokens
+  cache_create: null
+  reasoning: payload.info.total_token_usage.reasoning_output_tokens
+  total: payload.info.total_token_usage.total_tokens
+
+subagents:
+  model: independent-sessions
+  parent_link: { source: transcript_head, field: payload.source.subagent.thread_spawn.parent_thread_id, when: { type: session_meta } }
+  spawn_tool: spawn_agent
+  link_rule: child session_meta.payload.source.subagent.thread_spawn.parent_thread_id == parent id; agent role/nickname also in that block
+
+memory:
+  scope: thread
+  path: "memories_1.sqlite"                   # plus state_5.sqlite; read with sqlite3 -readonly
+  format: sqlite
+  writable: false
+
+mcp:
+  - scope: user
+    path: "config.toml"
+    format: toml
+    key: mcp_servers                          # [mcp_servers.<name>]
+    transport: { command: stdio, url: http }
+    fields: { command: command, args: args, env: env, url: url, enabled: enabled, enabled_tools: toolAllow, disabled_tools: toolDeny, startup_timeout_sec: timeoutMs }
+
+instructions:
+  - kind: AGENTS.md
+    paths: ["{cwd}/AGENTS.md", "AGENTS.md"]
+skills:
+  paths: ["skills/*/SKILL.md", "{cwd}/.agents/skills/*/SKILL.md", "plugins/cache/**/skills/*/SKILL.md"]
+plugins:
+  path: "plugins/cache/**/plugin.json"        # enabled map lives in config.toml
+  format: json
+usage:
+  source: transcript_event                    # newest token_count.rate_limits across the 12 newest rollouts
+  windows: [primary, secondary]
+  pct_field: used_percent
+  reset_field: resets_at                      # plus window_minutes
+history:
+  path: "history.jsonl"
+  fields: { display: text, ts: ts, sessionId: session_id }
+
+capabilities:
+  projects:       { level: full, note: "derived from cwd" }
+  sessions:       { level: full }
+  timeline:       { level: full }
+  tool_calls:     { level: full }
+  subagents:      { level: full, note: "children are ordinary sessions" }
+  memory:         { level: read-only, note: "sqlite; needs the sqlite3 binary or node:sqlite" }
+  mcp:            { level: full, note: "parsed from config.toml, editable" }
+  skills:         { level: full }
+  plugins:        { level: read-only }
+  usage_limits:   { level: partial, note: "snapshot from the last session, not live" }
+  context_meter:  { level: full, note: "from token_count in the transcript" }
+  resume:         { level: full }
+  new_session:    { level: full }
+  delete_session: { level: full, note: "trashes descendants too" }
+  history:        { level: full }
+
+probe:
+  sample: { glob: "sessions/*/*/*/rollout-*.jsonl", newest: 5, head: 200, tail: 200 }
+  required: [timestamp, type, payload]
+  enums:
+    type: [session_meta, turn_context, response_item, event_msg, compacted]
+    "payload.type": [message, reasoning, function_call, function_call_output, custom_tool_call, custom_tool_call_output, user_message, agent_message, agent_reasoning, token_count, thread_name_updated, task_started, task_complete, turn_aborted]
+  types:
+    "payload.info.total_token_usage.total_tokens": number
+  version_field: payload.cli_version
+
+hooks:
+  discover: paths.js
+  parse: parser.js
+  memory: codex-data.js
+  resources: resources.js
+  api: api.js
+
+known_unknowns:
+  - whether total_token_usage.input_tokens already includes cached_input_tokens (affects every part-summing formula)
+  - stable location of thread names on older CLIs (thread_name_updated is recent)

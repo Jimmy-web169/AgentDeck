@@ -1,6 +1,6 @@
 # AgentDeck provider spec — DRAFT for discussion
 
-Status: **draft, 2026-09-07**. Nothing here is enforced yet. It records what the
+Status: **draft, 2026-09-07** — machine-readable descriptors in `spec/`. Nothing here is enforced yet. It records what the
 two existing providers (`claude`, `codex`) already share, where they silently
 disagree, and the smallest normalized core a third provider (Antigravity `agy`,
 next) should target. `DATA-MODEL.md` stays the per-provider description of what is
@@ -16,7 +16,7 @@ reuse those names where free and own the rest.
 ## 1. Core components
 
 Field lists are the *minimum*. Optional fields are marked `?`. Names are the ones
-already used in the code; renames are listed as decisions in §6.
+already used in the code; renames are listed as decisions in §7.
 
 | Component | Fields | Notes |
 |---|---|---|
@@ -31,12 +31,52 @@ already used in the code; renames are listed as decisions in §6.
 | `McpServer` | `name, scope('user'\|'project'\|'plugin'), sourcePath, transport('stdio'\|'http'\|'sse'\|'ws'), command?, args?, env?, cwd?, url?, headers?, enabled, toolAllow?, toolDeny?, raw` | never expand `${VAR}` secrets; show the literal template |
 | `Instructions` | `kind('CLAUDE.md'\|'AGENTS.md'\|'GEMINI.md'), path, scope` | one resource kind, three file names |
 | `Skill` | `name, path, description?, hasSkillMd` | Agent Skills spec is shared by every vendor |
-| `Stats` | `root, projectCount, sessions, subagentSessions, userTurns, assistantTurns, toolCalls, toolCounts{}, modelCounts{}, tokens, projects[{slug, cwd, sessions, userTurns, toolCalls, tokens, models[], lastActivity}]` | keys already aligned; populations and token math are not (§3) |
+| `Stats` | `root, projectCount, sessions, subagentSessions, userTurns, assistantTurns, toolCalls, toolCounts{}, modelCounts{}, tokens, projects[{slug, cwd, sessions, userTurns, toolCalls, tokens, models[], lastActivity}]` | keys already aligned; populations and token math are not (§4) |
 | `Usage` | `rateLimits{windows[]}, ts(ms), sessionId?, contextWindow?` | one timestamp name |
 | `HistoryEntry` | `display, ts(ms), sessionId?, project?` | normalize `ts` to ms server-side |
 | `Activity` | output of `server/shared/activity.js` | already shared and unit-tested |
 
-## 2. Provider contract
+## 2. Descriptor layer (the protocol)
+
+A provider is a **module**: one declarative descriptor plus a few code hooks.
+The descriptor is what a human or an AI reads first; it says where the data is,
+how records map onto the components in §1, what the CLI can do, and how to detect
+that the vendor changed the format. Hooks implement only what a declaration cannot
+(parsing quirks, sqlite, sidecar discovery). This mirrors how deepseek-harness
+splits its runtime into swappable plugins: the core never knows a vendor, it only
+consumes normalized components; every vendor-specific decision lives in one place.
+
+```
+spec/provider.schema.json      the contract (JSON Schema 2020-12, validated in CI)
+spec/providers/claude.yaml     one descriptor per provider — YAML for readability
+spec/providers/codex.yaml
+server/providers/<id>/         hooks named in the descriptor: discover, parse,
+                               subagents, memory, resources, api
+```
+
+Descriptor sections: `cli` (bin, version/update/resume argv, env home) ·
+`roots` (default dirs, probe) · `projects` (directory / index / transcript grouping,
+cwd source) · `sessions` (glob, id, format, envelope, title sources) · `timeline`
+(ordered `when → kind` rules, part rules, tool-result pairing, noise) · `tokens`
+(field paths, per-message vs cumulative, canonical `total`) · `subagents` (nested vs
+independent sessions, spawn tool, link rule) · `memory` · `mcp[]` (path, format,
+transport and field mapping) · `instructions` / `skills` / `plugins` · `usage` ·
+`history` · `capabilities` (every feature graded `full | partial | read-only | none |
+unknown`, so a gap is explicit and the UI hides what a provider lacks) · `probe`
+(sample, required paths, enums, types, version field) · `hooks` · `known_unknowns`.
+
+Roll-out plan:
+
+1. **Now** — descriptors are documentation, validated against the schema in CI.
+2. **Next** — a test per provider asserts the real parser agrees with the descriptor
+   on fixtures (kind mapping, tool pairing, token fields). Drift between code and
+   descriptor fails the build, so the descriptor cannot rot.
+3. **Then** — the server loads `capabilities` and `cli` from the descriptor (the client
+   registry's `capabilities`, `rateLimit`, terminal config move there) and runs the
+   `probe` block for drift detection. Parsing stays in code until a generic
+   rule-driven parser proves itself on a third provider (Antigravity is the test).
+
+## 3. Provider contract (code side)
 
 **Server** `server/providers/<id>/`: `paths.js` (roots via `makeRoots`, session
 discovery, head read for `cwd`), `parser.js` (`readRecords` guarded by
@@ -65,7 +105,7 @@ Addressing is the one real fork: claude routes take `(slug, id)`, codex takes `i
 and derives `slug` from the transcript. `apiAddr` in the registry hides it from the
 shell; keep it that way.
 
-## 3. Known misalignments (work items)
+## 4. Known misalignments (work items)
 
 1. **Three total-token formulas disagree** (`lib/format.js`, `shared/Stats.jsx`,
    `shared/activity.js`) whenever `total` is present or `reasoning` ≠ 0, i.e. always
@@ -90,7 +130,7 @@ shell; keep it that way.
 8. The cross-folder aggregated view the user wants (all tracked folders of all
    providers on one Stats page) is blocked only by items 1–3.
 
-## 4. Format-drift detection
+## 5. Format-drift detection
 
 Vendors change their on-disk formats without notice. Each provider ships a
 declarative `probe.js`:
@@ -116,7 +156,7 @@ seam. One frozen fixture per known format generation lives under `test/probe/` s
 the probe itself is unit-tested. `make all` already updates the CLIs first; the probe
 tells the user the same morning when the update changed what is on disk.
 
-## 5. MCP config normalization
+## 6. MCP config normalization
 
 | Provider | Where | Shape → `McpServer` |
 |---|---|---|
@@ -128,7 +168,7 @@ tells the user the same morning when the update changed what is on disk.
 
 Precedence when the same name appears twice: local > project > user > plugin.
 
-## 6. Decisions to make together
+## 7. Decisions to make together
 
 1. Rename `tool_use` → `tool_call` (OTel) now, or keep and alias? (rename touches
    every Conversation/ToolCall component)
@@ -140,10 +180,10 @@ Precedence when the same name appears twice: local > project > user > plugin.
 5. Memory: expose codex thread memories under the same project tab (read-only) — yes?
 6. Antigravity: its transcripts carry no `cwd`; do we accept a "no project" bucket?
 
-## 7. Reference
+## 8. Reference
 
 - Agent Plugins 1.0 — https://agent-plugins.org/ (packaging only; Anthropic absent)
 - Agent Skills — https://agentskills.io/ (shared by every vendor)
 - OpenTelemetry GenAI semantic conventions — https://opentelemetry.io/docs/specs/semconv/gen-ai/
 - deepseek-ai/deepseek-harness — plugin-per-concern harness; session log = append-only typed events with `seq`, messages derived
-- Research notes: `scratchpad/standards-report.md`, provider audit (2026-09-07)
+- Research notes (local, git-ignored): `tmp/research/standards-2026-09.md`, `tmp/research/antigravity-*.md`; provider audit 2026-09-07 folded into §4

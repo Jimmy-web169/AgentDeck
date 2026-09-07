@@ -1,0 +1,169 @@
+# AgentDeck provider descriptor — Claude Code
+# Draft 2026-09-07: written from DATA-MODEL.md and server/providers/claude/*.
+# Not yet loaded by the server; a follow-up wires a test that the real parsers
+# agree with every path below (see PROVIDER-SPEC.md §"Descriptor layer").
+spec: agentdeck/provider/v1
+id: claude
+label: Claude Code
+accent: emerald
+docs: https://code.claude.com/docs
+status: stable
+
+cli:
+  bin: claude
+  version: [--version]
+  update: [update]
+  resume: [--resume, "{id}"]
+  new: []                       # `claude` in {cwd} starts a session
+  env_home: CLAUDE_CONFIG_DIR   # a second account = a second home dir
+  check_origin: false
+
+roots:
+  default_dirs: ["~/.claude"]
+  probe: { exists: projects }
+  label_default: home-relative
+
+projects:
+  from: directory
+  glob: "projects/*/"
+  slug: dirname                 # "C--Users-me-code-app" — opaque, derived from the cwd
+  cwd: { source: transcript_head, field: cwd }
+
+sessions:
+  glob: "projects/{slug}/*.jsonl"
+  id: filename_stem             # UUID
+  format: jsonl
+  kind_field: type
+  timestamp: { source: record, field: timestamp }   # ISO-8601
+  title: [custom-title, ai-title, first_prompt]      # /rename beats the AI title beats the first prompt
+  head_bytes: 65536
+  excludes: ["projects/{slug}/{id}/**"]              # per-session sidecar dir (subagents, workflows)
+
+timeline:
+  map:
+    - when: { type: user, "message.content[].type": tool_result }
+      kind: attachment
+      note: tool results ride on user records; they are paired onto the assistant's tool_use part, not shown as a user turn
+    - when: { type: user }
+      kind: user
+      text: message.content            # string or [{type:text}]
+    - when: { type: assistant }
+      kind: assistant
+      model: message.model
+      usage: message.usage
+      parts: message.content
+    - when: { type: system }
+      kind: system
+      text: content
+    - when: { type: [summary, file-history-snapshot, queue-operation] }
+      kind: meta
+  parts:
+    text: { when: { type: text }, text: text }
+    thinking: { when: { type: [thinking, redacted_thinking] }, text: thinking }
+    tool_use: { when: { type: [tool_use, server_tool_use] }, id: id, name: name, input: input }
+    tool_result:
+      when: { type: tool_result }
+      pair_by: id
+      id_field: tool_use_id
+      output: content
+      is_error: is_error
+  noise:
+    - "<system-reminder>…</system-reminder>"
+    - "<local-command-caveat>…</local-command-caveat>"
+    - "<command-name>…</command-name>"
+
+tokens:
+  source: per_message
+  input: message.usage.input_tokens
+  output: message.usage.output_tokens
+  cache_read: message.usage.cache_read_input_tokens
+  cache_create: message.usage.cache_creation_input_tokens
+  reasoning: null
+  total: sum
+
+subagents:
+  model: nested
+  glob: "projects/{slug}/{id}/subagents/agent-*.jsonl"
+  spawn_tool: Agent
+  link_rule: agent id appears in the Agent tool_result text; fall back to first-timestamp adjacency
+  groups: "projects/{slug}/{id}/workflows/wf_*/"      # Workflow runs: script + phases + task-notifications
+
+memory:
+  scope: project
+  path: "projects/{slug}/memory/*.md"                 # MEMORY.md index + one file per memory
+  format: markdown
+  writable: true
+
+mcp:
+  - scope: user
+    path: "~/.claude.json"
+    format: json
+    key: mcpServers                                   # also projects[cwd].mcpServers for project scope
+    transport: { stdio: stdio, http: http, sse: sse, ws: ws }   # `type` optional, default stdio
+    fields: { command: command, args: args, env: env, url: url, headers: headers }
+  - scope: project
+    path: "{cwd}/.mcp.json"
+    format: json
+    key: mcpServers
+  - scope: plugin
+    path: "plugins/**/.mcp.json"
+    format: json
+    key: mcpServers
+
+instructions:
+  - kind: CLAUDE.md
+    paths: ["{cwd}/CLAUDE.md", "{cwd}/.claude/CLAUDE.md", "~/.claude/CLAUDE.md"]
+skills:
+  paths: ["skills/*/SKILL.md", "{cwd}/.claude/skills/*/SKILL.md", "plugins/**/skills/*/SKILL.md"]
+plugins:
+  path: "plugins/installed_plugins.json"
+  format: json
+usage:
+  source: status_line_bridge                          # Claude never writes limits to disk; scripts/statusline-bridge.mjs does
+  path: "rate-limits.json"
+  windows: [five_hour, seven_day]
+  pct_field: used_percentage
+  reset_field: resets_at
+history:
+  path: "history.jsonl"
+  fields: { display: display, ts: timestamp, project: project }
+
+capabilities:
+  projects:       { level: full }
+  sessions:       { level: full }
+  timeline:       { level: full }
+  tool_calls:     { level: full }
+  subagents:      { level: full, note: "nested sidecars + workflow runs" }
+  memory:         { level: full, note: "read-write markdown per project" }
+  mcp:            { level: read-only, note: "project .mcp.json presence today; parsed list is a work item" }
+  skills:         { level: full }
+  plugins:        { level: read-only }
+  usage_limits:   { level: partial, note: "needs the status-line bridge" }
+  context_meter:  { level: partial, note: "from the usage bridge, not the transcript" }
+  resume:         { level: full }
+  new_session:    { level: full }
+  delete_session: { level: full, note: "to the OS trash" }
+  history:        { level: full }
+
+probe:
+  sample: { glob: "projects/*/*.jsonl", newest: 5, head: 200, tail: 200 }
+  required: [type, timestamp, uuid, sessionId]
+  enums:
+    type: [user, assistant, system, summary, attachment, file-history-snapshot, queue-operation]
+    "message.content[].type": [text, thinking, redacted_thinking, tool_use, server_tool_use, tool_result, image, document]
+  types:
+    "message.usage.input_tokens": number
+    "message.usage.output_tokens": number
+  sidecars: ["projects/*/*/subagents/agent-*.jsonl", "projects/*/*/workflows/wf_*/"]
+  version_field: version
+
+hooks:
+  discover: paths.js
+  parse: parser.js
+  subagents: runs.js
+  resources: resources.js
+  api: api.js
+
+known_unknowns:
+  - which Agent tool_result variants carry the agent id (some only carry the summary text)
+  - whether `advisor` parts should stay a separate kind or fold into `thinking`
