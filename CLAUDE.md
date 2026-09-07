@@ -33,14 +33,24 @@ here; the codebase itself is described in `README.md`, `CONTRIBUTING.md` and
   DevTools screenshot script pattern (`scratchpad/shot.mjs`) works with
   `--theme light|graphite` to cover every theme.
 
+## Where local things go (never committed)
+
+- **`tmp/`** (git-ignored) holds research notes, hand-off documents, diagnostics,
+  generated reports — anything written for the maintainer or for the next session
+  rather than for users of the repo. Write there by default; the maintainer moves
+  a file out deliberately when it should ship.
+- **Local skills** live in `.claude/skills/<name>/SKILL.md` (git-ignored). Scripts a
+  skill drives may live in `scripts/` and ship; the skill itself stays local.
+- `tmp.md` at the repo root is excluded via `.git/info/exclude` for the same reason.
+
 ## Tests and commits
 
 - **Backend changes need tests** in `test/` (`node --test`, run with `npm test`).
   Frontend tests are deliberately skipped for now.
+- Before a tag/release run `npm run release:check` (tests, build, provider-CLI
+  flags, privacy scan); see `RELEASE-CHECKLIST.md`.
 - Commit only when asked. On the v2 branch the maintainer wants tag `v2.0.0`
   moved to the branch tip after each round (`git tag -f v2.0.0`).
-- `tmp.md` at the repo root is git-excluded (`.git/info/exclude`) on purpose.
-  Never add it, never remove the exclusion.
 - Keep `CHANGELOG.md` current in the same commit as the feature.
 
 ## UI rules the maintainer has asked for (do not regress)

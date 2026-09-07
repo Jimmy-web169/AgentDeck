@@ -30,3 +30,6 @@ testproj/
 roots.claude.json
 roots.codex.json
 .claude/
+
+# local research notes, handoffs, scratch — never committed (see CLAUDE.md)
+tmp/

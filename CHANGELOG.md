@@ -86,6 +86,11 @@ its real terminal.
 - `make all` now runs `make update` first: every tracked provider CLI updates
   itself (`claude update`, `codex update`) before the servers start; failures
   only warn, `AGENTDECK_SKIP_UPDATE=1` skips it offline.
+- **Release gate**: `npm run release:check` = tests + build + `check:providers`
+  (every CLI flag AgentDeck drives still exists: `claude --resume`, `codex resume`,
+  tmux/ttyd/node-pty) + `check:privacy` (no home paths, e-mails or keys in what git
+  ships; LICENSE present). CI (`.github/workflows/ci.yml`) runs tests and the build
+  on Ubuntu, Windows and macOS. `RELEASE-CHECKLIST.md` lists the manual steps.
 - `PROVIDER-SPEC.md` — a draft contract for providers: the normalized core
   components, the shared route table, known claude/codex misalignments, a
   format-drift probe design and MCP-config normalization. For discussion.

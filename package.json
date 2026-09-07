@@ -13,7 +13,10 @@
     "web": "vite",
     "build": "vite build",
     "start": "node server/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "check:providers": "node scripts/check-providers.mjs",
+    "check:privacy": "node scripts/check-privacy.mjs",
+    "release:check": "npm test && npm run build && npm run check:providers && npm run check:privacy"
   },
   "dependencies": {
     "@lydell/node-pty": "^1.2.0-beta.12",

@@ -82,7 +82,7 @@ export function resolveVendoredExe(bin, pkgName, exeName) {
 }
 
 let ttydBin
-const findTtyd = () => (ttydBin !== undefined ? ttydBin : (ttydBin = findOnPath(['ttyd'], ['/opt/homebrew/bin/ttyd', '/usr/local/bin/ttyd'])))
+export const findTtyd = () => (ttydBin !== undefined ? ttydBin : (ttydBin = findOnPath(['ttyd'], ['/opt/homebrew/bin/ttyd', '/usr/local/bin/ttyd'])))
 
 // On Windows "tmux" is psmux's tmux-compatible alias. winget's portable install
 // adds its package dir to the *user* PATH, which a server started from an older
@@ -94,7 +94,7 @@ const TMUX_EXTRA = IS_WIN
     ]
   : ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux']
 let tmuxBin
-const findTmux = () => (tmuxBin !== undefined ? tmuxBin : (tmuxBin = findOnPath(['tmux'], TMUX_EXTRA)))
+export const findTmux = () => (tmuxBin !== undefined ? tmuxBin : (tmuxBin = findOnPath(['tmux'], TMUX_EXTRA)))
 
 // A stable, collision-free tmux session name derived from the terminal key, so
 // reopening the same monitored session always re-attaches the same tmux session.
