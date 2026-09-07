@@ -6,10 +6,10 @@ import { baseName, shortPath } from './paths.js'
 // Claude Code, by a second Claude account and by Codex shows up as three
 // projects; a workspace puts them under one name and shows their sessions as
 // one list.
-//   workspace = { id, name, items: [item], at, color? }   color = an accent name (lib/providerColors.js ACCENTS)
+//   workspace = { id, name, items: [item], at, color? }   color = any hex (lib/accent.js; legacy names still resolve)
 //   item      = { kind: 'project' | 'session', provider, root, rootLabel, slug, cwd, project, id?, title? }
 const KEY = 'agentdeck_workspaces'
-import { ACCENT_NAMES } from './providerColors.js'
+import { normalizeColor } from './accent.js'
 
 export const projectKey = (p) => `${p?.provider || ''}|${p?.root || ''}|${p?.slug || ''}`
 export const itemKey = (it) => `${projectKey(it)}|${it?.kind === 'session' || it?.id ? it.id || '' : ''}`
@@ -41,7 +41,7 @@ function load() {
         id: w.id,
         name: w.name,
         at: w.at || 0,
-        color: ACCENT_NAMES.includes(w.color) ? w.color : null,
+        color: normalizeColor(w.color),
         // v1 stored `projects`; fold them into `items`
         items: [...(Array.isArray(w.items) ? w.items : []), ...(Array.isArray(w.projects) ? w.projects.map((p) => ({ ...p, kind: 'project' })) : [])].map(normItem).filter(Boolean),
       }))
@@ -109,9 +109,9 @@ export function deleteWorkspace(id) {
   save(workspaces.filter((w) => w.id !== id))
 }
 
-// null clears the colour (back to the neutral workspace icon)
+// any hex; null clears the colour (back to the neutral workspace icon)
 export function setWorkspaceColor(id, color) {
-  const c = ACCENT_NAMES.includes(color) ? color : null
+  const c = normalizeColor(color)
   save(workspaces.map((w) => (w.id === id ? { ...w, color: c } : w)))
 }
 

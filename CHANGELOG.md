@@ -127,12 +127,13 @@ its real terminal.
   placeholder home paths so `check:privacy` stays green. README records the
   v1 → v2 progression and shows both releases' material.
 
-- **Colours you choose.** Preferences › Colours sets each provider's accent
-  (tab dot, active-tab bar, folder chips, source tags) from a fourteen-colour
-  palette (emerald → teal → lime → cyan → sky → indigo → violet → fuchsia →
-  pink → rose → red → orange → amber, and grey); a workspace's ⋯ menu sets its
-  own colour (icon and name). Accents are theme tokens, so every theme stays
-  consistent.
+- **Any colour you like.** Preferences › Colours sets each provider's accent
+  (tab dot, active-tab bar, folder chips, source tags) and a workspace's ⋯ menu
+  sets its own (icon and name) — with a free picker, not a fixed palette: a hue
+  slider, a saturation slider, the system colour dialog, a hex field, and your
+  own saved swatches ("+ save"). A colour is stored as hex; the UI keeps its hue
+  and saturation and each theme paints the lightness (bright on Midnight and
+  Graphite, deep on Paper), so one choice reads well in all three.
 
 ### Changed
 - **One set of folder chips.** The sidebar's chips are the only scope picker;

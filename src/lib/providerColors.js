@@ -1,61 +1,60 @@
-import { getPrefs } from './prefs.js'
+import { getPrefs, subscribePrefs } from './prefs.js'
+import { NAMED, hexToHsl, normalizeColor } from './accent.js'
 
-// Named accents used by the shell chrome (tab dots, the active tab's top bar,
-// quick-switcher rows, folder chips, workspace icons). Every accent maps to
-// theme tokens (`--<name>-400` etc. in index.css, one value per theme), never a
-// hex value, so all three themes stay consistent. The classes are spelled out
-// here so Tailwind's scanner sees them.
-const COLORS = {
-  emerald: { dot: 'bg-emerald-400', text: 'text-emerald-300', bar: 'rgb(var(--emerald-400))' },
-  teal: { dot: 'bg-teal-400', text: 'text-teal-300', bar: 'rgb(var(--teal-400))' },
-  lime: { dot: 'bg-lime-400', text: 'text-lime-300', bar: 'rgb(var(--lime-400))' },
-  cyan: { dot: 'bg-cyan-400', text: 'text-cyan-300', bar: 'rgb(var(--cyan-400))' },
-  sky: { dot: 'bg-sky-400', text: 'text-sky-300', bar: 'rgb(var(--sky-400))' },
-  indigo: { dot: 'bg-indigo-400', text: 'text-indigo-300', bar: 'rgb(var(--indigo-400))' },
-  violet: { dot: 'bg-violet-400', text: 'text-violet-300', bar: 'rgb(var(--violet-400))' },
-  fuchsia: { dot: 'bg-fuchsia-400', text: 'text-fuchsia-300', bar: 'rgb(var(--fuchsia-400))' },
-  pink: { dot: 'bg-pink-400', text: 'text-pink-300', bar: 'rgb(var(--pink-400))' },
-  rose: { dot: 'bg-rose-400', text: 'text-rose-300', bar: 'rgb(var(--rose-400))' },
-  red: { dot: 'bg-red-400', text: 'text-red-300', bar: 'rgb(var(--red-400))' },
-  orange: { dot: 'bg-orange-400', text: 'text-orange-300', bar: 'rgb(var(--orange-400))' },
-  amber: { dot: 'bg-amber-400', text: 'text-amber-300', bar: 'rgb(var(--amber-400))' },
-  zinc: { dot: 'bg-zinc-500', text: 'text-zinc-400', bar: 'rgb(var(--zinc-500))' },
+// Per-provider accent used by the shell chrome (tab dots, the active tab's top
+// bar, quick-switcher rows, folder chips, source tags). A provider names a
+// default colour in its registry entry (`color`, a legacy name or a hex); the
+// user's choice in Preferences › Colours (prefs.providerColors, any hex) wins.
+//
+// Consumers get *class names* (`ac-<id>-dot`, `ac-<id>-text`) and a bar colour.
+// The classes are written into a <style> element at runtime — one rule pair per
+// registered provider, reading `--ac-<id>-h` / `--ac-<id>-s` from <html> — so a
+// colour change repaints everything without any component knowing about hex
+// values, and the theme still owns the lightness (--accent-l-* in index.css).
+
+let registered = []
+const cls = (id) => String(id || '').replace(/[^a-z0-9_-]/gi, '_')
+const NEUTRAL = { hex: NAMED.zinc, dot: 'bg-zinc-500', text: 'text-zinc-400', bar: 'rgb(var(--zinc-500))' }
+
+export function providerDefaultColor(providers, id) {
+  return normalizeColor(providers?.find((p) => p.id === id)?.color) || NAMED.zinc
 }
-
-// what a colour picker offers (Preferences › Colours, a workspace's ⋯ menu),
-// in hue order so neighbours look related
-export const ACCENTS = [
-  { k: 'emerald', label: 'Emerald' },
-  { k: 'teal', label: 'Teal' },
-  { k: 'lime', label: 'Lime' },
-  { k: 'cyan', label: 'Cyan' },
-  { k: 'sky', label: 'Sky' },
-  { k: 'indigo', label: 'Indigo' },
-  { k: 'violet', label: 'Violet' },
-  { k: 'fuchsia', label: 'Fuchsia' },
-  { k: 'pink', label: 'Pink' },
-  { k: 'rose', label: 'Rose' },
-  { k: 'red', label: 'Red' },
-  { k: 'orange', label: 'Orange' },
-  { k: 'amber', label: 'Amber' },
-  { k: 'zinc', label: 'Grey' },
-]
-export const ACCENT_NAMES = ACCENTS.map((a) => a.k)
-export const isAccent = (name) => Object.prototype.hasOwnProperty.call(COLORS, name)
-export const accentClasses = (name, fallback = 'zinc') => COLORS[name] || COLORS[fallback]
-
-// A provider's accent: the user's choice (Preferences › Colours, stored in
-// prefs.providerColors) wins over the registry default (`color` in
-// src/providers/<id>.jsx). Callers re-render on pref changes through usePrefs.
-export function providerColorName(providers, id) {
-  const chosen = getPrefs().providerColors?.[id]
-  if (chosen && isAccent(chosen)) return chosen
-  return providers?.find((p) => p.id === id)?.color || 'zinc'
+export function providerColorValue(providers, id) {
+  return normalizeColor(getPrefs().providerColors?.[id]) || providerDefaultColor(providers, id)
 }
 export function providerColor(providers, id) {
-  return accentClasses(providerColorName(providers, id))
+  if (!id || !registered.some((p) => p.id === id)) return NEUTRAL
+  const k = cls(id)
+  return { hex: providerColorValue(providers, id), dot: `ac-${k}-dot`, text: `ac-${k}-text`, bar: `hsl(var(--ac-${k}-h) var(--ac-${k}-s) var(--accent-l-bar))` }
 }
 
 export function providerLabel(providers, id) {
   return providers?.find((p) => p.id === id)?.label || id || ''
 }
+
+// Called once with the provider list (src/providers/index.js); re-applied on
+// every preference change.
+export function registerProviders(list) {
+  registered = Array.isArray(list) ? list : []
+  applyProviderAccents()
+}
+export function applyProviderAccents() {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  let css = ''
+  for (const p of registered) {
+    const k = cls(p.id)
+    const { h, s } = hexToHsl(providerColorValue(registered, p.id))
+    root.style.setProperty(`--ac-${k}-h`, String(h))
+    root.style.setProperty(`--ac-${k}-s`, `${s}%`)
+    css += `.ac-${k}-dot{background-color:hsl(var(--ac-${k}-h) var(--ac-${k}-s) var(--accent-l-dot))}\n.ac-${k}-text{color:hsl(var(--ac-${k}-h) var(--ac-${k}-s) var(--accent-l-text))}\n`
+  }
+  let el = document.getElementById('agentdeck-accents')
+  if (!el) {
+    el = document.createElement('style')
+    el.id = 'agentdeck-accents'
+    document.head.appendChild(el)
+  }
+  if (el.textContent !== css) el.textContent = css
+}
+subscribePrefs(applyProviderAccents)

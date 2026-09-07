@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { normalizeColor } from './accent.js'
 
 // User preferences — the knobs the Preferences popover exposes. Stored in
 // localStorage and applied to <html> as data attributes so plain CSS can react
@@ -19,12 +20,12 @@ export const DENSITIES = [
 
 // inlineSubagents: sub-agent threads expand under the tool call that spawned
 // them in the Conversation view (off = the pre-2.0 view, Sub-agents tab only).
-// providerColors: { <providerId>: <accent name> } — the user's override of a
-// provider's shell accent (see lib/providerColors.js); absent = the registry default.
+// providerColors: { <providerId>: <hex> } — the user's override of a provider's
+// shell accent (see lib/providerColors.js); absent = the registry default.
+// customAccents: the user's own saved swatches (hex), shown in every colour picker.
 // showSuggestions: the "Suggested · same folder in several places" box under Workspaces.
-const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {} }
-// kept in step with ACCENTS in lib/providerColors.js (which imports this file, so no import here)
-const ACCENT_NAMES = ['emerald', 'teal', 'lime', 'cyan', 'sky', 'indigo', 'violet', 'fuchsia', 'pink', 'rose', 'red', 'orange', 'amber', 'zinc']
+const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {}, customAccents: [] }
+const MAX_SWATCHES = 24
 
 function load() {
   let prefs = { ...DEFAULTS }
@@ -36,8 +37,18 @@ function load() {
   } catch {}
   if (!THEMES.some((x) => x.k === prefs.theme)) prefs.theme = DEFAULTS.theme
   if (!DENSITIES.some((x) => x.k === prefs.density)) prefs.density = DEFAULTS.density
+  // colours are stored as hex; legacy palette names from before still resolve
   const pc = prefs.providerColors && typeof prefs.providerColors === 'object' ? prefs.providerColors : {}
-  prefs.providerColors = Object.fromEntries(Object.entries(pc).filter(([, v]) => ACCENT_NAMES.includes(v)))
+  prefs.providerColors = Object.fromEntries(
+    Object.entries(pc)
+      .map(([k, v]) => [k, normalizeColor(v)])
+      .filter(([, v]) => v)
+  )
+  const seen = new Set()
+  prefs.customAccents = (Array.isArray(prefs.customAccents) ? prefs.customAccents : [])
+    .map(normalizeColor)
+    .filter((c) => c && !seen.has(c) && seen.add(c))
+    .slice(-MAX_SWATCHES)
   return prefs
 }
 
@@ -67,6 +78,7 @@ if (typeof window !== 'undefined') {
 }
 
 export const getPrefs = () => prefs
+export const subscribePrefs = subscribe
 export function usePrefs() {
   return useSyncExternalStore(subscribe, getPrefs, getPrefs)
 }

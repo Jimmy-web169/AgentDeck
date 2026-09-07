@@ -6,6 +6,10 @@ import TabStrip from './components/shared/TabStrip.jsx'
 import QuickSwitcher from './components/shared/QuickSwitcher.jsx'
 import FoldersDialog from './components/shared/FoldersDialog.jsx'
 import { PROVIDER_LIST } from './providers/index.js'
+import { registerProviders } from './lib/providerColors.js'
+
+// per-provider accent classes (ac-<id>-dot / -text) are generated from prefs for this list
+registerProviders(PROVIDER_LIST)
 import { emptyTab, forgetRecent, isHome, loadRecent, loadTabs, normalizeView, pushRecent, sameTarget, saveTabs, targetKey } from './lib/tabs.js'
 import { forgetPins } from './lib/pins.js'
 import { baseName } from './lib/paths.js'

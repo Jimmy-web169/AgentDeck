@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { DENSITIES, THEMES, setPref, usePrefs } from '../../lib/prefs.js'
-import { ACCENTS, accentClasses, providerColorName } from '../../lib/providerColors.js'
+import { providerColor, providerColorValue, providerDefaultColor } from '../../lib/providerColors.js'
+import AccentPicker from './AccentPicker.jsx'
 import { GearIcon } from './shellIcons.jsx'
 
 // The gear in the tab strip: a small popover with the things a person is likely
@@ -46,36 +47,34 @@ function Toggle({ label, hint, value, onChange }) {
   )
 }
 
-// One row per provider: its shell accent (tab dot, folder chip, source tag).
-// The registry default stays selectable; picking it again clears the override.
+// One block per provider: its shell accent (tab dot, active-tab bar, folder
+// chip, source tag), picked freely; "default" restores the registry colour.
 function ProviderColors({ providers, prefs }) {
   return providers.map((p) => {
-    const current = providerColorName(providers, p.id)
+    const value = providerColorValue(providers, p.id)
+    const def = providerDefaultColor(providers, p.id)
+    const overridden = !!prefs.providerColors?.[p.id] && value !== def
     return (
-      <div key={p.id} className="py-1">
-        <div className="flex items-center gap-2 mb-1">
-          <span className={`w-2 h-2 rounded-full shrink-0 ${accentClasses(current).dot}`} />
-          <span className="text-[12.5px] text-zinc-200 truncate">{p.label}</span>
-          <span className="text-[11px] text-zinc-500">{ACCENTS.find((a) => a.k === current)?.label}</span>
+      <div key={p.id} className="py-1.5 first:pt-0">
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${providerColor(providers, p.id).dot}`} />
+          <span className="text-[12.5px] text-zinc-200">{p.label}</span>
+          <span className="text-[11px] font-mono text-zinc-500">{value}</span>
         </div>
-        <span className="flex flex-wrap items-center gap-1.5 pl-4">
-          {ACCENTS.map((a) => {
-            const on = current === a.k
-            return (
-              <button
-                key={a.k}
-                onClick={() => {
+        <AccentPicker
+          value={value}
+          defaultValue={def}
+          onChange={(hex) => setPref('providerColors', { ...(prefs.providerColors || {}), [p.id]: hex })}
+          onReset={
+            overridden
+              ? () => {
                   const next = { ...(prefs.providerColors || {}) }
-                  if (a.k === p.color) delete next[p.id]
-                  else next[p.id] = a.k
+                  delete next[p.id]
                   setPref('providerColors', next)
-                }}
-                title={a.k === p.color ? `${a.label} (default)` : a.label}
-                className={`w-4 h-4 rounded-full ${accentClasses(a.k).dot} ${on ? 'ring-2 ring-zinc-100 ring-offset-1 ring-offset-ink-800' : 'opacity-60 hover:opacity-100'}`}
-              />
-            )
-          })}
-        </span>
+                }
+              : null
+          }
+        />
       </div>
     )
   })
@@ -105,7 +104,7 @@ export default function Preferences({ className = '', providers = [] }) {
         <GearIcon />
       </button>
       {open && (
-        <div ref={ref} className="absolute right-0 top-full z-50 mt-1 w-[300px] rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl p-3.5">
+        <div ref={ref} className="absolute right-0 top-full z-50 mt-1 w-[330px] max-h-[85vh] overflow-y-auto rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl p-3.5">
           <Group title="Theme">
             <Pills options={THEMES} value={prefs.theme} onPick={(v) => setPref('theme', v)} />
           </Group>

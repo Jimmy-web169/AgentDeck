@@ -171,7 +171,8 @@ async function tour(t, fx, cdp) {
   // Preferences: pick a different accent for the first provider
   await t.click(`document.querySelector('button[title="Preferences"]')`, { after: 900 })
   await t.wait(`/colours/i.test(${T})`, 3000) // innerText carries the CSS uppercase
-  await t.click(`document.querySelector('button[title="Violet"]') || document.querySelector('button[title="Teal"]')`, { after: 1400 })
+  // one of the seeded saved swatches (the picker is free-form; swatches are the user's own)
+  await t.click(`[...document.querySelectorAll('[data-swatch]')][1] || null`, { after: 1400 })
   await t.key('Escape', 'Escape')
   await sleep(1200)
   await t.moveTo(W * 0.55, H * 0.5, 600)

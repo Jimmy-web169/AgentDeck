@@ -6,7 +6,8 @@ import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import { createWorkspace, deleteWorkspace, projectKey, removeFromWorkspace, renameWorkspace, setWorkspaceColor, sourceKey, suggestWorkspaces, useWorkspaces, workspaceHolding, workspaceSources } from '../../lib/workspaces.js'
 import { usePrefs } from '../../lib/prefs.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
-import { accentClasses, providerColor, providerLabel } from '../../lib/providerColors.js'
+import { providerColor, providerLabel } from '../../lib/providerColors.js'
+import { accentStyle } from '../../lib/accent.js'
 import { ChevronRightIcon, CloseIcon, DotsIcon, LayersIcon, PinIcon, PlusIcon } from './shellIcons.jsx'
 import { FolderIcon } from './icons.jsx'
 import PathPicker from './PathPicker.jsx'
@@ -524,7 +525,9 @@ export default function AppSidebar({
                       <div className={`group relative flex items-stretch hover:bg-ink-700/50 ${open ? 'bg-ink-700/30' : ''}`}>
                         <button onClick={() => toggleWs(w.id)} className="flex-1 min-w-0 text-left pl-2 pr-1 py-1.5 flex items-center gap-1.5">
                           <ChevronRightIcon className={`w-3 h-3 text-zinc-600 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-                          <LayersIcon className={`w-3.5 h-3.5 shrink-0 ${w.color ? accentClasses(w.color).text : 'text-sky-300/80'}`} />
+                          <span className="shrink-0 inline-flex" style={w.color ? accentStyle(w.color).style : undefined}>
+                            <LayersIcon className={`w-3.5 h-3.5 ${w.color ? 'accent-text' : 'text-sky-300/80'}`} />
+                          </span>
                           {renaming?.id === w.id ? (
                             <input
                               autoFocus
@@ -541,7 +544,7 @@ export default function AppSidebar({
                               className="flex-1 min-w-0 bg-ink-700 border border-zinc-700 rounded px-1.5 py-0.5 text-[12.5px] text-zinc-100"
                             />
                           ) : (
-                            <span className={`text-[12.5px] truncate ${w.color ? accentClasses(w.color).text : 'text-zinc-200'}`} title={w.name}>{wsName.get(w.id) || w.name}</span>
+                            <span className={`text-[12.5px] truncate ${w.color ? 'accent-text' : 'text-zinc-200'}`} style={w.color ? accentStyle(w.color).style : undefined} title={w.name}>{wsName.get(w.id) || w.name}</span>
                           )}
                           {!open && sources.length > 0 && (
                             <span className="flex -space-x-0.5 shrink-0 ml-1">
@@ -562,7 +565,7 @@ export default function AppSidebar({
                             { label: 'Rename', onClick: () => setRenaming({ id: w.id, name: w.name }) },
                             { label: 'Delete workspace', danger: true, onClick: () => askDeleteWorkspace(w) },
                           ]}
-                          swatches={{ value: w.color, onPick: (c) => setWorkspaceColor(w.id, c) }}
+                          accent={{ value: w.color, onChange: (c) => setWorkspaceColor(w.id, c), onReset: w.color ? () => setWorkspaceColor(w.id, null) : null, resetLabel: 'clear' }}
                         />
                       </div>
                       {open && (
