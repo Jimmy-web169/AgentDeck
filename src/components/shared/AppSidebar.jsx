@@ -24,7 +24,10 @@ import useConfirm from '../../lib/useConfirm.jsx'
 //                folder, shown as ONE flat session list; a coloured source tag
 //                (provider dot + folder label) tells the members apart, and
 //                the source chips above the list filter it
-//   Pinned       pinned projects (expand in place) and sessions, every provider
+//   Pinned       pinned projects (expand in place) and sessions, every provider.
+//                Pinning MOVES a row here: a pinned project leaves the Projects
+//                list and a pinned session leaves its project's inline list, so
+//                nothing is listed twice (searching shows everything again).
 //   Projects     the current folder's projects; expand one to see its sessions
 //
 // Every row has the same two hover controls — pin and ⋯ — and everything else
@@ -168,11 +171,14 @@ function ProjectLine({ ctx, src, open, onToggle, menuKey, children }) {
 
 // sessions of a project from the index (pinned projects expand in place)
 function ProjectSessions({ ctx, src, indent = 'pl-9', keyPrefix }) {
-  const { index, openKeys, toggleKey } = ctx
-  const lst = index.sessionsFor(src.provider, src.root, src.slug)
+  const { index, openKeys, toggleKey, hidePinned } = ctx
+  const full = index.sessionsFor(src.provider, src.root, src.slug)
   const all = openKeys.has(`${keyPrefix}|all`)
-  if (lst === null) return <div className={`${indent} pr-2 py-1.5 text-[11.5px] text-zinc-600`}>loading…</div>
-  if (!lst.length) return <div className={`${indent} pr-2 py-1.5 text-[11.5px] text-zinc-600`}>no sessions yet</div>
+  if (full === null) return <div className={`${indent} pr-2 py-1.5 text-[11.5px] text-zinc-600`}>loading…</div>
+  // pinned sessions live in the Pinned section, not under their project
+  const lst = hidePinned ? full.filter((s) => !isPinned({ provider: src.provider, root: src.root, slug: src.slug, id: s.id })) : full
+  const hidden = full.length - lst.length
+  if (!full.length) return <div className={`${indent} pr-2 py-1.5 text-[11.5px] text-zinc-600`}>no sessions yet</div>
   const shown = all ? lst : lst.slice(0, INLINE_SESSIONS)
   return (
     <>
@@ -181,6 +187,12 @@ function ProjectSessions({ ctx, src, indent = 'pl-9', keyPrefix }) {
         <button onClick={() => toggleKey(`${keyPrefix}|all`)} className={`${indent} pr-2 py-1 text-[11px] text-sky-400 hover:text-sky-300`}>
           {all ? 'show fewer' : `show all ${lst.length}`}
         </button>
+      )}
+      {hidden > 0 && (
+        <div className={`${indent} pr-2 py-1 text-[11px] text-zinc-600 flex items-center gap-1`} title="Pinned sessions are listed in the Pinned section above">
+          <PinIcon className="w-3 h-3 text-amber-300/70" />
+          {lst.length ? `${hidden} more pinned · see Pinned` : `${hidden === 1 ? 'its only session is' : `all ${hidden} sessions are`} pinned · see Pinned`}
+        </div>
       )}
     </>
   )
@@ -280,7 +292,10 @@ export default function AppSidebar({
     setMenuFor(null)
   }, [provider, root, openSlug])
 
-  const list = sessions || []
+  // pinning moves a row into Pinned; the move is undone while searching or when the Pinned section is switched off
+  const hidePinned = !filter && !!prefs.showPinned
+  const list = (sessions || []).filter((s) => !hidePinned || !isPinned({ provider, root, slug: openSlug, id: s.id }))
+  const hiddenPinned = (sessions || []).length - list.length
   const selCount = list.filter((s) => selected.has(s.id)).length
 
   const toggleSelected = (id) =>
@@ -407,9 +422,10 @@ export default function AppSidebar({
     if (ok) deleteWorkspace(w.id)
   }
 
-  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, askTrash, menuFor, setMenuFor, workspaces, openKeys, toggleKey }
+  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, askTrash, menuFor, setMenuFor, workspaces, openKeys, toggleKey, hidePinned }
 
   const filtered = projects.filter((p) => {
+    if (hidePinned && isPinned({ provider, root, slug: p.slug })) return false
     if (!filter) return true
     const hay = `${p.cwd || ''} ${p.slug} ${p.name}`.toLowerCase()
     return hay.includes(filter.toLowerCase())
@@ -669,6 +685,12 @@ export default function AppSidebar({
                       {sessions === null && <div className="px-7 py-2 text-[12px] text-zinc-600">loading…</div>}
                       {sessions && sessions.length === 0 && <div className="px-7 py-2 text-[12px] text-zinc-600">no sessions yet</div>}
                       {list.map((s) => <SessionLine ctx={ctx} key={s.id} src={src} s={s} menuKey={`${mk}|${s.id}`} selectable={selectMode} />)}
+                      {hiddenPinned > 0 && (
+                        <div className="pl-7 pr-2 py-1 text-[11px] text-zinc-600 flex items-center gap-1" title="Pinned sessions are listed in the Pinned section above">
+                          <PinIcon className="w-3 h-3 text-amber-300/70" />
+                          {list.length ? `${hiddenPinned} more pinned · see Pinned` : `${hiddenPinned === 1 ? 'its only session is' : `all ${hiddenPinned} sessions are`} pinned · see Pinned`}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

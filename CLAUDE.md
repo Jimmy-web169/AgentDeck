@@ -51,6 +51,8 @@ here; the codebase itself is described in `README.md`, `CONTRIBUTING.md` and
 - Insights is *personal* (rhythm, streaks, session shape, neglected projects) and
   must not repeat Stats (tokens, tool bars, model mix).
 - Keyboard hints must be visible without scrolling.
+- Pinning moves a row into the Pinned section (it leaves Projects / its
+  project's inline list); nothing is listed twice except while searching.
 
 ## Gotchas
 

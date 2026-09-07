@@ -37,8 +37,11 @@ its real terminal.
   folder (the same repo under Claude Code, a second Claude account and Codex,
   say). A workspace shows ONE flat session list; a coloured source tag
   (provider dot + folder label) tells members apart and the source chips
-  filter the list. The sidebar suggests groups for folders it sees in several
-  places; two different folders with the same name (…/project/AgentDeck and
+  filter the list. Pinning *moves* a row into Pinned: a pinned project leaves
+  the Projects list and a pinned session leaves its project's inline list (a
+  muted "2 more pinned · see Pinned" line marks the gap), so nothing is listed
+  twice; searching shows everything again. The sidebar suggests groups for
+  folders it sees in several places; two different folders with the same name (…/project/AgentDeck and
   …/maintain/AgentDeck) are suggested with their parent folder in the name,
   pressing Group twice reuses the existing workspace instead of duplicating
   it, and same-named workspaces show their parent folder in the list. Pinned
