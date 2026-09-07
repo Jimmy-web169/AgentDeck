@@ -2,12 +2,11 @@ import { useEffect, useState } from 'react'
 import { codexApi as api } from '../../api.js'
 import Stats from './Stats.jsx'
 import HistoryView from '../shared/HistoryView.jsx'
-import MemoryView from './MemoryView.jsx'
 import PluginsView from './PluginsView.jsx'
 import ResourcesView from './ResourcesView.jsx'
 
-// Home pages for the Codex provider (home-scoped: stats, history, memory,
-// plugins, resources). Each page takes { root, focus, onOpen } — onOpen(target)
+// Home pages for the Codex provider (home-scoped: stats, history, plugins,
+// resources). Each page takes { root, focus, onOpen } — onOpen(target)
 // asks the shell to open a session { root, id } in the current tab (Codex is
 // id-addressed; the app derives the project from the session).
 
@@ -43,10 +42,6 @@ export function HistoryPage({ root }) {
   return <HistoryView data={data} />
 }
 
-export function MemoryPage({ root }) {
-  return <MemoryView root={root} />
-}
-
 export function PluginsPage({ root }) {
   return <PluginsView root={root} />
 }
@@ -58,7 +53,6 @@ export function ResourcesPage({ root }) {
 export const HOME_PAGES = {
   stats: StatsPage,
   history: HistoryPage,
-  memory: MemoryPage,
   plugins: PluginsPage,
   resources: ResourcesPage,
 }

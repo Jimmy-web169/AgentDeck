@@ -4,7 +4,7 @@
 //   #/<provider>/<root>                 a tracked folder
 //   #/<provider>                        a provider's app as-is
 //   #/home/<view>                       a Home page (stats, history, …)
-//   #/                                  Home overview
+//   #/                                  Home (Activity)
 // Every segment is URI-encoded (codex slugs are absolute cwds, claude slugs
 // contain nothing worse than '-', but encode uniformly).
 
@@ -19,7 +19,8 @@ const dec = (s) => {
 
 export function toHash(target) {
   if (!target?.provider) {
-    return target?.view && target.view !== 'overview' ? `#/home/${enc(target.view)}` : '#/'
+    const v = target?.view
+    return v && v !== 'activity' && v !== 'overview' ? `#/home/${enc(v)}` : '#/'
   }
   const parts = [target.provider]
   if (target.root) {
@@ -41,8 +42,8 @@ export function fromHash(hash, knownProviders = []) {
     .split('/')
     .filter(Boolean)
     .map(dec)
-  if (!segs.length) return { provider: null } // Home overview
-  if (segs[0] === 'home') return { provider: null, view: segs[1] || 'overview' }
+  if (!segs.length) return { provider: null } // Home (Activity)
+  if (segs[0] === 'home') return { provider: null, view: segs[1] || 'activity' }
   const [provider, root, slug, id] = segs
   if (knownProviders.length && !knownProviders.includes(provider)) return null
   const t = { provider }

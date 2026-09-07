@@ -4,6 +4,7 @@ import Conversation from './components/claude/Conversation.jsx'
 import RawView from './components/shared/RawView.jsx'
 import SubagentsView from './components/claude/SubagentsView.jsx'
 import Resources from './components/claude/Resources.jsx'
+import MemoryView from './components/claude/MemoryView.jsx'
 import { ShortcutChips } from './components/shared/ShortcutHints.jsx'
 import TerminalPanel from './components/claude/TerminalPanel.jsx'
 import LiveSessionsPanel from './components/shared/LiveSessionsPanel.jsx'
@@ -25,6 +26,7 @@ const SESSION_TABS = [
   { k: 'conversation', need: 'session', label: 'Conversation' },
   { k: 'subagents', need: 'subagents', label: 'Sub-agents' },
   { k: 'raw', need: 'session', label: 'Raw' },
+  { k: 'memory', need: 'project', label: 'Memory' },
   { k: 'config', need: 'project', label: 'Config' },
 ]
 const VIEWS = new Set(SESSION_TABS.map((t) => t.k))
@@ -316,7 +318,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
         setRaw(null)
         setTermDraft(null)
       }
-      const v = view === 'config' ? 'config' : 'conversation'
+      const v = view === 'config' || view === 'memory' ? view : 'conversation'
       if (tabRef.current !== v) {
         setTab(v)
         tabRef.current = v
@@ -506,6 +508,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
           <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
             {tab === 'subagents' && <SubagentsView key={(active && active.id) || 'none'} data={subagents} version={active ? getSessionVersion(sessionVersions, 'claude', root, active.id) : 0} active={appActive} />}
             {tab === 'raw' && raw && <RawView records={raw.records} />}
+            {tab === 'memory' && root && openSlug && <MemoryView key={`mem-${root}-${openSlug}`} root={root} slug={openSlug} />}
             {tab === 'config' && root && openSlug && <Resources key={`cfg-${root}-${openSlug}`} root={root} slug={openSlug} />}
           </ErrorBoundary>
         </div>

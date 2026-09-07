@@ -2,12 +2,11 @@ import { useEffect, useState } from 'react'
 import { claudeApi as api } from '../../api.js'
 import Stats from '../shared/Stats.jsx'
 import HistoryView from '../shared/HistoryView.jsx'
-import MemoryView from './MemoryView.jsx'
 import PluginsView from './PluginsView.jsx'
 import Resources from './Resources.jsx'
 
-// Home pages for the Claude provider (folder-scoped: stats, history, memory,
-// plugins, resources). Each page takes { root, focus, onOpen } — onOpen(target)
+// Home pages for the Claude provider (folder-scoped: stats, history, plugins,
+// resources). Each page takes { root, focus, onOpen } — onOpen(target)
 // asks the shell to open a session { root, slug, id, title } in the current tab.
 
 function useFetch(fn, deps) {
@@ -42,12 +41,6 @@ export function HistoryPage({ root }) {
   return <HistoryView data={data} />
 }
 
-export function MemoryPage({ root }) {
-  const [projects, err] = useFetch(() => api.projects(root).then((d) => d.projects || []), [root])
-  if (err) return <Err msg={err} />
-  return <MemoryView root={root} projects={projects || []} />
-}
-
 export function PluginsPage({ root }) {
   const [data, err] = useFetch(() => api.plugins(root), [root])
   if (err) return <Err msg={err} />
@@ -61,7 +54,6 @@ export function ResourcesPage({ root }) {
 export const HOME_PAGES = {
   stats: StatsPage,
   history: HistoryPage,
-  memory: MemoryPage,
   plugins: PluginsPage,
   resources: ResourcesPage,
 }

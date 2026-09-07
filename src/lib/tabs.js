@@ -2,28 +2,31 @@
 //
 // A tab = { key, target }. `target` says where the tab is:
 //   { provider, root, rootLabel, slug, id, title, project, cwd, draft, view }
-// Everything is optional. No provider → Home (the logo page: overview, stats,
-// history, memory, plugins, resources, folders — `view` picks the page and
-// `scope` = { provider, root } picks the folder for the per-folder pages).
-// A provider without a session shows that provider's app as it is. `draft`
-// marks a not-yet-saved "new conversation". `view` remembers which in-app tab
-// (conversation / sub-agents / raw / config) the tab was on, so switching back
-// lands where you left. Tabs persist in localStorage.
+// Everything is optional. No provider → Home: `view` picks the page
+// (activity, stats, history, plugins, resources, folders); the per-folder
+// pages use the sidebar's scope. A provider without a session shows that
+// provider's app as it is. `draft` marks a not-yet-saved "new conversation".
+// `view` remembers which in-app tab (conversation / sub-agents / raw / memory /
+// config) the tab was on, so switching back lands where you left. Tabs persist
+// in localStorage.
 
 export const TABS_KEY = 'agentdeck_tabs'
 export const RECENT_KEY = 'agentdeck_recent'
 const RECENT_MAX = 40
 
+// Home pages. `nav: false` keeps a page reachable (deep link, the "+" next to
+// the folder chips) without a button of its own.
 export const HOME_VIEWS = [
-  { k: 'overview', label: 'Overview' },
+  { k: 'activity', label: 'Activity' },
   { k: 'stats', label: 'Stats' },
   { k: 'history', label: 'History' },
-  { k: 'memory', label: 'Memory' },
   { k: 'plugins', label: 'Plugins' },
   { k: 'resources', label: 'Resources' },
-  { k: 'folders', label: 'Folders' },
+  { k: 'folders', label: 'Folders', nav: false },
 ]
-export const homeViewLabel = (k) => HOME_VIEWS.find((v) => v.k === k)?.label || ''
+const LEGACY_VIEWS = { overview: 'activity', memory: 'activity' }
+export const normalizeView = (v) => (HOME_VIEWS.some((x) => x.k === v) ? v : LEGACY_VIEWS[v] || 'activity')
+export const homeViewLabel = (k) => HOME_VIEWS.find((v) => v.k === normalizeView(k))?.label || ''
 
 export const newKey = () => Math.random().toString(36).slice(2, 10)
 
@@ -40,10 +43,7 @@ export const emptyTab = (target = null) => ({ key: newKey(), target })
 
 // What the strip prints for a tab: a primary (project) and secondary (session) part.
 export function tabLabel(target, providers = []) {
-  if (!target?.provider) {
-    const v = target?.view && target.view !== 'overview' ? homeViewLabel(target.view) : ''
-    return { primary: 'Home', secondary: v }
-  }
+  if (!target?.provider) return { primary: homeViewLabel(target?.view), secondary: '' }
   const providerLabel = providers.find((p) => p.id === target.provider)?.label || target.provider
   const project = target.project || ''
   if (target.draft) return { primary: project || target.title || providerLabel, secondary: target.title || 'New conversation' }
@@ -59,7 +59,11 @@ export function loadTabs() {
     if (!raw || !Array.isArray(raw.tabs)) return null
     const tabs = raw.tabs
       .filter((t) => t && typeof t === 'object')
-      .map((t) => ({ key: typeof t.key === 'string' && t.key ? t.key : newKey(), target: t.target && typeof t.target === 'object' ? t.target : null }))
+      .map((t) => {
+        let target = t.target && typeof t.target === 'object' ? t.target : null
+        if (target && !target.provider) target = { provider: null, view: normalizeView(target.view), focus: target.focus || null }
+        return { key: typeof t.key === 'string' && t.key ? t.key : newKey(), target }
+      })
     if (!tabs.length) return null
     const activeKey = tabs.some((t) => t.key === raw.activeKey) ? raw.activeKey : tabs[0].key
     return { tabs, activeKey }
@@ -74,7 +78,7 @@ export function saveTabs(tabs, activeKey) {
   } catch {}
 }
 
-// ---- recent (MRU) sessions for the quick switcher's empty state ----
+// ---- recent (MRU) sessions for the quick switcher / Activity ----
 export function loadRecent() {
   try {
     const arr = JSON.parse(localStorage.getItem(RECENT_KEY) || '[]')

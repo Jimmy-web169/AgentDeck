@@ -4,6 +4,7 @@ import Conversation from './components/codex/Conversation.jsx'
 import RawView from './components/shared/RawView.jsx'
 import ResourcesView from './components/codex/ResourcesView.jsx'
 import SubagentsView from './components/codex/SubagentsView.jsx'
+import MemoryView from './components/codex/MemoryView.jsx'
 import { ShortcutChips } from './components/shared/ShortcutHints.jsx'
 import TerminalPanel from './components/codex/TerminalPanel.jsx'
 import LiveSessionsPanel from './components/shared/LiveSessionsPanel.jsx'
@@ -30,6 +31,7 @@ const SESSION_TABS = [
   { k: 'conversation', need: 'session', label: 'Conversation' },
   { k: 'subagents', need: 'session', label: 'Sub-agents' },
   { k: 'raw', need: 'session', label: 'Raw' },
+  { k: 'memory', need: 'project', label: 'Memory' },
   { k: 'config', need: 'project', label: 'Config' },
 ]
 const VIEWS = new Set(SESSION_TABS.map((t) => t.k))
@@ -298,7 +300,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
         setRaw(null)
         setTermDraft(null)
       }
-      const v = view === 'config' ? 'config' : 'conversation'
+      const v = view === 'config' || view === 'memory' ? view : 'conversation'
       if (tabRef.current !== v) {
         setTab(v)
         tabRef.current = v
@@ -474,6 +476,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
           <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
             {tab === 'subagents' && active && <SubagentsView key={active.id} root={root} parent={active} versions={sessionVersions} active={appActive} onOpenSession={openSessionById} />}
             {tab === 'raw' && raw && <RawView records={raw.records} typeOf={CODEX_RAW_TYPE} />}
+            {tab === 'memory' && root && openSlug && <MemoryView key={`mem-${root}-${openSlug}`} root={root} cwd={openSlug} />}
           </ErrorBoundary>
         </div>
       )}

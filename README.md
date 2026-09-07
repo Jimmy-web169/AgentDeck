@@ -32,9 +32,11 @@ Per provider, in one UI:
 - **Continue a conversation** — pick up any session in an embedded terminal
   running the real CLI (tmux-backed, so it survives navigation and can be
   attached from any shell). Closing the tab ends it.
-- **Home** — the logo page: running terminals, pinned items and recent projects
-  across providers, per-folder Stats / History / Memory / Plugins / Resources,
-  and tracked-folder management.
+- **Home** — the AgentDeck wordmark: Activity (running terminals, latest
+  sessions, pinned items and recent projects across providers), per-folder
+  Stats / History / Plugins / Resources, and tracked-folder management.
+- **Memory per project** — a Memory tab next to Config for both providers
+  (Claude's `memory/*.md`, Codex's per-thread memories filtered to the project).
 - **Pins** — pin projects or sessions you're working on; they lead the sidebar,
   the quick switcher and Home.
 - **Live updates** — the UI lights up the moment an agent writes to disk

@@ -2,18 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createApi } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
-import { HOME_VIEWS, isHome } from '../../lib/tabs.js'
+import { HOME_VIEWS, isHome, normalizeView } from '../../lib/tabs.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { TrashIcon } from './icons.jsx'
-import { CheckSquareIcon, PanelLeftIcon, PinIcon } from './shellIcons.jsx'
+import { CheckSquareIcon, PinIcon } from './shellIcons.jsx'
 import PathPicker from './PathPicker.jsx'
-import ScopeBar from './ScopeBar.jsx'
+import FolderChips from './FolderChips.jsx'
 
 // The one sidebar. It belongs to the shell, so it is the same column whether
 // the active tab shows Home or a session — only the highlights move:
-//   scope        provider · folder (segmented + chips)
-//   Home pages   Overview · Stats · History · … · Folders (navigate this tab)
+//   folders      the active provider's tracked folders as chips (+ = track one)
+//   Home pages   Activity · Stats · History · Plugins · Resources
 //   filter, + New project
 //   Pinned       this folder's pinned projects / sessions
 //   Projects     expand one to see its sessions; click a session to open it
@@ -24,6 +24,7 @@ export default function AppSidebar({
   providers,
   index,
   live,
+  termKeys,
   scope,
   onScope,
   activeTarget,
@@ -33,7 +34,6 @@ export default function AppSidebar({
   onNewProject,
   onDeleteSession,
   onDeleteSessions,
-  onCollapse,
 }) {
   const [filter, setFilter] = useState('')
   const [openSlug, setOpenSlug] = useState(null)
@@ -52,7 +52,7 @@ export default function AppSidebar({
   const api = useMemo(() => (provider ? createApi(provider) : null), [provider])
   const scopeInfo = index.scopes.find((s) => s.provider === provider && s.root === root)
   const rootLabel = scopeInfo?.rootLabel || ''
-  const homeView = isHome(activeTarget) ? activeTarget?.view || 'overview' : null
+  const homeView = isHome(activeTarget) ? normalizeView(activeTarget?.view) : null
 
   const projects = useMemo(() => index.projects.filter((p) => p.provider === provider && p.root === root), [index.projects, provider, root])
   const sessions = openSlug && provider ? index.sessionsFor(provider, root, openSlug) : null
@@ -122,6 +122,9 @@ export default function AppSidebar({
   }
 
   const isLive = (id) => live?.ids?.has(liveSessionKey(provider, root, id))
+  const hasTerm = (id) => termKeys?.has(liveSessionKey(provider, root, id))
+  // terminal running › being written › nothing
+  const dotOf = (id) => (hasTerm(id) ? 'bg-red-400 animate-pulse' : isLive(id) ? 'bg-emerald-400 animate-pulse' : null)
   const isActiveSession = (id) => activeTarget?.provider === provider && activeTarget?.root === root && activeTarget?.id === id
   const projectTarget = (p) => ({ provider, root, rootLabel, slug: p.slug, cwd: p.cwd, project: p.name })
   const sessionTarget = (s) => {
@@ -140,17 +143,10 @@ export default function AppSidebar({
   return (
     <aside className="w-full h-full flex flex-col bg-ink-900 border-r border-zinc-800">
       <div className="p-3 border-b border-zinc-800 space-y-2.5">
-        <div className="flex items-start gap-2">
-          <div className="flex-1 min-w-0">
-            <ScopeBar scopes={index.scopes} providers={providers} value={scope} onChange={onScope} onManage={() => onOpenHome({ view: 'folders' })} />
-          </div>
-          <button onClick={onCollapse} title="Hide sidebar  (Ctrl+B)" className={`${iconBtn} mt-0.5 w-7 h-7 text-zinc-500 hover:text-zinc-100 hover:bg-ink-700`}>
-            <PanelLeftIcon />
-          </button>
-        </div>
+        <FolderChips scopes={index.scopes} provider={provider} root={root} onPick={onScope} onManage={() => onOpenHome({ view: 'folders' })} />
 
         <div className="flex flex-wrap gap-1">
-          {HOME_VIEWS.map((v) => (
+          {HOME_VIEWS.filter((v) => v.nav !== false).map((v) => (
             <button
               key={v.k}
               onClick={(e) => onOpenHome({ view: v.k }, { newTab: e.ctrlKey || e.metaKey })}
@@ -193,7 +189,7 @@ export default function AppSidebar({
                     className="flex-1 min-w-0 text-left pl-3 pr-2 py-1.5"
                   >
                     <div className="text-[12.5px] text-zinc-300 truncate flex items-center gap-1.5">
-                      {p.id && isLive(p.id) && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />}
+                      {p.id && dotOf(p.id) && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotOf(p.id)}`} />}
                       <span className="truncate">{p.id ? p.title || p.id.slice(0, 8) : p.project || p.slug}</span>
                     </div>
                     <div className="text-[10.5px] text-zinc-600 truncate">{p.id ? p.project || '' : 'project'}</div>
@@ -258,7 +254,7 @@ export default function AppSidebar({
                         <>
                           <span className="text-red-300">
                             trash {selCount}
-                            {list.some((s) => selected.has(s.id) && (isLive(s.id) || (s.lastTs && Date.now() - new Date(s.lastTs).getTime() < 5 * 60 * 1000))) ? ' (incl. active!)' : ''}?
+                            {list.some((s) => selected.has(s.id) && (dotOf(s.id) || (s.lastTs && Date.now() - new Date(s.lastTs).getTime() < 5 * 60 * 1000))) ? ' (incl. active!)' : ''}?
                           </span>
                           <button onClick={runBatchDelete} className="px-1.5 py-0.5 rounded bg-red-500/30 text-red-200">yes</button>
                           <button onClick={() => setConfirmBatch(false)} className="px-1.5 py-0.5 rounded bg-ink-600 text-zinc-300">no</button>
@@ -275,8 +271,8 @@ export default function AppSidebar({
                   {sessions && sessions.length === 0 && <div className="px-7 py-2 text-[12px] text-zinc-600">no sessions yet</div>}
                   {list.map((s) => {
                     const active = isActiveSession(s.id)
-                    const live = isLive(s.id)
-                    const recent = live || (s.lastTs && Date.now() - new Date(s.lastTs).getTime() < 5 * 60 * 1000)
+                    const dot = dotOf(s.id)
+                    const recent = !!dot || (s.lastTs && Date.now() - new Date(s.lastTs).getTime() < 5 * 60 * 1000)
                     const checked = selected.has(s.id)
                     const pinnedS = isPinned({ provider, root, slug: openSlug, id: s.id })
                     return (
@@ -290,7 +286,7 @@ export default function AppSidebar({
                         >
                           <div className="text-[12.5px] text-zinc-300 truncate flex items-center gap-1.5">
                             {selectMode && <span className={`shrink-0 ${checked ? 'text-red-300' : 'text-zinc-600'}`}>{checked ? '☑' : '☐'}</span>}
-                            {live && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />}
+                            {dot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} title={hasTerm(s.id) ? 'terminal running' : 'being written'} />}
                             {s.isSubagent && <span className="shrink-0 text-violet-400" title={`subagent${s.agentRole ? ` · ${s.agentRole}` : ''}`}>⤷</span>}
                             {s.oversized && <span className="shrink-0 text-amber-400" title="Transcript exceeds the parse limit — it can't be opened, but other sessions are unaffected">⚠</span>}
                             {pinnedS && !selectMode && <PinIcon className="w-3 h-3 text-amber-300 shrink-0" filled />}
@@ -330,7 +326,7 @@ export default function AppSidebar({
           )
         })}
         {filtered.length === 0 && (
-          <div className="p-4 text-[12px] text-zinc-600">{!scope ? 'No tracked folders yet — add one under Folders.' : index.loading && !projects.length ? 'Loading projects…' : 'No projects.'}</div>
+          <div className="p-4 text-[12px] text-zinc-600">{!scope ? 'No tracked folders yet — press + above to track one.' : index.loading && !projects.length ? 'Loading projects…' : 'No projects.'}</div>
         )}
       </div>
 

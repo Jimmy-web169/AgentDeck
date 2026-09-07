@@ -20,15 +20,22 @@ its real terminal.
   prompt), ← comes back to the row you left; Enter opens a project's live or
   newest session; Ctrl+Enter opens in a new tab. Pinned and recent sessions on
   the empty query.
-- **Home** (the AgentDeck wordmark in the tab strip): Overview (running
-  terminals, pinned items, recent projects across providers), Stats, History,
-  Memory, Plugins, Resources per tracked folder, and Folders — one list of
-  every provider's tracked folders and one add form.
-- **One sidebar for everything.** The shell owns the sidebar, so Home and a
-  session tab share the same column: a provider · folder scope (segmented
-  switch + folder chips), the Home pages, and that folder's projects and
-  sessions from the cross-provider index. Clicking there navigates the
-  current tab; Ctrl/middle-click opens a new one.
+- **Home** (the AgentDeck wordmark in the tab strip): Activity — running
+  terminals, the latest sessions across every provider, pinned items, recent
+  projects and the keyboard map — plus Stats, History, Plugins and Resources
+  per tracked folder. Folders (one list of every provider's tracked folders,
+  one add form) opens from the "+" next to the folder chips.
+- **One sidebar for everything.** A provider rail (one square per provider,
+  so more providers just add rows) plus one sidebar the shell owns: the
+  provider's folders as chips, the Home pages, and that folder's projects and
+  sessions from the cross-provider index — identical whether the tab shows
+  Home or a session. Clicking there navigates the current tab; Ctrl/middle-
+  click opens a new one.
+- **Memory is project-level** for both providers: a Memory tab next to Config
+  (Claude: `projects/<slug>/memory/*.md`; Codex: the memories of that
+  project's threads, filtered by cwd).
+- A tab whose session has a terminal running shows a red dot; green still
+  means "being written to right now".
 - **Pins** for projects and sessions — from the sidebar, the quick switcher or
   Home; pinned items sit at the top of the sidebar and the switcher.
 - `#/provider/root/slug/id` and `#/home/<view>` deep links.

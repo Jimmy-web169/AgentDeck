@@ -13,12 +13,14 @@ import ThemeToggle from './ThemeToggle.jsx'
 //  - a new tab grows in (tab-enter); neighbours slide into place (FLIP) when a
 //    tab closes or moves
 //  - the active tab carries its provider's color as a top bar; a session that
-//    is being written to right now pulses its dot
+//    is being written to right now pulses its dot green, one with a terminal
+//    running pulses it red
 export default function TabStrip({
   tabs,
   activeKey,
   providers,
   live,
+  termKeys,
   onSelect,
   onClose,
   onCloseOthers,
@@ -122,8 +124,12 @@ export default function TabStrip({
           const { primary, secondary } = tabLabel(t, providers)
           const color = providerColor(providers, t?.provider)
           const isLive = !!(t?.id && live?.ids?.has(liveSessionKey(t.provider, t.root, t.id)))
+          const hasTerm = !!(
+            t?.provider &&
+            (t.id ? termKeys?.has(liveSessionKey(t.provider, t.root, t.id)) : t.draft && (termKeys?.has(`${t.provider}|${t.root}|new|${t.slug}`) || termKeys?.has(`${t.provider}|${t.root}|new|${t.cwd}`)))
+          )
           const entering = !seen.current.has(tab.key)
-          const dot = isLive ? 'bg-emerald-400 animate-pulse' : t?.provider ? color.dot : 'bg-zinc-600'
+          const dot = hasTerm ? 'bg-red-400 animate-pulse' : isLive ? 'bg-emerald-400 animate-pulse' : t?.provider ? color.dot : 'bg-zinc-600'
           return (
             <div
               key={tab.key}
@@ -149,7 +155,7 @@ export default function TabStrip({
                 setMenu({ x: e.clientX, y: e.clientY, key: tab.key })
               }}
               onAnimationEnd={measure}
-              title={t?.cwd || t?.slug ? `${primary}${secondary ? ` · ${secondary}` : ''}\n${t.cwd || t.slug}` : primary}
+              title={`${primary}${secondary ? ` · ${secondary}` : ''}${hasTerm ? '\nterminal running' : ''}${t?.cwd || t?.slug ? `\n${t.cwd || t.slug}` : ''}`}
               className={`tab group relative flex items-center gap-2 h-8 pl-3 pr-1 min-w-[88px] max-w-[220px] flex-1 rounded-t-lg text-[12px] cursor-default overflow-hidden ${
                 entering ? 'tab-enter' : ''
               } ${active ? 'bg-ink-700 text-zinc-100' : 'text-zinc-500 hover:bg-ink-800 hover:text-zinc-300'}`}
