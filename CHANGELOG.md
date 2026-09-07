@@ -106,6 +106,20 @@ its real terminal.
   (now on `GET /api/subagents`), Codex's `thread_spawn.agent_path` (now on
   `children[]`) — so an unlinked call renders as before. Preferences ›
   Conversation turns it off; the Sub-agents tab is unchanged either way.
+- **Demo material from a synthetic data root.** `scripts/demo/make-fixture.mjs`
+  writes a self-contained Claude home + Codex home (fictional projects under
+  `C:\Users\demo\code\…`, 12 weeks of sessions with a plausible rhythm,
+  sub-agent sidecars and child rollouts, a shared-cwd project so a workspace
+  suggestion appears; scenarios `v2-highlights`, `single-project`, `empty`;
+  deterministic per `--seed`). `AGENTDECK_CONFIG_DIR=<dir>` points the server at
+  another set of `roots.<id>.json` files and, when set, never seeds or re-adds
+  the real `~/.claude` / `~/.codex`. `scripts/demo/shoot.mjs` drives headless
+  Chrome/Edge over the DevTools protocol (no puppeteer): every shot in every
+  theme, storage seeded from the fixture manifest (pins, a workspace, tabs),
+  readiness predicates instead of sleeps, `demo/v2-tour.gif` when ffmpeg is on
+  PATH. `test/demo-fixture.test.js` pins the override and runs every scenario
+  through the real parsers. `.privacyignore` allow-lists the placeholder home
+  paths so `check:privacy` stays green. README's demo section uses the new set.
 
 ### Changed
 - The "+" next to the folder chips opens a centered **Tracked folders** dialog

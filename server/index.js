@@ -8,6 +8,7 @@ import { isAllowedOrigin } from './shared/origin.js'
 import { stopAllTerminals } from './shared/terminal.js'
 import { registerWatchControl, restartWatchers } from './shared/watchGate.js'
 import { invalidate } from './shared/parseCache.js'
+import { configDir, isolatedConfig } from './shared/roots.js'
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -232,6 +233,7 @@ server.on('error', (err) => {
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`\n  AgentDeck API  →  http://localhost:${PORT}  (127.0.0.1 only)`)
   console.log(`  providers: ${Object.keys(PROVIDERS).join(', ')}`)
+  if (isolatedConfig()) console.log(`  config dir: ${configDir()}  (AGENTDECK_CONFIG_DIR — default roots are NOT added)`)
   console.log(`  dev UI: http://localhost:${DEV_UI_PORT}\n`)
   void startWatchers()
 })

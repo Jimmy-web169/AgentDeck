@@ -1,0 +1,4 @@
+# Placeholder home paths written by the demo fixture generator and its test
+# (the fictional "demo" user, and the ${user} template inside the test) — never a real account.
+allow:/(Users|home)[\\/]+demo\b/
+allow:/(Users|home)[\\/]+\$/

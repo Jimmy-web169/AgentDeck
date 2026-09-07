@@ -1,10 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { makeRoots, HOME, expandHome, dirExists, idFor, assertInside } from '../../shared/roots.js'
+import { makeRoots, HOME, expandHome, dirExists, idFor, assertInside, configDir } from '../../shared/roots.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const CONFIG_PATH = path.join(__dirname, '..', '..', '..', 'roots.claude.json')
+// roots.claude.json lives in the config dir (repo root, or AGENTDECK_CONFIG_DIR)
+const CONFIG_PATH = () => path.join(configDir(), 'roots.claude.json')
 
 function hasProjects(dir) {
   try {
