@@ -129,9 +129,10 @@ its real terminal.
 
 - **Any colour you like.** Preferences › Colours sets each provider's accent
   (tab dot, active-tab bar, folder chips, source tags) and a workspace's ⋯ menu
-  sets its own (icon and name) — with a free picker, not a fixed palette: a hue
-  slider, a saturation slider, the system colour dialog, a hex field, and your
-  own saved swatches ("+ save"). A colour is stored as hex; the UI keeps its hue
+  sets its own (icon and name) — each a quiet row (chip, hex, "change") whose
+  picker unfolds only when you click it, and a free picker rather than a fixed
+  palette: your own saved swatches, a hue slider, a saturation slider, a hex
+  field and the system colour dialog. A colour is stored as hex; the UI keeps its hue
   and saturation and each theme paints the lightness (bright on Midnight and
   Graphite, deep on Paper), so one choice reads well in all three.
 

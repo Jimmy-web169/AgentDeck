@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { DENSITIES, THEMES, setPref, usePrefs } from '../../lib/prefs.js'
-import { providerColor, providerColorValue, providerDefaultColor } from '../../lib/providerColors.js'
-import AccentPicker from './AccentPicker.jsx'
+import { providerColorValue, providerDefaultColor } from '../../lib/providerColors.js'
+import AccentField from './AccentPicker.jsx'
 import { GearIcon } from './shellIcons.jsx'
 
 // The gear in the tab strip: a small popover with the things a person is likely
@@ -47,35 +47,33 @@ function Toggle({ label, hint, value, onChange }) {
   )
 }
 
-// One block per provider: its shell accent (tab dot, active-tab bar, folder
-// chip, source tag), picked freely; "default" restores the registry colour.
+// One quiet row per provider (chip + hex + "change"); the picker unfolds under
+// the row you click, one at a time. "default" restores the registry colour.
 function ProviderColors({ providers, prefs }) {
+  const [openId, setOpenId] = useState(null)
   return providers.map((p) => {
     const value = providerColorValue(providers, p.id)
     const def = providerDefaultColor(providers, p.id)
     const overridden = !!prefs.providerColors?.[p.id] && value !== def
     return (
-      <div key={p.id} className="py-1.5 first:pt-0">
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className={`w-2 h-2 rounded-full shrink-0 ${providerColor(providers, p.id).dot}`} />
-          <span className="text-[12.5px] text-zinc-200">{p.label}</span>
-          <span className="text-[11px] font-mono text-zinc-500">{value}</span>
-        </div>
-        <AccentPicker
-          value={value}
-          defaultValue={def}
-          onChange={(hex) => setPref('providerColors', { ...(prefs.providerColors || {}), [p.id]: hex })}
-          onReset={
-            overridden
-              ? () => {
-                  const next = { ...(prefs.providerColors || {}) }
-                  delete next[p.id]
-                  setPref('providerColors', next)
-                }
-              : null
-          }
-        />
-      </div>
+      <AccentField
+        key={p.id}
+        label={p.label}
+        value={value}
+        defaultValue={def}
+        open={openId === p.id}
+        onToggle={(o) => setOpenId(o ? p.id : null)}
+        onChange={(hex) => setPref('providerColors', { ...(prefs.providerColors || {}), [p.id]: hex })}
+        onReset={
+          overridden
+            ? () => {
+                const next = { ...(prefs.providerColors || {}) }
+                delete next[p.id]
+                setPref('providerColors', next)
+              }
+            : null
+        }
+      />
     )
   })
 }
@@ -104,7 +102,7 @@ export default function Preferences({ className = '', providers = [] }) {
         <GearIcon />
       </button>
       {open && (
-        <div ref={ref} className="absolute right-0 top-full z-50 mt-1 w-[330px] max-h-[85vh] overflow-y-auto rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl p-3.5">
+        <div ref={ref} className="absolute right-0 top-full z-50 mt-1 w-[300px] max-h-[85vh] overflow-y-auto rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl p-3.5">
           <Group title="Theme">
             <Pills options={THEMES} value={prefs.theme} onPick={(v) => setPref('theme', v)} />
           </Group>
@@ -114,7 +112,7 @@ export default function Preferences({ className = '', providers = [] }) {
           {providers.length > 0 && (
             <Group title="Colours">
               <ProviderColors providers={providers} prefs={prefs} />
-              <div className="text-[11px] text-zinc-500 mt-1">A workspace's colour is in its ⋯ menu.</div>
+              <div className="text-[11px] text-zinc-500 mt-0.5">A workspace's colour is in its ⋯ menu.</div>
             </Group>
           )}
           <Group title="Sidebar">

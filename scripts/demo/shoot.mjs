@@ -160,9 +160,32 @@ const SHOTS = [
     act: async (cdp) => {
       await cdp.eval(`(() => { const b = document.querySelector('button[title="Preferences"]'); if (b) b.click(); return !!b })()`)
       await cdp.waitFor(`/colours/i.test(${T})`, { timeout: 3000 }) // innerText carries the CSS uppercase
+      // unfold the first provider's colour tray so the picker is in the shot
+      await cdp.eval(`(() => { const c = document.querySelector('[data-accent-chip]'); if (c) c.click(); return !!c })()`)
+      await cdp.waitFor(`!!document.querySelector('[data-swatch]')`, { timeout: 3000 })
       await sleep(400)
     },
-    about: 'Preferences popover (theme, density, provider colours, sidebar sections)',
+    about: 'Preferences popover with a provider colour tray open',
+  },
+  {
+    name: 'workspace-menu',
+    hash: '#/',
+    seed: 'full',
+    h: H,
+    ready: () => all(booted, hasText('LATEST SESSIONS')),
+    act: async (cdp, fx) => {
+      // the workspace row's ⋯ menu, with its colour tray unfolded
+      await cdp.eval(`(() => {
+        const s = document.querySelector('span[title=${JSON.stringify(fx.shared?.name || '')}]');
+        const row = s && s.closest('.group');
+        const more = row && row.querySelector('button[title="More"]'); if (more) more.click();
+        return !!more })()`)
+      await cdp.waitFor(`!!document.querySelector('[data-accent-chip]')`, { timeout: 3000 })
+      await cdp.eval(`(() => { const c = document.querySelector('[data-accent-chip]'); if (c) c.click(); return !!c })()`)
+      await cdp.waitFor(`!!document.querySelector('[data-swatch]')`, { timeout: 3000 })
+      await sleep(400)
+    },
+    about: 'A workspace ⋯ menu (rename, delete, colour)',
   },
 ]
 

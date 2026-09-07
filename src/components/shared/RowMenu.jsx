@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { addToWorkspace, createWorkspace, inWorkspace, removeFromWorkspace } from '../../lib/workspaces.js'
-import AccentPicker from './AccentPicker.jsx'
+import AccentField from './AccentPicker.jsx'
 import { PlusIcon } from './shellIcons.jsx'
 
 // The "⋯" menu of a sidebar row. Every row gets the same two hover controls —
@@ -41,7 +41,7 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
   const row = 'w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] text-zinc-300 hover:bg-ink-600 hover:text-zinc-100 disabled:opacity-40 disabled:hover:bg-transparent'
 
   return (
-    <div ref={ref} onMouseDown={(e) => e.stopPropagation()} className={`absolute right-2 top-full z-30 mt-0.5 ${accent ? 'w-72' : 'w-60'} rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl py-1`}>
+    <div ref={ref} onMouseDown={(e) => e.stopPropagation()} className={`absolute right-2 top-full z-30 mt-0.5 ${accent ? 'w-64' : 'w-60'} rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl py-1`}>
       {items.map((it) => (
         <button
           key={it.label}
@@ -58,9 +58,8 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
       {accent && (
         <>
           {items.length > 0 && <div className="my-1 border-t border-zinc-800" />}
-          <div className="px-3 pt-1 pb-1 text-[10.5px] uppercase tracking-wider text-zinc-600">Colour</div>
-          <div className="px-3 pb-2">
-            <AccentPicker value={accent.value} defaultValue={accent.defaultValue} onChange={accent.onChange} onReset={accent.onReset} resetLabel={accent.resetLabel || 'clear'} />
+          <div className="px-3 pb-1">
+            <AccentField label="Colour" value={accent.value} defaultValue={accent.defaultValue} onChange={accent.onChange} onReset={accent.onReset} resetLabel={accent.resetLabel || 'clear'} />
           </div>
         </>
       )}
