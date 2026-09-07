@@ -11,23 +11,34 @@ should be describable in this folder first and coded second.
 | `provider.schema.json` | JSON Schema 2020-12 for a descriptor — the machine-checked contract | validates both descriptors |
 | `providers/claude.yaml` | Claude Code descriptor | validates; documentation only |
 | `providers/codex.yaml` | Codex descriptor | validates; documentation only |
-| `providers/antigravity.yaml` | Antigravity (`agy`) descriptor | not here yet — a draft lives in `tmp/research/` until the hands-on findings are confirmed |
+| `providers/antigravity.yaml` | Antigravity (`agy`) descriptor, from nine real runs | draft; validates; no parser yet |
+| `fixtures/<id>/` | Fictional raw sessions (from `scripts/demo/make-fixture.mjs`) with the parser's golden output under `expected/` | claude, codex |
 
-Validate a descriptor:
+Check everything (also part of `npm test` and `npm run release:check`):
 
 ```
-npx -y ajv-cli@5 validate --spec=draft2020 -s spec/provider.schema.json -d spec/providers/claude.yaml
+npm run check:spec            # schema ✓, fixtures parse to their goldens ✓, vocabulary ✓
+npm run check:spec -- --update   # after an intended parser change: rewrite the goldens, then review the diff
 ```
+
+`check:spec` does three things: validates every descriptor against the schema;
+parses every fixture session with the provider's real `parser.js` and compares
+`summary` + `timeline` to the committed golden; and checks that the descriptor's
+`timeline.map` kinds, `timeline.parts` and `tokens` fields describe everything the
+parser actually emitted. A parser that starts producing something the descriptor
+does not mention fails the gate — that is what keeps the descriptor honest.
 
 ## Where the roll-out stands (2026-09-07)
 
-1. **Descriptors as documentation, schema-validated** — done. Nothing reads them at runtime yet.
-2. **Conformance** — not started. The plan: `spec/fixtures/<id>/` with a minimal raw
-   session and its `expected.normalized.json`; `npm run check:spec` validates the
-   schema, then asserts the real parser reproduces the golden output. This is what
-   stops a descriptor from rotting, and it is the next step.
-3. **Server reads `capabilities` / `cli` / `probe` from the descriptor** — not started.
-4. **Generic rule-driven parser** — not started; Antigravity is the intended test case.
+1. **Descriptors as documentation, schema-validated** — done.
+2. **Conformance** — done (`check:spec`, above). Goldens are content-only (no
+   mtimes or paths) so they are stable across machines.
+3. **Format-drift probe at startup** — next: `server/shared/formatProbe.js` runs
+   each descriptor's `probe:` block over the newest files of every tracked root,
+   fingerprints the observed schema, compares with the baseline in
+   `roots.<id>.json`, and flags the folder chip on `drift`.
+4. **Server reads `capabilities` / `cli` / `probe` from the descriptor** — after 3.
+5. **Generic rule-driven parser** — later; Antigravity is the intended test case.
 
 The maintainer's discussion notes on how far to take the descriptor language
 (record grammar, examples, versioning) are local, in `tmp/`.

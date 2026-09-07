@@ -1,0 +1,186 @@
+# AgentDeck provider descriptor — Google Antigravity CLI (`agy`)
+# Draft 2026-09-07, written from nine real `agy` 1.1.27 runs on Windows (the
+# findings are consolidated in the maintainer's research notes). No parser
+# exists yet, so `npm run check:spec` validates this file against the schema
+# only. Fields marked `# guess` were not verified on disk.
+spec: agentdeck/provider/v1
+id: antigravity
+label: Antigravity
+accent: violet                                  # guess — any hue not taken by claude (emerald) / codex (sky)
+docs: https://antigravity.google/docs/cli/reference
+status: draft
+
+cli:
+  bin: agy
+  version: [--version]                          # prints "1.1.27"
+  update: [update]                              # `agy update`; the CLI also self-updates on launch
+  resume: [--conversation, "{id}"]              # verified: appends steps to the same brain/<id> + conversations/<id>.db
+  new: []                                       # `agy` in {cwd}; an untrusted cwd is only mounted after the trust prompt (or with --add-dir {cwd})
+  check_origin: true                            # guess
+
+roots:
+  default_dirs: ["~/.gemini/antigravity-cli", "~/.gemini/antigravity", "~/.gemini/antigravity-ide"]   # CLI first; hub and IDE share the layout
+  probe: { exists: brain }                      # brain/ and conversations/ appear together; conversation_summaries.db is not reliable (see notes)
+  label_default: basename
+
+projects:
+  from: transcript                              # no project dirs; group by the workspace found per conversation, else a "no workspace" bucket
+  glob: "brain/*/.system_generated/logs/transcript_full.jsonl"
+  slug: cwd
+  cwd: { source: sidecar, field: "conversations/{id}.db:trajectory_metadata_blob.data.1.1" }   # workspace file:// URI; also .7; git owner/repo in .1.3, branch in .1.4
+  # cwd fallbacks (hook): cache/last_conversations.json {"<abs cwd>": "<latest id>"}; sub-agent spawn record workspaceUris;
+  # log/cli-*.log "workspaceDirs=[…]" + "Print mode: conversation=<id>". Absent for untrusted print-mode runs (verified absent in run 1).
+
+sessions:
+  glob: "brain/*/.system_generated/logs/transcript_full.jsonl"
+  id: filename_stem                             # not exact: the id is the brain/<id>/ directory name (UUID) — discover hook derives it from the path
+  format: jsonl
+  kind_field: type
+  timestamp: { source: record, field: created_at }        # ISO-8601 UTC per step
+  title: [annotation_title, first_prompt]                 # annotations/{id}.pbtxt `title:"…"` (auto-generated at creation), else the first <USER_REQUEST>
+  head_bytes: 65536
+  excludes:
+    - "brain/*/.system_generated/logs/transcript.jsonl"           # same steps, args JSON-encoded as strings, long fields truncated
+    - "brain/*/.system_generated/logs/chunks/**"                  # byte-identical chunk copies
+    - "brain/*/.system_generated/steps/**"                        # raw tool outputs (sidecar)
+    - "brain/*/.system_generated/messages/**"                     # agent mailbox (sidecar)
+
+timeline:
+  map:
+    - when: { type: USER_INPUT }
+      kind: user
+      text: content                             # "<USER_REQUEST>\n…\n</USER_REQUEST>" + metadata blocks — see noise
+    - when: { type: PLANNER_RESPONSE }
+      kind: assistant
+      parts: tool_calls                         # plus the scalar fields `content` (text) and `thinking` on the same record — folded in by the hook
+      note: no model/usage on the record; model label only in the first USER_INPUT's <USER_SETTINGS_CHANGE>, tokens only in SQLite (see tokens)
+    - when: { type: [GENERIC, RUN_COMMAND, VIEW_FILE, CODE_ACTION, GREP_SEARCH, SEARCH_WEB, LIST_DIR, MCP_TOOL, INVOKE_SUBAGENT, BROWSER_SUBAGENT] }
+      kind: attachment
+      note: tool result; 1.1.27 writes GENERIC for every tool, the hub wrote the specific types. Paired by adjacency onto the previous assistant's tool_calls
+    - when: { type: SYSTEM_MESSAGE }
+      kind: system
+      text: content                             # inter-agent mail ("[Message] timestamp=… sender=<child id|system> priority=… content=…")
+    - when: { type: ERROR_MESSAGE }
+      kind: system
+      text: content
+    - when: { type: [EPHEMERAL_MESSAGE, CONVERSATION_HISTORY, CHECKPOINT] }
+      kind: ignore                              # system-prompt injections / compaction — must not count as turns or tokens
+  parts:
+    text: { text: content }
+    thinking: { text: thinking }
+    tool_use: { name: name, input: args, note: "no id in JSONL; SQLite step_payload.20.7.1 (planner) / steps.metadata.4.1 (result) carry call_<n>" }
+    tool_result:
+      when: { type: [GENERIC, RUN_COMMAND, VIEW_FILE, CODE_ACTION, GREP_SEARCH, SEARCH_WEB, LIST_DIR, MCP_TOOL, INVOKE_SUBAGENT, BROWSER_SUBAGENT] }
+      pair_by: adjacency
+      output: content                           # prefixed by "Created At: …\nCompleted At: …\n"; raw output also in steps/{step_index}/output.txt
+      is_error: error
+  noise:
+    - "<USER_REQUEST>…</USER_REQUEST>"          # unwrap, keep the inside
+    - "<ADDITIONAL_METADATA>…</ADDITIONAL_METADATA>"
+    - "<USER_SETTINGS_CHANGE>…</USER_SETTINGS_CHANGE>"
+    - "<SYSTEM_MESSAGE>…</SYSTEM_MESSAGE>"
+
+tokens:
+  source: per_message                           # one steps.metadata.9 block per PLANNER_RESPONSE in conversations/{id}.db; sum them
+  input: "sqlite:steps.metadata.9.2"            # verified: Σ = usage.input_tokens of the JSON result
+  output: "sqlite:steps.metadata.9.3"           # verified: Σ = usage.output_tokens (includes thinking)
+  cache_read: "sqlite:steps.metadata.9.5"       # verified: Σ = usage.cache_read_tokens
+  cache_create: null
+  reasoning: "sqlite:steps.metadata.9.9"        # verified: Σ = usage.thinking_tokens; .10 = output − thinking
+  total: sum                                    # input + output, as agy's own total_tokens
+
+subagents:
+  model: independent-sessions
+  glob: "brain/*/.system_generated/logs/transcript_full.jsonl"       # children are ordinary conversations (no annotation, no presence lock, not in last_conversations.json)
+  parent_link: { source: record, field: "tool_calls[].args.Recipient", when: { type: PLANNER_RESPONSE, "tool_calls[].name": send_message } }   # child → parent back-pointer
+  spawn_tool: invoke_subagent
+  link_rule: the GENERIC step right after invoke_subagent (also steps/<idx>/output.txt) holds JSON {conversationId, logAbsoluteUri, workspaceUris}; parent messages/*.json has sender = child id; conversation_summaries.db parent_conversation_id/nesting_depth exist but were empty for CLI runs
+
+memory:
+  scope: thread
+  path: "brain/{id}/*.md"                       # agent artifacts (task / implementation_plan / walkthrough) with .metadata.json — none produced by the CLI runs
+  format: markdown
+  writable: false
+  # knowledge/ held only knowledge.lock; implicit/*.pb are opaque; no create-knowledge tool exists in the 57-tool list (delete_knowledge only)
+
+mcp:
+  - scope: user
+    path: "~/.gemini/config/mcp_config.json"    # 0 B on this machine; shape from the bundled agy-customizations docs
+    format: json
+    key: mcpServers
+    transport: { command: stdio, serverUrl: sse }                  # `agy mcp add --type http` output key unverified  # guess
+    fields: { command: command, args: args, env: env, serverUrl: url, disabled: enabled, disabledTools: toolDeny }   # disabled is negated  # guess
+  - scope: plugin
+    path: "~/.gemini/config/plugins/*/mcp_config.json"
+    format: json
+    key: mcpServers
+  - scope: project
+    path: "{cwd}/.agents/mcp_config.json"       # guess — customization root per docs; not observed
+    format: json
+    key: mcpServers
+
+instructions:
+  - kind: AGENTS.md
+    paths: ["{cwd}/AGENTS.md", "{cwd}/GEMINI.md", "~/.gemini/GEMINI.md", "~/.gemini/config/plugins/*/rules/AGENTS.md"]   # walk-up from cwd to repo root
+skills:
+  paths: ["builtin/skills/*/SKILL.md", "skills/*/SKILL.md", "~/.gemini/skills/*/SKILL.md", "~/.gemini/config/plugins/*/skills/*/SKILL.md", "{cwd}/.agents/skills/*/SKILL.md"]
+plugins:
+  path: "~/.gemini/config/plugins/*/plugin.json"                  # enabled map: ~/.gemini/config/config.json → plugins.<dir>.enabled
+  format: json
+usage:
+  source: api                                   # `agy -p /usage --output-format json` → command.data.groups[].buckets[]; no conversation is created; needs keyring auth
+  path: "agy -p /usage --output-format json"
+  windows: [5h, weekly]                         # bucket.window; two groups: "Gemini Models", "Claude and GPT models"
+  pct_field: remaining_fraction                 # NB remaining (0..1), not used-percent
+  reset_field: reset_time
+history:
+  path: "history.jsonl"                         # interactive prompts only; print mode never appends
+  fields: { display: display, ts: timestamp, project: workspace }
+
+capabilities:
+  projects:       { level: partial, note: "workspace only known for trusted/interactive (verified) and maybe --add-dir (unverified) sessions; others land in a no-workspace bucket" }
+  sessions:       { level: full, note: "directory scan; no usable index for the CLI" }
+  timeline:       { level: full }
+  tool_calls:     { level: partial, note: "adjacency pairing; ids only via SQLite" }
+  subagents:      { level: full, note: "children are ordinary conversations; depth > 1 untested" }
+  memory:         { level: none, note: "no user-visible memory found; artifacts would be read-only markdown" }
+  mcp:            { level: read-only, note: "parse mcp_config.json; `agy mcp add` could make it full" }
+  skills:         { level: full }
+  plugins:        { level: read-only }
+  usage_limits:   { level: partial, note: "one CLI call per poll (~2-5 s, spawns a language server); not on disk" }
+  context_meter:  { level: partial, note: "gen_metadata.9.10 {used, 256000} is a guess" }
+  resume:         { level: full }
+  new_session:    { level: full, note: "trust prompt on first use of a cwd" }
+  delete_session: { level: partial, note: "trash brain/<id>, conversations/<id>.db, annotations/<id>.pbtxt, presence/<id>.lock; also fix cache/last_conversations.json" }
+  history:        { level: partial, note: "interactive prompts only" }
+
+probe:
+  sample: { glob: "brain/*/.system_generated/logs/transcript_full.jsonl", newest: 5, head: 200, tail: 200 }
+  required: [step_index, source, type, status, created_at]
+  enums:
+    source: [USER_EXPLICIT, MODEL, SYSTEM]
+    type: [USER_INPUT, PLANNER_RESPONSE, GENERIC, SYSTEM_MESSAGE, ERROR_MESSAGE, RUN_COMMAND, VIEW_FILE, CODE_ACTION, GREP_SEARCH, SEARCH_WEB, LIST_DIR, MCP_TOOL, INVOKE_SUBAGENT, BROWSER_SUBAGENT, EPHEMERAL_MESSAGE, CONVERSATION_HISTORY, CHECKPOINT]
+    status: [DONE, RUNNING, PENDING, CANCELED, ERROR, INTERRUPTED]      # only DONE observed; rest from the survey's enum  # guess
+  types:
+    step_index: number
+    created_at: string
+  sidecars: ["conversations/*.db", "annotations/*.pbtxt", "brain/*/.system_generated/steps/*/output.txt", "brain/*/.system_generated/messages/*.json", "cache/last_conversations.json"]
+  # no version_field: transcripts are not stamped with the CLI version; use `agy --version`
+
+hooks:
+  discover: paths.js                            # brain/ scan, id from dirname, three roots, cwd fallbacks
+  parse: parser.js                              # transcript_full.jsonl → timeline, adjacency pairing, noise stripping
+  subagents: subagents.js                       # invoke_subagent result JSON + send_message back-pointer
+  sqlite: trajectory-db.js                      # node:sqlite + raw protobuf reader for tokens / model / call ids / workspace
+  resources: resources.js
+  api: api.js
+
+known_unknowns:
+  - whether conversation_summaries.db ever gets CLI rows (print mode never wrote it; interactive exit not observed)
+  - whether --add-dir print runs store the workspace in trajectory_metadata_blob (decides how many sessions can be grouped)
+  - gen_metadata.9.10 as context used / window; steps.metadata.9.6 and .10 semantics; trajectory_meta.source 17 vs 1
+  - parent_references contents for a child conversation; sub-agent depth > 1
+  - the key `agy mcp add --type http` writes (serverUrl vs url); why `agy plugin list` ignores installed config/plugins
+  - an env var equivalent of CLAUDE_CONFIG_DIR (a GeminiDir setting exists per the log, name unknown)
+  - whether presence/<id>.lock is held while a conversation runs (files persist after exit)
+  - the meaning of implicit/*.pb and whether any user-facing memory/knowledge is written by the CLI

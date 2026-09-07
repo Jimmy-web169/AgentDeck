@@ -17,8 +17,13 @@ Run top to bottom before tagging. Every step is a command or a yes/no check.
 
 ## 2. Gate: `npm run release:check`
 
-Runs `npm test` → `npm run build` → `npm run check:providers` → `npm run check:privacy`.
-All four must pass on the release machine.
+Runs `npm test` → `npm run build` → `npm run check:providers` → `npm run check:privacy`
+→ `npm run check:spec`. All five must pass on the release machine.
+
+- `check:spec` — every `spec/providers/*.yaml` validates, every fixture session in
+  `spec/fixtures/` parses to its committed golden, and each descriptor describes
+  what its parser emits. A parser change that is intended: `npm run check:spec --
+  --update`, then review the golden diff in the same commit.
 
 - `check:providers` — `claude` and `codex` are on PATH, `--version`/`--help`
   answer, `claude --resume` and `codex resume <id>` are still in their help;

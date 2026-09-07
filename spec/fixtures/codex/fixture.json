@@ -1,0 +1,16 @@
+{
+  "provider": "codex",
+  "origin": "scripts/demo/make-fixture.mjs --scenario single-project --seed 7 --now 2026-09-01T09:00:00Z --platform posix — fictional project /home/demo/code/orbit-api",
+  "sessions": [
+    {
+      "id": "3d5465c2-6ffd-76db-9962-51657f9592e0",
+      "file": "session-3d5465c2.jsonl",
+      "covers": "session_meta / turn_context / response_item message + function_call + function_call_output / reasoning / event_msg token_count / a spawn_agent call whose child is the second fixture"
+    },
+    {
+      "id": "9ac9275b-1a73-7a7c-a941-883be3fef114",
+      "file": "child-9ac9275b.jsonl",
+      "covers": "a spawned child rollout: session_meta.source.subagent.thread_spawn (parent_thread_id, agent_path, depth)"
+    }
+  ]
+}

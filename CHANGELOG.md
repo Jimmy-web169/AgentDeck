@@ -127,6 +127,14 @@ its real terminal.
   placeholder home paths so `check:privacy` stays green. README records the
   v1 → v2 progression and shows both releases' material.
 
+- **Spec conformance gate.** `npm run check:spec` (in `npm test` and
+  `release:check`) validates every `spec/providers/*.yaml` against the JSON
+  Schema, parses the fictional fixture sessions in `spec/fixtures/<id>/` with
+  the provider's real parser and compares the result to committed goldens, and
+  checks that each descriptor describes every timeline kind, part kind and token
+  field the parser emits. `--update` rewrites the goldens after an intended
+  parser change. The Antigravity descriptor now lives in `spec/providers/`
+  (draft, schema-validated).
 - **A workspace's own glyph.** Its ⋯ menu picks one of a dozen icons (layers,
   folder, star, bolt, rocket, flask, book, briefcase, globe, code, heart, tag);
   the workspace colour tints that glyph only, the name stays plain text.
