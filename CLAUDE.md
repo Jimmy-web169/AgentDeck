@@ -63,8 +63,12 @@ git-ignored on purpose (like `.claude/`): it stays local to the maintainer.
 
 - **Backend changes need tests** in `test/` (`node --test`, run with `npm test`).
   Frontend tests are deliberately skipped for now.
-- Before a tag/release run `npm run release:check` (tests, build, provider-CLI
-  flags, privacy scan); see `RELEASE-CHECKLIST.md`.
+- **Before `git push origin`, run the `release` skill** — it runs the gate
+  (`npm run release:check`: tests, build, provider-CLI flags, privacy scan),
+  checks the docs, and invokes the `demo` skill (screens + the recorded tour).
+  Do not regenerate demo material at any other time (the maintainer does not
+  want it re-run after every change); verify a UI change with headless shots
+  into the scratchpad instead. See `RELEASE-CHECKLIST.md`.
 - Commit only when asked. On the v2 branch the maintainer wants tag `v2.0.0`
   moved to the branch tip after each round (`git tag -f v2.0.0`).
 - Keep `CHANGELOG.md` current in the same commit as the feature.

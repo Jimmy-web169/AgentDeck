@@ -36,7 +36,7 @@ import useConfirm from '../../lib/useConfirm.jsx'
 
 const SECTIONS_KEY = 'agentdeck_sidebar_sections'
 const INLINE_SESSIONS = 8 // sessions under a pinned project before "show all"
-const WS_SESSIONS = 12 // sessions in a workspace list before "show all"
+const WS_GROUP_SESSIONS = 6 // sessions shown per project inside a workspace before "show all"
 const loadSections = () => {
   try {
     return { workspaces: true, pinned: true, projects: true, ...JSON.parse(localStorage.getItem(SECTIONS_KEY) || '{}') }
@@ -226,7 +226,6 @@ export default function AppSidebar({
   const [openKeys, setOpenKeys] = useState(() => new Set()) // expanded pinned projects
   const [openWs, setOpenWs] = useState(() => new Set()) // expanded workspaces
   const [wsFilter, setWsFilter] = useState({}) // workspace id -> Set(sourceKey)
-  const [wsAll, setWsAll] = useState(() => new Set()) // workspaces showing every session
   const [sections, setSections] = useState(loadSections)
   const [pickerOpen, setPickerOpen] = useState(false)
   const [picking, setPicking] = useState(false)
@@ -279,7 +278,6 @@ export default function AppSidebar({
     })
   const toggleKey = toggleIn(setOpenKeys)
   const toggleWs = toggleIn(setOpenWs)
-  const toggleWsAll = toggleIn(setWsAll)
   const toggleWsSource = (wid, sk) =>
     setWsFilter((prev) => {
       const cur = new Set(prev[wid] || [])
@@ -366,29 +364,44 @@ export default function AppSidebar({
   const isActive = (prov, r, id) => activeTarget?.provider === prov && activeTarget?.root === r && activeTarget?.id === id
   const isRecent = (s) => s.lastTs && Date.now() - new Date(s.lastTs).getTime() < RECENT_MS
 
-  // a workspace as ONE flat, time-sorted session list across all its members
-  const wsRows = (w) => {
-    const rows = []
-    const seen = new Set()
+  // a workspace as its member projects, each heading its own sessions (newest
+  // first); a session member whose project is not itself a member gets a
+  // "selected" group under that project's name. With many sessions this is
+  // what makes "which project, which folder" readable at a glance — a flat
+  // list with a source tag per row did not (the user said so, 2026-09-07).
+  const wsGroups = (w) => {
+    const groups = new Map()
     let loading = false
-    const tracked = (it) => index.scopes.some((x) => x.provider === it.provider && x.root === it.root)
     let untracked = 0
+    const tracked = (it) => index.scopes.some((x) => x.provider === it.provider && x.root === it.root)
+    const groupFor = (it, partial) => {
+      const k = projectKey(it)
+      let g = groups.get(k)
+      if (!g) {
+        g = { key: k, src: srcL(it), item: it, partial, rows: [], seen: new Set() }
+        groups.set(k, g)
+      } else if (!partial) {
+        g.partial = false
+        g.item = it
+      }
+      return g
+    }
     for (const it of w.items) {
       if (it.kind !== 'project') continue
       if (!tracked(it)) {
         untracked++
         continue
       }
+      const g = groupFor(it, false)
       const lst = index.sessionsFor(it.provider, it.root, it.slug)
       if (lst === null) {
         loading = true
         continue
       }
       for (const s of lst) {
-        const k = `${it.provider}|${it.root}|${s.id}`
-        if (seen.has(k)) continue
-        seen.add(k)
-        rows.push({ src: srcL(it), s, item: it })
+        if (g.seen.has(s.id)) continue
+        g.seen.add(s.id)
+        g.rows.push({ s, item: it })
       }
     }
     for (const it of w.items) {
@@ -397,15 +410,21 @@ export default function AppSidebar({
         untracked++
         continue
       }
-      const k = `${it.provider}|${it.root}|${it.id}`
-      if (seen.has(k)) continue
-      seen.add(k)
+      const g = groupFor(it, true)
+      if (g.seen.has(it.id)) continue
+      g.seen.add(it.id)
       const lst = index.sessionsFor(it.provider, it.root, it.slug)
       const fresh = lst?.find((x) => x.id === it.id)
-      rows.push({ src: srcL(it), s: fresh || { id: it.id, title: it.title || it.id.slice(0, 8), lastTs: null, toolCalls: null }, item: it })
+      g.rows.push({ s: fresh || { id: it.id, title: it.title || it.id.slice(0, 8), lastTs: null, toolCalls: null }, item: it })
     }
-    rows.sort((a, b) => String(b.s.lastTs || '').localeCompare(String(a.s.lastTs || '')))
-    return { rows, loading, untracked }
+    const byTime = (a, b) => String(b.s.lastTs || '').localeCompare(String(a.s.lastTs || ''))
+    const out = [...groups.values()]
+    for (const g of out) {
+      g.rows.sort(byTime)
+      g.latest = g.rows[0]?.s.lastTs || ''
+    }
+    out.sort((a, b) => String(b.latest).localeCompare(String(a.latest)))
+    return { groups: out, loading, untracked }
   }
 
   // labels come from the live folder list, never from what was stored when a
@@ -497,9 +516,8 @@ export default function AppSidebar({
                   const open = openWs.has(w.id)
                   const sources = workspaceSources(w).map((x) => ({ ...x, rootLabel: labelOf(x.provider, x.root, x.rootLabel) }))
                   const filt = wsFilter[w.id]
-                  const { rows, loading, untracked } = open ? wsRows(w) : { rows: [], loading: false, untracked: 0 }
-                  const visible = filt?.size ? rows.filter((r) => filt.has(sourceKey(r.src))) : rows
-                  const shown = wsAll.has(w.id) ? visible : visible.slice(0, WS_SESSIONS)
+                  const { groups, loading, untracked } = open ? wsGroups(w) : { groups: [], loading: false, untracked: 0 }
+                  const visible = filt?.size ? groups.filter((g) => filt.has(sourceKey(g.src))) : groups
                   const mk = `ws|${w.id}`
                   return (
                     <div key={w.id}>
@@ -568,34 +586,69 @@ export default function AppSidebar({
                               })}
                             </div>
                           )}
-                          {shown.map((r) => (
-                            <SessionLine
-                              ctx={ctx}
-                              key={`${r.src.provider}|${r.src.root}|${r.s.id}`}
-                              src={r.src}
-                              s={r.s}
-                              showSource
-                              menuKey={`${mk}|${r.src.provider}|${r.src.root}|${r.s.id}`}
-                              extraItems={[{ label: r.item.kind === 'session' ? 'Remove from workspace' : `Remove ${r.src.project} (${r.src.rootLabel}) from workspace`, onClick: () => removeItem(w.id, r.item) }]}
-                            />
-                          ))}
+                          {visible.map((g) => {
+                            const gk = `${mk}|${g.key}`
+                            const gopen = !openKeys.has(`${gk}|closed`) // groups start open
+                            const all = openKeys.has(`${gk}|all`)
+                            const shownRows = all ? g.rows : g.rows.slice(0, WS_GROUP_SESSIONS)
+                            const c = providerColor(providers, g.src.provider)
+                            return (
+                              <div key={g.key}>
+                                <div className="group relative flex items-stretch hover:bg-ink-700/40">
+                                  <button
+                                    onClick={() => toggleKey(`${gk}|closed`)}
+                                    title={`${g.src.cwd || g.src.slug}\n${providerLabel(providers, g.src.provider)} · ${g.src.rootLabel}${g.partial ? '\nonly the sessions you added, not the whole project' : ''}`}
+                                    className="flex-1 min-w-0 text-left pl-6 pr-1 py-1 flex items-center gap-1.5"
+                                  >
+                                    <ChevronRightIcon className={`w-3 h-3 text-zinc-600 shrink-0 transition-transform ${gopen ? 'rotate-90' : ''}`} />
+                                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.dot}`} />
+                                    <span className="text-[12px] font-medium text-zinc-300 truncate">{g.src.project}</span>
+                                    <span className={`text-[10.5px] truncate ${c.text}`}>{g.src.rootLabel}</span>
+                                    {g.partial && <span className="text-[10px] text-zinc-600 shrink-0">selected</span>}
+                                    <span className="ml-auto text-[10.5px] text-zinc-600 shrink-0">{g.rows.length}</span>
+                                  </button>
+                                  {!g.partial && (
+                                    <div className="flex items-center gap-0.5 pr-1.5">
+                                      <button onClick={() => setMenuFor(menuFor === gk ? null : gk)} title="More" className={`${hoverBtn} ${menuFor === gk ? 'opacity-100 text-zinc-100 bg-ink-600' : ''}`}>
+                                        <DotsIcon className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
+                                  {!g.partial && <RowMenu open={menuFor === gk} onClose={() => setMenuFor(null)} items={[{ label: `Remove ${g.src.project} (${g.src.rootLabel}) from workspace`, onClick: () => removeItem(w.id, g.item) }]} />}
+                                </div>
+                                {gopen &&
+                                  shownRows.map((r) => (
+                                    <SessionLine
+                                      ctx={ctx}
+                                      key={`${g.src.provider}|${g.src.root}|${r.s.id}`}
+                                      src={g.src}
+                                      s={r.s}
+                                      indent="pl-9"
+                                      menuKey={`${gk}|${r.s.id}`}
+                                      extraItems={r.item.kind === 'session' ? [{ label: 'Remove from workspace', onClick: () => removeItem(w.id, r.item) }] : []}
+                                    />
+                                  ))}
+                                {gopen && !g.rows.length && <div className="pl-9 pr-2 py-1 text-[11px] text-zinc-600">no sessions yet</div>}
+                                {gopen && g.rows.length > WS_GROUP_SESSIONS && (
+                                  <button onClick={() => toggleKey(`${gk}|all`)} className="pl-9 pr-2 py-1 text-[11px] text-sky-400 hover:text-sky-300">
+                                    {all ? 'show fewer' : `show all ${g.rows.length}`}
+                                  </button>
+                                )}
+                              </div>
+                            )
+                          })}
                           {loading && <div className="pl-7 pr-2 py-1.5 text-[11.5px] text-zinc-600">loading…</div>}
                           {untracked > 0 && <div className="pl-7 pr-2 py-1 text-[11px] text-zinc-600">{untracked} member{untracked === 1 ? '' : 's'} in a folder that is no longer tracked — hidden</div>}
-                          {!loading && !rows.length && <div className="pl-7 pr-2 py-1.5 text-[11.5px] text-zinc-600">Empty — open ⋯ on a project or session and tick this workspace.</div>}
-                          {visible.length > WS_SESSIONS && (
-                            <button onClick={() => toggleWsAll(w.id)} className="pl-7 pr-2 py-1 text-[11px] text-sky-400 hover:text-sky-300">
-                              {wsAll.has(w.id) ? 'show fewer' : `show all ${visible.length}`}
-                            </button>
-                          )}
+                          {!loading && !groups.length && <div className="pl-7 pr-2 py-1.5 text-[11.5px] text-zinc-600">Empty — open ⋯ on a project or session and tick this workspace.</div>}
                         </div>
                       )}
                     </div>
                   )
                 })}
-                {!workspaces.length && newWs == null && !suggestions.length && (
+                {!workspaces.length && newWs == null && !(prefs.showSuggestions && suggestions.length) && (
                   <div className="px-3 pb-1.5 text-[11.5px] text-zinc-600">Group projects and sessions from any provider under one name — ⋯ on a row → Workspaces.</div>
                 )}
-                {suggestions.length > 0 && (
+                {prefs.showSuggestions && suggestions.length > 0 && (
                   <div className="mt-1 mx-2 mb-1 rounded-md border border-dashed border-zinc-700/70 px-2 py-1.5">
                     <div className="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">Suggested · same folder in several places</div>
                     {suggestions.slice(0, 5).map((s) => (

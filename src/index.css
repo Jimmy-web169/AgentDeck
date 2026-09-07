@@ -57,6 +57,25 @@
   --cyan-500: 6 182 212;
   --fuchsia-300: 240 171 252;
   --fuchsia-500: 217 70 239;
+  /* wider accent palette (Preferences › Colours, workspace colours) */
+  --rose-400: 251 113 133;
+  --cyan-400: 34 211 238;
+  --fuchsia-400: 232 121 249;
+  --teal-300: 94 234 212;
+  --teal-400: 45 212 191;
+  --teal-500: 20 184 166;
+  --orange-300: 253 186 116;
+  --orange-400: 251 146 60;
+  --orange-500: 249 115 22;
+  --lime-300: 190 242 100;
+  --lime-400: 163 230 53;
+  --lime-500: 132 204 22;
+  --indigo-300: 165 180 252;
+  --indigo-400: 129 140 248;
+  --indigo-500: 99 102 241;
+  --pink-300: 249 168 212;
+  --pink-400: 244 114 182;
+  --pink-500: 236 72 153;
 }
 
 :root[data-theme='graphite'] {
@@ -108,6 +127,25 @@
   --cyan-500: 6 182 212;
   --fuchsia-300: 240 171 252;
   --fuchsia-500: 217 70 239;
+  /* wider accent palette (Preferences › Colours, workspace colours) */
+  --rose-400: 251 113 133;
+  --cyan-400: 34 211 238;
+  --fuchsia-400: 232 121 249;
+  --teal-300: 94 234 212;
+  --teal-400: 45 212 191;
+  --teal-500: 20 184 166;
+  --orange-300: 253 186 116;
+  --orange-400: 251 146 60;
+  --orange-500: 249 115 22;
+  --lime-300: 190 242 100;
+  --lime-400: 163 230 53;
+  --lime-500: 132 204 22;
+  --indigo-300: 165 180 252;
+  --indigo-400: 129 140 248;
+  --indigo-500: 99 102 241;
+  --pink-300: 249 168 212;
+  --pink-400: 244 114 182;
+  --pink-500: 236 72 153;
 }
 
 :root[data-theme='light'] {
@@ -157,6 +195,25 @@
   --cyan-500: 14 116 144;
   --fuchsia-300: 165 45 138;
   --fuchsia-500: 163 21 126;
+  /* wider accent palette (Preferences › Colours, workspace colours) */
+  --rose-400: 225 29 72;
+  --cyan-400: 8 145 178;
+  --fuchsia-400: 192 38 211;
+  --teal-300: 15 118 110;
+  --teal-400: 13 148 136;
+  --teal-500: 15 118 110;
+  --orange-300: 194 65 12;
+  --orange-400: 234 88 12;
+  --orange-500: 194 65 12;
+  --lime-300: 77 124 15;
+  --lime-400: 101 163 13;
+  --lime-500: 77 124 15;
+  --indigo-300: 67 56 202;
+  --indigo-400: 79 70 229;
+  --indigo-500: 67 56 202;
+  --pink-300: 190 24 93;
+  --pink-400: 219 39 119;
+  --pink-500: 190 24 93;
 }
 
 /* ---- code highlighting (highlight.js) ----

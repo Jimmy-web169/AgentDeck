@@ -21,8 +21,10 @@ export const DENSITIES = [
 // them in the Conversation view (off = the pre-2.0 view, Sub-agents tab only).
 // providerColors: { <providerId>: <accent name> } — the user's override of a
 // provider's shell accent (see lib/providerColors.js); absent = the registry default.
-const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {} }
-const ACCENT_NAMES = ['emerald', 'sky', 'violet', 'amber', 'red', 'zinc']
+// showSuggestions: the "Suggested · same folder in several places" box under Workspaces.
+const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {} }
+// kept in step with ACCENTS in lib/providerColors.js (which imports this file, so no import here)
+const ACCENT_NAMES = ['emerald', 'teal', 'lime', 'cyan', 'sky', 'indigo', 'violet', 'fuchsia', 'pink', 'rose', 'red', 'orange', 'amber', 'zinc']
 
 function load() {
   let prefs = { ...DEFAULTS }

@@ -59,7 +59,7 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
         <>
           {items.length > 0 && <div className="my-1 border-t border-zinc-800" />}
           <div className="px-3 pt-1 pb-0.5 text-[10.5px] uppercase tracking-wider text-zinc-600">Colour</div>
-          <div className="flex items-center gap-1.5 px-3 pb-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 px-3 pb-1.5">
             {ACCENTS.map((a) => {
               const on = swatches.value === a.k
               return (

@@ -52,10 +52,13 @@ function ProviderColors({ providers, prefs }) {
   return providers.map((p) => {
     const current = providerColorName(providers, p.id)
     return (
-      <div key={p.id} className="flex items-center gap-2 py-1">
-        <span className={`w-2 h-2 rounded-full shrink-0 ${accentClasses(current).dot}`} />
-        <span className="text-[12.5px] text-zinc-200 flex-1 truncate">{p.label}</span>
-        <span className="flex items-center gap-1.5">
+      <div key={p.id} className="py-1">
+        <div className="flex items-center gap-2 mb-1">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${accentClasses(current).dot}`} />
+          <span className="text-[12.5px] text-zinc-200 truncate">{p.label}</span>
+          <span className="text-[11px] text-zinc-500">{ACCENTS.find((a) => a.k === current)?.label}</span>
+        </div>
+        <span className="flex flex-wrap items-center gap-1.5 pl-4">
           {ACCENTS.map((a) => {
             const on = current === a.k
             return (
@@ -117,6 +120,7 @@ export default function Preferences({ className = '', providers = [] }) {
           )}
           <Group title="Sidebar">
             <Toggle label="Workspaces section" hint="Grouped projects and sessions leave the Projects list" value={prefs.showWorkspaces} onChange={(v) => setPref('showWorkspaces', v)} />
+            <Toggle label="Workspace suggestions" hint="“Same folder in several places” under Workspaces" value={prefs.showSuggestions} onChange={(v) => setPref('showSuggestions', v)} />
             <Toggle label="Pinned section" hint="Pinned rows leave the Projects list" value={prefs.showPinned} onChange={(v) => setPref('showPinned', v)} />
           </Group>
           <Group title="Lists">

@@ -1,245 +1,54 @@
 #!/usr/bin/env node
 // shoot.mjs — headless screenshots of AgentDeck for README / release notes.
 //
-// Drives Chrome (or Edge) over the DevTools protocol with the `ws` package —
-// no puppeteer. Meant to run against a server that serves the demo fixture:
+// Drives Chrome (or Edge) over the DevTools protocol (scripts/demo/lib.mjs — the
+// `ws` package, no puppeteer). Meant to run against a server that serves the
+// demo fixture, never a real home:
 //
 //   node scripts/demo/make-fixture.mjs            # tmp/demo-root
 //   npx vite build
 //   AGENTDECK_CONFIG_DIR=tmp/demo-root AGENTDECK_PORT=47861 AGENTDECK_WEB_PORT=47862 node server/index.js &
 //   node scripts/demo/shoot.mjs --base http://localhost:47861
 //
-// Every shot is taken in each theme (dark = Midnight, light = Paper; add
-// graphite with --themes) and written to demo/<release>/<shot>-<theme>.png
-// (release = vMAJOR.MINOR from package.json, e.g. demo/v2.0/; --release
-// overrides) plus demo/<release>/tour.gif. The browser profile is a throw-away
-// temp dir; localStorage is seeded per shot (theme, prefs, pins, a workspace,
-// recent sessions, tabs) from the fixture manifest, so the sidebar looks
-// lived-in and only ever names fictional projects.
+// Output goes to demo/<release>/<shot>.png (release = vMAJOR.MINOR from
+// package.json, e.g. demo/v2.0/; --release overrides). One theme by default
+// (graphite); with several --themes the file names get a -<theme> suffix. The
+// browser profile is a throw-away temp dir; localStorage is seeded per shot
+// (theme, prefs, pins, a workspace, recent sessions, tabs) from the fixture
+// manifest, so the sidebar looks lived-in and only ever names fictional
+// projects. The moving tour (tour.gif / tour.mp4) is record.mjs's job.
 //
 // Usage:
 //   node scripts/demo/shoot.mjs [--base http://localhost:47861] [--release v2.0] [--out <dir>] [--fixture tmp/demo-root]
-//        [--themes dark,light] [--shots home-activity,insights,…] [--w 1440] [--h 900] [--scale 1]
-//        [--seed base|full] [--browser <path-to-chrome-or-edge>] [--no-gif] [--keep-profile] [--list]
+//        [--themes graphite] [--shots home-activity,insights,…] [--w 1440] [--h 900] [--scale 1]
+//        [--seed base|full] [--browser <path-to-chrome-or-edge>] [--keep-profile] [--list]
 //   --seed overrides every shot's storage seeding: base = theme/prefs only, full = + pins,
 //   workspace, recent, tabs (the default is per shot, see SHOTS)
 
-import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
-import net from 'node:net'
-import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import WebSocket from 'ws'
+import { REPO, THEME_KEYS, assertFixtureServer, currentRelease, fail, findBrowser, launchBrowser, loadFixture, parseArgs, seedScript, seedsFor, sessionHash, sleep } from './lib.mjs'
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-
-// ---- args ---------------------------------------------------------------------
-
-function parseArgs(argv) {
-  const o = {}
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
-    if (a === '--no-gif' || a === '--keep-profile' || a === '--list' || a === '--help' || a === '-h') o[a.slice(2)] = true
-    else if (a.startsWith('--')) o[a.slice(2)] = argv[++i]
-  }
-  return o
-}
-const A = parseArgs(process.argv.slice(2))
+const A = parseArgs(process.argv.slice(2), ['--keep-profile', '--list'])
 if (A.help) {
-  console.log('usage: node scripts/demo/shoot.mjs [--base http://localhost:47861] [--release v2.0] [--out <dir>] [--fixture tmp/demo-root] [--themes dark,light] [--shots a,b] [--w 1440] [--h 900] [--scale 1] [--browser exe] [--no-gif] [--keep-profile] [--list]')
+  console.log('usage: node scripts/demo/shoot.mjs [--base http://localhost:47861] [--release v2.0] [--out <dir>] [--fixture tmp/demo-root] [--themes graphite] [--shots a,b] [--w 1440] [--h 900] [--scale 1] [--browser exe] [--keep-profile] [--list]')
   process.exit(0)
 }
 const BASE = (A.base || 'http://localhost:47861').replace(/\/+$/, '')
-// Each release keeps its own folder — demo/v1.0/, demo/v2.0/ … — so README can
-// show what a version looked like and old shots are never overwritten. The
-// default release comes from package.json ("2.1.0" → v2.1); --release overrides.
-function currentRelease() {
-  try {
-    const v = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8')).version || '0.0.0'
-    const [major, minor] = v.split('.')
-    return `v${major}.${minor}`
-  } catch {
-    return 'v0.0'
-  }
-}
 const RELEASE = A.release || currentRelease()
 const OUT = path.resolve(A.out || path.join(REPO, 'demo', RELEASE))
 const FIXTURE = path.resolve(A.fixture || path.join(REPO, 'tmp', 'demo-root'))
 const W = Number(A.w || 1440)
 const H = Number(A.h || 900)
 const SCALE = Number(A.scale || 1)
-
-// theme name in the file name → the app's theme key (src/lib/prefs.js THEMES)
-const THEME_KEYS = { dark: 'midnight', light: 'light', graphite: 'graphite' }
-const THEMES = (A.themes || 'dark,light').split(',').map((s) => s.trim()).filter(Boolean)
+const THEMES = (A.themes || 'graphite').split(',').map((s) => s.trim()).filter(Boolean)
 for (const t of THEMES) if (!THEME_KEYS[t]) fail(`unknown theme "${t}" — one of ${Object.keys(THEME_KEYS).join(', ')}`)
-
-function fail(msg) {
-  console.error(`shoot: ${msg}`)
-  process.exit(1)
-}
-
-// ---- browser ------------------------------------------------------------------
-
-function findBrowser() {
-  if (A.browser) return A.browser
-  const env = [process.env.CHROME_PATH, process.env.AGENTDECK_BROWSER].filter(Boolean)
-  const win = [
-    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-    path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
-    'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
-    'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
-  ]
-  const mac = ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge']
-  const linux = ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'microsoft-edge']
-  const cands = [...env, ...(process.platform === 'win32' ? win : process.platform === 'darwin' ? mac : [])]
-  for (const c of cands) if (c && fs.existsSync(c)) return c
-  if (process.platform !== 'win32') {
-    for (const c of linux) {
-      const r = spawnSync('which', [c], { encoding: 'utf8' })
-      if (r.status === 0 && r.stdout.trim()) return r.stdout.trim()
-    }
-  }
-  return null
-}
-
-const freePort = () =>
-  new Promise((resolve, reject) => {
-    const s = net.createServer()
-    s.listen(0, '127.0.0.1', () => {
-      const p = s.address().port
-      s.close(() => resolve(p))
-    })
-    s.on('error', reject)
-  })
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-
-// ---- CDP client ---------------------------------------------------------------
-
-class Cdp {
-  constructor(ws) {
-    this.ws = ws
-    this.id = 0
-    this.pending = new Map()
-    this.listeners = new Map()
-    ws.on('message', (m) => {
-      const msg = JSON.parse(m)
-      if (msg.id && this.pending.has(msg.id)) {
-        const { resolve, reject } = this.pending.get(msg.id)
-        this.pending.delete(msg.id)
-        msg.error ? reject(new Error(`${msg.error.message} (${msg.error.code})`)) : resolve(msg.result)
-      } else if (msg.method && this.listeners.has(msg.method)) {
-        for (const fn of this.listeners.get(msg.method)) fn(msg.params)
-      }
-    })
-  }
-  send(method, params = {}) {
-    return new Promise((resolve, reject) => {
-      const id = ++this.id
-      this.pending.set(id, { resolve, reject })
-      this.ws.send(JSON.stringify({ id, method, params }))
-    })
-  }
-  on(method, fn) {
-    if (!this.listeners.has(method)) this.listeners.set(method, new Set())
-    this.listeners.get(method).add(fn)
-    return () => this.listeners.get(method).delete(fn)
-  }
-  async eval(expression, { awaitPromise = true } = {}) {
-    const r = await this.send('Runtime.evaluate', { expression, awaitPromise, returnByValue: true })
-    if (r.exceptionDetails) throw new Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text)
-    return r.result?.value
-  }
-  // poll a page-side predicate (JS expression) until it is truthy
-  async waitFor(expression, { timeout = 10000, every = 150 } = {}) {
-    const until = Date.now() + timeout
-    while (Date.now() < until) {
-      try {
-        if (await this.eval(expression)) return true
-      } catch {}
-      await sleep(every)
-    }
-    return false
-  }
-}
-
-// ---- fixture → localStorage seeds -----------------------------------------------
-// Shapes come from src/lib/prefs.js, tabs.js, pins.js, workspaces.js — keep in sync.
-
-function loadFixture() {
-  const mf = path.join(FIXTURE, 'manifest.json')
-  if (!fs.existsSync(mf)) fail(`no manifest at ${mf} — run scripts/demo/make-fixture.mjs first (or pass --fixture)`)
-  const manifest = JSON.parse(fs.readFileSync(mf, 'utf8'))
-  const rootsOf = (id) => {
-    try {
-      return JSON.parse(fs.readFileSync(path.join(FIXTURE, `roots.${id}.json`), 'utf8'))[0]
-    } catch {
-      return null
-    }
-  }
-  const roots = { claude: rootsOf('claude'), codex: rootsOf('codex') }
-  const target = (s) => ({ provider: s.provider, root: manifest.rootIds[s.provider], rootLabel: roots[s.provider]?.label || `~/.${s.provider}`, slug: s.slug, id: s.id, title: s.title || null, project: s.project, cwd: s.cwd })
-  const byMinutes = (a, b) => b.minutes - a.minutes
-  const claude = manifest.sessions.filter((s) => s.provider === 'claude')
-  const codex = manifest.sessions.filter((s) => s.provider === 'codex')
-  const claudeStar = claude.find((s) => s.subagents.length) || [...claude].sort(byMinutes)[0] || null
-  const codexStar = codex.find((s) => s.subagents.length) || [...codex].sort(byMinutes)[0] || null
-  const longest = [...manifest.sessions].sort(byMinutes)[0] || null
-  const shared = manifest.projects.find((p) => p.providers.length > 1) || manifest.projects[0] || null
-  const otherProject = manifest.projects.find((p) => p !== shared && p.providers.includes('codex')) || manifest.projects.find((p) => p !== shared) || null
-  const projectTarget = (p, provider) => ({ kind: 'project', provider, root: manifest.rootIds[provider], rootLabel: roots[provider]?.label || `~/.${provider}`, slug: provider === 'claude' ? p.claudeSlug : p.cwd, cwd: p.cwd, project: p.name, id: null, title: null })
-  const recent = [...manifest.sessions].sort((a, b) => new Date(b.end) - new Date(a.end)).slice(0, 6)
-  return { manifest, roots, target, claudeStar, codexStar, longest, shared, otherProject, projectTarget, recent }
-}
-
-function seedsFor(fx, themeKey, level) {
-  const now = Date.now()
-  const seeds = {
-    agentdeck_theme: themeKey,
-    agentdeck_prefs: { theme: themeKey, density: 'comfortable', showWorkspaces: true, showPinned: true, showFirstPrompt: true, inlineSubagents: true },
-    agentdeck_sidebar_sections: { workspaces: true, pinned: true, projects: true },
-  }
-  if (level === 'base') return seeds
-  const { target, longest, claudeStar, codexStar, shared, otherProject, projectTarget, recent } = fx
-  // pins: one session (the long pairing session) + one whole project
-  const pins = []
-  if (longest) pins.push({ ...target(longest), at: now - 3600e3 })
-  if (otherProject) {
-    const prov = otherProject.providers.includes('codex') ? 'codex' : otherProject.providers[0]
-    const pt = projectTarget(otherProject, prov)
-    pins.push({ provider: pt.provider, root: pt.root, rootLabel: pt.rootLabel, slug: pt.slug, id: null, title: null, project: pt.project, cwd: pt.cwd, at: now - 7200e3 })
-  }
-  seeds.agentdeck_pins = pins
-  // one workspace: the project that lives in both providers, grouped and coloured
-  if (shared) seeds.agentdeck_workspaces = [{ id: 'demo-ws-1', name: shared.name, at: now - 86400e3, color: 'violet', items: shared.providers.map((prov) => projectTarget(shared, prov)) }]
-  // MRU for the quick switcher
-  seeds.agentdeck_recent = recent.map((s, i) => ({ ...target(s), at: now - (i + 1) * 900e3 }))
-  // a lived-in tab strip: Home + the two showcase sessions (the hash decides which is active)
-  const tabs = [{ key: 'demo-home', target: { provider: null, view: 'activity', focus: null } }]
-  if (claudeStar) tabs.push({ key: 'demo-claude', target: { ...target(claudeStar), view: 'conversation' } })
-  if (codexStar) tabs.push({ key: 'demo-codex', target: { ...target(codexStar), view: 'conversation' } })
-  seeds.agentdeck_tabs = { tabs, activeKey: 'demo-home' }
-  return seeds
-}
-
-// wrapped in try/catch: the script also runs on the about:blank we park on
-// between shots, where localStorage access throws a SecurityError
-const seedScript = (seeds) =>
-  'try {\n' +
-  Object.entries(seeds)
-    .map(([k, v]) => `localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(typeof v === 'string' ? v : JSON.stringify(v))});`)
-    .join('\n') +
-  '\n} catch {}'
 
 // ---- the shot list ----------------------------------------------------------------
 // hash: where to navigate (src/lib/route.js) · seed: 'base' | 'full' · h: viewport
 // height · ready: page-side predicate that says the data is on screen · act: extra
 // steps before capture (CDP client + fixture)
 
-const sessionHash = (t) => `#/${[t.provider, t.root, t.slug, t.id].map(encodeURIComponent).join('/')}`
 // page-side predicates (strings evaluated in the page). `booted` = the sidebar
 // has listed the current folder's projects and nothing is still loading — the
 // seeded workspace/pins/tabs render from localStorage before any fetch returns,
@@ -294,7 +103,7 @@ const SHOTS = [
       if (pinnedTitle) await cdp.waitFor(hasText(pinnedTitle.slice(0, 20)), { timeout: 4000 })
       await sleep(500)
     },
-    about: 'Sidebar with a cross-provider workspace and pinned rows',
+    about: 'Sidebar with a cross-provider workspace (grouped by project) and pinned rows',
   },
   {
     name: 'insights',
@@ -350,7 +159,7 @@ const SHOTS = [
     ready: () => all(booted, hasText('LATEST SESSIONS')),
     act: async (cdp) => {
       await cdp.eval(`(() => { const b = document.querySelector('button[title="Preferences"]'); if (b) b.click(); return !!b })()`)
-      await cdp.waitFor(hasText('Colours'), { timeout: 3000 })
+      await cdp.waitFor(`/colours/i.test(${T})`, { timeout: 3000 }) // innerText carries the CSS uppercase
       await sleep(400)
     },
     about: 'Preferences popover (theme, density, provider colours, sidebar sections)',
@@ -368,54 +177,18 @@ async function main() {
   const shots = only ? SHOTS.filter((s) => only.includes(s.name)) : SHOTS
   if (only) for (const n of only) if (!SHOTS.some((s) => s.name === n)) fail(`unknown shot "${n}" — see --list`)
 
-  const browser = findBrowser()
+  const browser = findBrowser(A.browser)
   if (!browser) fail('no Chrome/Edge found — pass --browser <path> or set CHROME_PATH')
-  const fx = loadFixture()
-
-  // refuse to shoot a server that is not serving the fixture: the sidebar would show real sessions
-  let rootsSeen
-  try {
-    rootsSeen = await (await fetch(`${BASE}/api/claude/roots`)).json()
-  } catch (e) {
-    fail(`${BASE} is not answering (${e.message}) — start the server first (see the header of this file)`)
-  }
-  const served = (rootsSeen.roots || []).map((r) => path.resolve(r.dir))
-  const expected = path.resolve(fx.manifest.claudeHome)
-  if (!served.length || served.some((d) => d !== expected)) fail(`${BASE} serves ${served.join(', ') || 'nothing'} — not the fixture at ${expected}. Start it with AGENTDECK_CONFIG_DIR=${path.relative(process.cwd(), FIXTURE) || '.'}`)
+  const fx = loadFixture(FIXTURE)
+  await assertFixtureServer(BASE, fx)
 
   fs.mkdirSync(OUT, { recursive: true })
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'agentdeck-shoot-'))
-  const port = await freePort()
-  // --lang: dates/times in the shots must not follow this machine's locale.
-  // The back-forward cache is off on purpose: with it on, every page we navigate
-  // away from stays alive for a while with its /events SSE socket open, and after
-  // five or six shots Chrome's six-connections-per-host budget is spent — every
-  // /api request then queues forever and the sidebar shows "no tracked folder".
-  const chrome = spawn(browser, [`--remote-debugging-port=${port}`, '--headless=new', '--no-first-run', '--no-default-browser-check', '--disable-gpu', '--hide-scrollbars', '--force-device-scale-factor=1', '--lang=en-US', '--disable-back-forward-cache', '--disable-features=BackForwardCache', `--window-size=${W},${H}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore' })
+  const { cdp, close, version } = await launchBrowser({ browser, width: W, height: H, keepProfile: !!A['keep-profile'] })
   const written = []
   try {
-    let version = null
-    for (let i = 0; i < 60 && !version; i++) {
-      try {
-        version = await (await fetch(`http://127.0.0.1:${port}/json/version`)).json()
-      } catch {
-        await sleep(250)
-      }
-    }
-    if (!version) fail('the browser did not start (remote debugging port never answered)')
-    console.log(`browser: ${version.Browser}  ·  server: ${BASE}  ·  fixture: ${path.relative(process.cwd(), FIXTURE) || '.'} (${fx.manifest.scenario})`)
-    const target = await (await fetch(`http://127.0.0.1:${port}/json/new?about:blank`, { method: 'PUT' })).json()
-    const ws = new WebSocket(target.webSocketDebuggerUrl, { perMessageDeflate: false })
-    await new Promise((r, j) => {
-      ws.on('open', r)
-      ws.on('error', j)
-    })
-    const cdp = new Cdp(ws)
-    await cdp.send('Page.enable')
-    await cdp.send('Runtime.enable')
+    console.log(`browser: ${version}  ·  server: ${BASE}  ·  fixture: ${path.relative(process.cwd(), FIXTURE) || '.'} (${fx.manifest.scenario})  ·  out: ${path.relative(process.cwd(), OUT)}`)
     await cdp.send('Log.enable').catch(() => {})
     await cdp.send('Network.enable').catch(() => {})
-    await cdp.send('Emulation.setLocaleOverride', { locale: 'en-US' }).catch(() => {})
     // console / network errors from the page, reported per shot. The app's nav
     // index swallows a failed /roots fetch and only retries 45 s later, so a
     // request that fails at boot leaves "no tracked folder" for the whole shot —
@@ -440,7 +213,7 @@ async function main() {
     for (const theme of THEMES) {
       const themeKey = THEME_KEYS[theme]
       for (const shot of shots) {
-        const name = `${shot.name}-${theme}.png`
+        const name = THEMES.length > 1 ? `${shot.name}-${theme}.png` : `${shot.name}.png`
         const file = path.join(OUT, name)
         const h = shot.h || H
         pageErrors = []
@@ -449,8 +222,8 @@ async function main() {
         const { identifier } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: seedScript(seedsFor(fx, themeKey, A.seed || shot.seed)) })
         const hash = typeof shot.hash === 'function' ? shot.hash(fx) : shot.hash
         // a per-shot query string forces a full document load (a bare hash change
-        // would not re-run the seed script), without bouncing through about:blank.
-        // Up to three fresh loads: the page is only "ready" once the data is in.
+        // would not re-run the seed script). Up to three fresh loads: the page is
+        // only "ready" once the data is in.
         const readyExpr = shot.ready ? shot.ready(fx) : 'document.readyState === "complete"'
         let ready = false
         let since = Date.now()
@@ -488,37 +261,15 @@ async function main() {
         for (const e of pageErrors.slice(0, 3)) console.log(`      page error: ${e.slice(0, 160)}`)
       }
     }
-    ws.close()
   } finally {
-    chrome.kill()
-    await sleep(300)
-    if (!A['keep-profile']) fs.rmSync(profile, { recursive: true, force: true })
+    await close()
   }
 
   const flagged = written.filter((w) => !w.ok)
-  if (!A['no-gif']) makeGif(written.filter((w) => w.theme === THEMES[0] && w.ok).map((w) => w.file), path.join(OUT, 'tour.gif'))
   if (flagged.length) {
     console.warn(`\n${flagged.length} shot(s) flagged (!) — review them, then re-run just those:  --shots ${[...new Set(flagged.map((w) => w.shot))].join(',')}`)
     process.exitCode = 2
   }
-}
-
-// A 1 fps tour of the first theme's frames, when ffmpeg is on PATH.
-function makeGif(frames, out) {
-  if (frames.length < 2) return
-  const probe = spawnSync('ffmpeg', ['-version'], { encoding: 'utf8' })
-  const list = path.join(os.tmpdir(), `agentdeck-tour-${process.pid}.txt`)
-  const listBody = frames.map((f) => `file '${f.replace(/\\/g, '/').replace(/'/g, "'\\''")}'\nduration 1.5`).join('\n') + `\nfile '${frames[frames.length - 1].replace(/\\/g, '/')}'\n`
-  const args = ['-y', '-f', 'concat', '-safe', '0', '-i', list, '-vf', 'fps=1,scale=1200:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=3', '-loop', '0', out]
-  if (probe.status !== 0) {
-    console.log(`\nffmpeg not on PATH — to build the tour GIF yourself, write a concat list (file '<png>' / duration 1.5 per frame) and run:\n  ffmpeg ${args.map((a) => (a.includes(' ') || a.includes(';') ? JSON.stringify(a) : a)).join(' ')}`)
-    return
-  }
-  fs.writeFileSync(list, listBody)
-  const r = spawnSync('ffmpeg', args, { encoding: 'utf8' })
-  fs.rmSync(list, { force: true })
-  if (r.status === 0) console.log(`  ✓ ${path.relative(process.cwd(), out)}  (${frames.length} frames, 1 fps)`)
-  else console.warn(`  ! ffmpeg failed (${r.status}): ${(r.stderr || '').split('\n').filter(Boolean).slice(-3).join(' | ')}`)
 }
 
 main().catch((e) => {

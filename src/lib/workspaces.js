@@ -9,7 +9,7 @@ import { baseName, shortPath } from './paths.js'
 //   workspace = { id, name, items: [item], at, color? }   color = an accent name (lib/providerColors.js ACCENTS)
 //   item      = { kind: 'project' | 'session', provider, root, rootLabel, slug, cwd, project, id?, title? }
 const KEY = 'agentdeck_workspaces'
-const ACCENT_NAMES = ['emerald', 'sky', 'violet', 'amber', 'red', 'zinc']
+import { ACCENT_NAMES } from './providerColors.js'
 
 export const projectKey = (p) => `${p?.provider || ''}|${p?.root || ''}|${p?.slug || ''}`
 export const itemKey = (it) => `${projectKey(it)}|${it?.kind === 'session' || it?.id ? it.id || '' : ''}`

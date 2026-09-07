@@ -114,20 +114,25 @@ its real terminal.
   deterministic per `--seed`). `AGENTDECK_CONFIG_DIR=<dir>` points the server at
   another set of `roots.<id>.json` files and, when set, never seeds or re-adds
   the real `~/.claude` / `~/.codex`. `scripts/demo/shoot.mjs` drives headless
-  Chrome/Edge over the DevTools protocol (no puppeteer): every shot in every
-  theme, storage seeded from the fixture manifest (pins, a workspace, tabs),
-  readiness predicates instead of sleeps, `tour.gif` when ffmpeg is on PATH.
-  Every release keeps its own folder (`demo/v1.0/` is the original material,
-  `demo/v2.0/` this release's; the script picks the folder from
+  Chrome/Edge over the DevTools protocol (no puppeteer): every shot in the
+  Graphite theme, storage seeded from the fixture manifest (pins, a workspace,
+  tabs), readiness predicates instead of sleeps. `scripts/demo/record.mjs`
+  records a scripted tour — a drawn cursor, Ctrl+K, a session with its inline
+  sub-agent thread, Stats, Insights, the workspace, a colour pick — as
+  `tour.mp4` (h264) and a 256-colour `tour.gif` made from it (ffmpeg). Every
+  release keeps its own folder (`demo/v1.0/` is the original material,
+  `demo/v2.0/` this release's; the scripts pick the folder from
   `package.json`). `test/demo-fixture.test.js` pins the override and runs
   every scenario through the real parsers. `.privacyignore` allow-lists the
-  placeholder home paths so `check:privacy` stays green. README's demo section
-  shows both releases.
+  placeholder home paths so `check:privacy` stays green. README records the
+  v1 → v2 progression and shows both releases' material.
 
 - **Colours you choose.** Preferences › Colours sets each provider's accent
-  (tab dot, active-tab bar, folder chips, source tags) from the theme palette;
-  a workspace's ⋯ menu sets its own colour (icon and name). Accents are theme
-  tokens, so every theme stays consistent.
+  (tab dot, active-tab bar, folder chips, source tags) from a fourteen-colour
+  palette (emerald → teal → lime → cyan → sky → indigo → violet → fuchsia →
+  pink → rose → red → orange → amber, and grey); a workspace's ⋯ menu sets its
+  own colour (icon and name). Accents are theme tokens, so every theme stays
+  consistent.
 
 ### Changed
 - **One set of folder chips.** The sidebar's chips are the only scope picker;
@@ -138,6 +143,14 @@ its real terminal.
   its project's inline list (a muted "N more in a workspace" hint stays). A row
   can be pinned and grouped at once. Searching, or switching the Workspaces
   section off in Preferences, shows everything again.
+- **A workspace lists its sessions per project.** Each member project is a
+  small heading (provider dot, project name, folder) with its own newest-first
+  sessions under it, collapsible, "show all" per project; sessions you added
+  on their own sit under their project's name marked "selected". With many
+  sessions this reads as "which project, which folder" at a glance, which the
+  flat list with a source tag per row did not.
+- Workspace suggestions ("same folder in several places") can be switched off
+  in Preferences › Sidebar.
 - The "+" next to the folder chips opens a centered **Tracked folders** dialog
   (list with editable labels, untrack, one add form) instead of a Home page;
   `#/home/folders` links fall back to Home › Activity.

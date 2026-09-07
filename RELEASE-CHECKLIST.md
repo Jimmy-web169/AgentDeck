@@ -6,11 +6,12 @@ Run top to bottom before tagging. Every step is a command or a yes/no check.
 
 - [ ] `CHANGELOG.md` has a `## [x.y.z] - YYYY-MM-DD` section for this release
       (Added / Changed / Fixed) and `package.json` `version` matches it.
-- [ ] Demo assets in `demo/` are current: `monitor-work-flow.gif` (+ `.mp4`)
-      and the screenshots `README.md` embeds (`claude-states.png`,
-      `codex-states.png`, `monitor-sub-agents.png`, `quick-switcher.jpg`,
-      `skill.png`, `tmux-attach-session.png`). Re-record when the UI changed;
-      keep the file names the README links to.
+- [ ] Demo assets for this release exist in `demo/vX.Y/` — the screenshots
+      `README.md` embeds plus `tour.gif` / `tour.mp4` — produced by the `demo`
+      skill (`scripts/demo/make-fixture.mjs` → side server on 47861 →
+      `shoot.mjs` → `record.mjs`) from the synthetic data root, never from a
+      real home. Keep the file names the README links to; earlier releases'
+      folders stay untouched.
 - [ ] README install / OS notes still match `scripts/setup.sh`,
       `scripts/setup.ps1` and the Makefile targets.
 
@@ -45,17 +46,19 @@ All four must pass on the release machine.
       only MIT / ISC / BSD / Apache-2.0 (or otherwise compatible) licences; the
       bundled xterm.js and highlight.js assets keep their own headers.
 
-## 5. Demo on a clean data root  _(placeholder)_
+## 5. Demo on a clean data root
 
-- [ ] Run the demo skill against an empty `CLAUDE_CONFIG_DIR` / `CODEX_HOME`
-      and a fresh `roots.*.json`, walk the README demo once, confirm the GIF
-      still matches what a first-time user sees.
-      _The skill itself is not written yet — until it is, do this by hand._
+- [ ] The `demo` skill ran for this release (it is the last step of the
+      `release` skill): fixture regenerated, every PNG under `demo/vX.Y/`
+      reviewed for fictional data only, `tour.gif` plays and matches the UI,
+      the 47861 server is stopped. This — not `check:privacy` — is the privacy
+      check for images.
 
 ## 6. Tag + GitHub release
 
 - [ ] `git tag -a vX.Y.Z -m "AgentDeck X.Y.Z"` on the release commit
       (`git tag -f vX.Y.Z` while a pre-release tag is being moved), then
-      `git push origin vX.Y.Z`.
+      `git push origin vX.Y.Z`. **The `release` skill is the pre-push gate:
+      run it before every `git push origin`, never after.**
 - [ ] GitHub release for the tag: paste the CHANGELOG section as the notes,
-      attach `demo/monitor-work-flow.gif`, link the CI run.
+      attach `demo/vX.Y/tour.gif` and `tour.mp4`, link the CI run.
