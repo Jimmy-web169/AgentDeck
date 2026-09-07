@@ -126,12 +126,12 @@ test('keys that are data (file paths, ids, dates as map keys) never enter the fi
   const spec = { required: ['type'], enums: {}, types: {} }
   const obs = observe(
     [
-      { type: 'file-history-snapshot', snapshot: { trackedFileBackups: { 'C:\\Users\\someone\\code\\a.js': { v: 1 }, '/home/someone/b.js': { v: 2 } }, at: 1 } },
+      { type: 'file-history-snapshot', snapshot: { trackedFileBackups: { 'C:\\Users\\demo\\code\\a.js': { v: 1 }, '/home/demo/b.js': { v: 2 } }, at: 1 } },
       { type: 'x', byId: { 'e26a83d9-6055-455f-b7d3-8b0268513749': 1 }, byDay: { '2026-09-08': 2 } },
     ],
     spec
   )
-  assert.ok(!obs.keys.some((k) => /Users|home|someone|e26a83d9|2026-09/.test(k)), JSON.stringify(obs.keys))
+  assert.ok(!obs.keys.some((k) => /Users|home|demo|e26a83d9|2026-09/.test(k)), JSON.stringify(obs.keys))
   assert.ok(obs.keys.includes('snapshot.trackedFileBackups') && obs.keys.includes('snapshot.at'), 'the record shape itself is still recorded')
 })
 
