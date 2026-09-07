@@ -4,17 +4,31 @@ Read this before touching the repo. It records how the maintainer wants work run
 here; the codebase itself is described in `README.md`, `CONTRIBUTING.md` and
 `DATA-MODEL.md`, and the running change log lives in `CHANGELOG.md`.
 
+## How the maintainer likes to work
+
+- The maintainer writes in Traditional Chinese; reply in Traditional Chinese
+  unless they switch. Code, commit messages and docs stay in English.
+- Work iteratively on UI: give the result, then a short list of what to look at.
+  Verify visually (Claude in Chrome or a headless screenshot) before saying a UI
+  change is done.
+- When context gets full, compact and keep going; do not drop the current task.
+- Commit when asked; never push. Keep the CHANGELOG in the same commit.
+- Do not ask permission for reversible steps that follow from what was asked.
+  Ask only when different readings would produce materially different work.
+- Report progress in short updates while working. Never block silently on a
+  background task for minutes; poll briefly or do other work in between.
+
 ## How to split work (token thrift)
 
-- **Small, self-contained tasks go to a subagent** — a page rewrite against a
-  written spec, a doc pass, a diagnostic script, a search. Write the spec to the
-  scratchpad first, hand over the file list, and forbid touching anything else.
-- **Everything a subagent produces is reviewed by the main session** before it is
-  committed: build, backend tests, theme-token compliance, integration with the
-  shell (`src/App.jsx`, `src/components/shared/AppSidebar.jsx`, `HomeView.jsx`).
-- **Large or cross-cutting tasks stay with the main agent** (shell/app sync,
-  server routing, anything spanning more than a couple of files). Do not fan a
-  big task out into many agents; the coordination costs more than it saves.
+- **Default: the main agent does the work itself.** Subagents are used only
+  when the maintainer asks for them; on 2026-09-07 they said fanning out did
+  not help ("感覺沒有比較好"). If one is used anyway: write the spec to the
+  scratchpad first, hand over the file list, forbid touching anything else, and
+  **review everything it produces in the main session** before it is committed
+  (build, backend tests, theme-token compliance, integration with the shell —
+  `src/App.jsx`, `src/components/shared/AppSidebar.jsx`, `HomeView.jsx`).
+- **Large or cross-cutting tasks always stay with the main agent** (shell/app
+  sync, server routing, anything spanning more than a couple of files).
 - Keep the main context lean: run scripts from the scratchpad, read only what the
   review needs, and use `git diff --stat` before reading whole files.
 
