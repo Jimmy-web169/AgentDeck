@@ -104,6 +104,7 @@ export default function useNavIndex(providers, { enabled = true } = {}) {
           root: r.id,
           rootLabel: r.label,
           exists: r.exists !== false,
+          probe: r.probe || null, // format-drift status from the server's probe (chip badge)
         }))
       ),
     [providers, roots]

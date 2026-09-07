@@ -20,6 +20,7 @@ import {
   invalidateIndex,
 } from './paths.js'
 import { safeTrash } from '../../shared/trash.js'
+import { probeStatus, runProbe, acceptProbe } from '../../shared/formatProbe.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
 import { addTokens, tokenFields, zeroTokens as zeroTokensShared } from '../../shared/tokens.js'
 import { child } from '../../shared/children.js'
@@ -68,8 +69,19 @@ function httpErr(status, message) {
 // --- roots -------------------------------------------------------------------
 
 function getRoots() {
-  const roots = rootsWithMeta()
+  const roots = rootsWithMeta().map((r) => ({ ...r, probe: probeStatus('codex', r.id) }))
   return { roots, default: roots[0]?.id || null }
+}
+
+// format-drift probe (server/shared/formatProbe.js): re-sample now / take the
+// current shape as the new baseline
+function postProbeRun(_q, body) {
+  const root = resolveRoot(body?.root)
+  return { root: root.id, probe: runProbe('codex', root) }
+}
+function postProbeAccept(_q, body) {
+  const root = resolveRoot(body?.root)
+  return { root: root.id, probe: acceptProbe('codex', root) }
 }
 
 function postRoots(_q, body) {
@@ -520,6 +532,8 @@ async function getPickFolder() {
 
 const ROUTES = {
   'GET /api/roots': getRoots,
+  'POST /api/probe/run': postProbeRun,
+  'POST /api/probe/accept': postProbeAccept,
   'POST /api/roots': postRoots,
   'POST /api/roots/label': postRootLabel,
   'GET /api/activity': getActivity,

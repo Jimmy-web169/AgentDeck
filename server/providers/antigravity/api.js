@@ -32,6 +32,7 @@ import { child } from '../../shared/children.js'
 import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../shared/parseCache.js'
 import { withOversizeFallback } from '../../shared/transcriptGuard.js'
 import { safeTrash } from '../../shared/trash.js'
+import { probeStatus, runProbe, acceptProbe } from '../../shared/formatProbe.js'
 import { makeDispatch } from '../../shared/dispatch.js'
 import { bucketActivity } from '../../shared/activity.js'
 import { openTool, pickFolderNative } from '../../shared/launch.js'
@@ -96,8 +97,19 @@ const fpOf = (file) => {
 // --- roots -------------------------------------------------------------------
 
 function getRoots() {
-  const roots = rootsWithMeta()
+  const roots = rootsWithMeta().map((r) => ({ ...r, probe: probeStatus('antigravity', r.id) }))
   return { roots, default: roots[0]?.id || null, sqlite: sqliteAvailable() }
+}
+
+// format-drift probe (server/shared/formatProbe.js): re-sample now / take the
+// current shape as the new baseline
+function postProbeRun(_q, body) {
+  const root = resolveRoot(body?.root)
+  return { root: root.id, probe: runProbe('antigravity', root) }
+}
+function postProbeAccept(_q, body) {
+  const root = resolveRoot(body?.root)
+  return { root: root.id, probe: acceptProbe('antigravity', root) }
 }
 function postRoots(_q, body) {
   if (!body?.path) throw httpErr(400, 'missing path')
@@ -463,6 +475,8 @@ const getPickFolder = async () => pickFolderNative()
 
 const ROUTES = {
   'GET /api/roots': getRoots,
+  'POST /api/probe/run': postProbeRun,
+  'POST /api/probe/accept': postProbeAccept,
   'POST /api/roots': postRoots,
   'POST /api/roots/label': postRootLabel,
   'DELETE /api/roots': deleteRoots,

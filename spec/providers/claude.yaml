@@ -149,7 +149,12 @@ probe:
   sample: { glob: "projects/*/*.jsonl", newest: 5, head: 200, tail: 200 }
   required: [type, timestamp, uuid, sessionId]
   enums:
-    type: [user, assistant, system, summary, attachment, file-history-snapshot, queue-operation]
+    # the first seven are the conversation; the rest are bookkeeping records Claude Code
+    # 2.1.259–2.1.263 interleaves into the same file (seen 2026-09-08 by the format probe
+    # on a real home) — the parser skips them, the probe must not call them drift
+    type: [user, assistant, system, summary, attachment, file-history-snapshot, queue-operation,
+           ai-title, last-prompt, mode, permission-mode, cost-state, file-history-delta, frame-link,
+           bridge-session, atis-latch, artifact-autoreact-ledger, artifact-comment-monitor]
     "message.content[].type": [text, thinking, redacted_thinking, tool_use, server_tool_use, tool_result, image, document]
   types:
     "message.usage.input_tokens": number

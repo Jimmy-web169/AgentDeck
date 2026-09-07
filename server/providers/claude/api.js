@@ -37,6 +37,7 @@ const oversizeStub = (id, e) => ({ ...summarize([], id), title: `(transcript too
 import { discoverRuns, discoverPlainAgents } from './runs.js'
 import { inventory, readResource, writeResource, deleteResource } from './resources.js'
 import { safeTrash } from '../../shared/trash.js'
+import { probeStatus, runProbe, acceptProbe } from '../../shared/formatProbe.js'
 import { withWatchersPaused } from '../../shared/watchGate.js'
 import { parseSkillsAdd, runSkillsAdd } from '../../shared/skills.js'
 import { SKILL_CONFIG } from './skills.js'
@@ -102,7 +103,19 @@ function projectInfo(rootDir, slug) {
 // --- read handlers -----------------------------------------------------------
 
 function getRoots() {
-  return { roots: rootsWithMeta(), default: rootsWithMeta()[0]?.id || null }
+  const roots = rootsWithMeta().map((r) => ({ ...r, probe: probeStatus('claude', r.id) }))
+  return { roots, default: roots[0]?.id || null }
+}
+
+// format-drift probe (server/shared/formatProbe.js): re-sample now / take the
+// current shape as the new baseline
+function postProbeRun(_q, body) {
+  const root = resolveRoot(body?.root)
+  return { root: root.id, probe: runProbe('claude', root) }
+}
+function postProbeAccept(_q, body) {
+  const root = resolveRoot(body?.root)
+  return { root: root.id, probe: acceptProbe('claude', root) }
 }
 
 function postRoots(_q, body) {
@@ -714,6 +727,8 @@ function getVersion(q) {
 
 const ROUTES = {
   'GET /api/roots': getRoots,
+  'POST /api/probe/run': postProbeRun,
+  'POST /api/probe/accept': postProbeAccept,
   'POST /api/roots': postRoots,
   'POST /api/roots/label': postRootLabel,
   'GET /api/activity': getActivity,

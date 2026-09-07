@@ -7,6 +7,7 @@ import { PROVIDERS } from './registry.js'
 import { isAllowedOrigin } from './shared/origin.js'
 import { stopAllTerminals } from './shared/terminal.js'
 import { registerWatchControl, restartWatchers } from './shared/watchGate.js'
+import { scheduleProbes, runAllProbes } from './shared/formatProbe.js'
 import { invalidate } from './shared/parseCache.js'
 import { configDir, isolatedConfig } from './shared/roots.js'
 
@@ -193,7 +194,10 @@ const server = http.createServer(async (req, res) => {
     const { status, body: out } = await provider.dispatch(req.method, apiPath, url.searchParams, body)
     // tracked-folder changes -> re-arm watchers so live updates cover new roots
     // (via the gate: deferred if a delete currently holds the watchers paused)
-    if (apiPath === '/api/roots' && req.method !== 'GET' && status < 400) await restartWatchers()
+    if (apiPath === '/api/roots' && req.method !== 'GET' && status < 400) {
+      await restartWatchers()
+      setTimeout(() => runAllProbes(PROVIDERS), 500) // a newly tracked folder gets its baseline right away
+    }
     // handlers may attach _etag (a content fingerprint) to a GET body: echo it
     // as an ETag and answer a matching If-None-Match with an empty 304, so
     // pollers pay nothing when nothing changed. The client sends no-store and
@@ -236,6 +240,8 @@ server.listen(PORT, '127.0.0.1', () => {
   if (isolatedConfig()) console.log(`  config dir: ${configDir()}  (AGENTDECK_CONFIG_DIR — default roots are NOT added)`)
   console.log(`  dev UI: http://localhost:${DEV_UI_PORT}\n`)
   void startWatchers()
+  // format-drift probe: the newest transcripts of every tracked root, at start and hourly
+  scheduleProbes(PROVIDERS)
 })
 
 process.on('exit', () => stopAllTerminals())

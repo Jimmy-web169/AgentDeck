@@ -132,29 +132,37 @@ shell; keep it that way.
 
 ## 5. Format-drift detection
 
-Vendors change their on-disk formats without notice. Each provider ships a
-declarative `probe.js`:
+Vendors change their on-disk formats without notice. The `probe:` block of each
+descriptor (`spec/providers/<id>.yaml`) says what to watch — **implemented
+2026-09-08** in `server/shared/formatProbe.js`, which reads that block at runtime:
 
-```js
-export const PROBE = {
-  version: 1,
-  files: { glob: 'projects/*/*.jsonl', newest: 5, head: 200, tail: 200 },
-  required: ['type', 'timestamp', 'message.role'],           // dotted paths, must exist
-  enums: { type: ['user', 'assistant', 'system', 'summary'] }, // observed values ⊆ set
-  types: { 'message.usage.input_tokens': 'number' },
-  sidecars: ['subagents/agent-*.jsonl'],
-}
+```yaml
+probe:
+  sample: { glob: "projects/*/*.jsonl", newest: 5, head: 200, tail: 200 }
+  required: [type, timestamp, uuid, sessionId]     # dotted paths every record carries
+  enums: { type: [user, assistant, system, summary, …] }   # observed values ⊆ set
+  types: { "message.usage.input_tokens": number }
+  version_field: version
 ```
 
-`server/shared/formatProbe.js` samples the newest files, canonicalizes the observed
-key set / enum values / types, hashes it, and compares with the fingerprint stored
-in `roots.<id>.json`: `baseline` (first run) · `ok` · `changed` (new optional keys →
-info badge) · `drift` (missing required key, unknown enum value, type change → banner
-on the folder chip and an entry on Home › Activity with "mark as expected"). Runs at
-startup and hourly, never on hot reads, through the existing `makeRoots({ dataProbe })`
-seam. One frozen fixture per known format generation lives under `test/probe/` so
-the probe itself is unit-tested. `make all` already updates the CLIs first; the probe
-tells the user the same morning when the update changed what is on disk.
+The newest files of every tracked root are sampled at startup, hourly, and when a
+folder is added (never on hot reads); the observed key set / enum values / types are
+fingerprinted and compared with the descriptor and with the baseline stored in
+`<configDir>/probe.<id>.json`. Status per root, attached to `GET /api/roots`:
+
+| status | meaning | shown |
+|---|---|---|
+| `baseline` | first sample of this root, stored | Folders dialog |
+| `ok` | matches the descriptor and the baseline | Folders dialog |
+| `changed` | keys the baseline never saw, or a listed enum value seen for the first time | Folders dialog (“format changed”), log |
+| `drift` | a required key in fewer than half the sampled records, an enum value the descriptor does not list, a type that changed | **badge on the folder chip**, Folders dialog with the details, `accept` / `re-check` |
+| `empty` | nothing to sample yet | — |
+
+Thresholds (decision 4 below, 2026-09-08): a new optional key is not worth a badge —
+warn only on what every consumer of the format needs. `POST /api/probe/accept`
+makes the current shape the baseline; `POST /api/probe/run` re-samples now.
+`test/format-probe.test.js` lays the spec fixtures out as homes and breaks the
+format the way a vendor would.
 
 ## 6. MCP config normalization
 
@@ -176,7 +184,7 @@ Precedence when the same name appears twice: local > project > user > plugin.
    optional `groups[]` — agree?
 3. **decided 2026-09-07**: show the common fields first, then the provider's own, and the backend must say which is which (`fields` on `/api/stats`). Was: should the UI ever show provider-specific tiles (reasoning, cache create) or only
    non-zero fields of the common `Tokens`?
-4. Drift `changed` vs `drift` thresholds: is a new optional key worth a badge?
+4. **decided 2026-09-08**: no — a new optional key is `changed` (dialog + log only); `drift` = missing required key (< 50% of sampled records), unknown enum value, type change (chip badge). Was: is a new optional key worth a badge?
 5. Memory: expose codex thread memories under the same project tab (read-only) — yes?
 6. Antigravity: its transcripts carry no `cwd`; do we accept a "no project" bucket?
 

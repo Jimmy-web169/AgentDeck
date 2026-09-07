@@ -121,10 +121,29 @@ function Dialog({ onClose, providers, index }) {
                       </button>
                     )}
                     <div className="text-[11px] text-zinc-500 font-mono truncate">{r.dir}</div>
+                    {r.probe?.details?.length > 0 && (
+                      <div className={`text-[10.5px] truncate ${r.probe.status === 'drift' ? 'text-amber-300/90' : 'text-zinc-500'}`} title={r.probe.details.map((d) => d.msg).join('\n')}>
+                        {r.probe.details.map((d) => d.msg).join(' · ')}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-[10.5px] flex gap-2 shrink-0">
+                  <div className="text-[10.5px] flex items-center gap-2 shrink-0">
                     <span className={r.exists ? 'text-emerald-400' : 'text-red-400'}>{r.exists ? 'exists' : 'missing'}</span>
                     <span className={r[r.statusField] ? 'text-sky-400' : 'text-zinc-600'}>{r[r.statusField] ? 'has history' : 'config only'}</span>
+                    {/* format-drift probe: what the newest transcripts look like vs the descriptor + the stored baseline */}
+                    {r.probe && r.probe.status !== 'empty' && (
+                      <span className={r.probe.status === 'drift' ? 'text-amber-300' : r.probe.status === 'changed' ? 'text-zinc-300' : 'text-zinc-600'} title={`Format probe · ${r.probe.records} records from ${r.probe.files} file${r.probe.files === 1 ? '' : 's'} at ${r.probe.at}${r.probe.versions?.length ? ` · CLI ${r.probe.versions.join(', ')}` : ''}`}>
+                        {r.probe.status === 'drift' ? 'format drift' : r.probe.status === 'changed' ? 'format changed' : 'format ok'}
+                      </span>
+                    )}
+                    {r.probe && (r.probe.status === 'drift' || r.probe.status === 'changed') && (
+                      <button onClick={() => run(() => apis[r.provider].probeAccept(r.id))} disabled={busy} title="This is a real format change I understand — make the current shape the baseline" className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 disabled:opacity-40">
+                        accept
+                      </button>
+                    )}
+                    <button onClick={() => run(() => apis[r.provider].probeRun(r.id))} disabled={busy} title="Re-sample the newest transcripts now" className="text-zinc-500 hover:text-zinc-200 disabled:opacity-40">
+                      re-check
+                    </button>
                   </div>
                   <button onClick={() => untrack(r)} disabled={busy} title="Stop tracking this folder. Does NOT delete it from disk." className="text-[11px] px-2 py-1 rounded bg-zinc-500/15 text-zinc-300 hover:bg-zinc-500/25 disabled:opacity-40 shrink-0">
                     untrack

@@ -170,6 +170,15 @@ its real terminal.
   (`node:sqlite`, Node ≥ 22.5; without it the JSONL alone is shown). The
   descriptor `spec/providers/antigravity.yaml` is `experimental` and its
   fixture + golden run through `npm run check:spec` like the other two.
+- **Format-drift probe.** Vendors change their transcript formats without
+  notice; each provider descriptor's `probe:` block now drives a sampler that
+  reads the newest transcripts of every tracked folder at start-up, hourly and
+  when a folder is added, and compares the observed keys, enum values and types
+  with the descriptor and with a stored baseline. A folder whose format drifted
+  (a required key gone, an unknown record type, a token count that turned into
+  a string) gets a small “!” on its chip; the Folders dialog shows what changed
+  and offers *accept* (take the new shape as the baseline) and *re-check*. A
+  merely added optional key is recorded, not flagged.
 - **Stats is a session tab.** Next to Conversation / Sub-agents / Raw, drilled
   to the open session (breadcrumbs climb to the project and the folder); the
   old "Stats →" link that left for Home is gone, so the session tab is never

@@ -33,11 +33,14 @@ does not mention fails the gate — that is what keeps the descriptor honest.
 1. **Descriptors as documentation, schema-validated** — done.
 2. **Conformance** — done (`check:spec`, above). Goldens are content-only (no
    mtimes or paths) so they are stable across machines.
-3. **Format-drift probe at startup** — next: `server/shared/formatProbe.js` runs
-   each descriptor's `probe:` block over the newest files of every tracked root,
-   fingerprints the observed schema, compares with the baseline in
-   `roots.<id>.json`, and flags the folder chip on `drift`.
-4. **Server reads `capabilities` / `cli` / `probe` from the descriptor** — after 3.
+3. **Format-drift probe** — done (2026-09-08): `server/shared/formatProbe.js`
+   runs each descriptor's `probe:` block over the newest files of every tracked
+   root at startup / hourly / when a folder is added, compares with the
+   descriptor and the baseline in `<configDir>/probe.<id>.json`, and flags the
+   folder chip on `drift` (details, accept and re-check in the Folders dialog).
+   Thresholds: PROVIDER-SPEC §5 / §7.4.
+4. **Server reads `capabilities` / `cli` from the descriptor** — `probe` is read
+   from it already; the rest after the Antigravity descriptor settles.
 5. **Generic rule-driven parser** — later. Antigravity got a hand-written
    parser first (2026-09-08): its transcript needs adjacency pairing and a
    SQLite sidecar, which is exactly the kind of case the rule language will

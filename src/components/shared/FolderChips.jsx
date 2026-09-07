@@ -12,13 +12,14 @@ export default function FolderChips({ scopes = [], providers = [], value, onPick
       <button
         key={`${s.provider}|${s.root}`}
         onClick={() => onPick?.({ provider: s.provider, root: s.root })}
-        title={`${providerLabel(providers, s.provider)} · ${s.rootLabel}${s.exists === false ? ' (missing on disk)' : ''}`}
+        title={`${providerLabel(providers, s.provider)} · ${s.rootLabel}${s.exists === false ? ' (missing on disk)' : ''}${s.probe?.status === 'drift' ? `\nFormat drift — ${(s.probe.details || []).map((d) => d.msg).join('; ')}\nDetails and “accept” in Folders (+).` : ''}`}
         className={`shrink-0 max-w-[200px] flex items-center gap-1.5 px-2 h-6 rounded-md text-[11.5px] border transition-colors ${
           active ? `bg-ink-600 border-zinc-500 ${c.text}` : 'border-zinc-800 text-zinc-500 hover:text-zinc-200 hover:border-zinc-600 hover:bg-ink-700'
         } ${s.exists === false ? 'line-through' : ''}`}
       >
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.dot}`} />
         <span className="truncate">{s.rootLabel}</span>
+        {s.probe?.status === 'drift' && <span className="shrink-0 text-[10px] font-semibold text-amber-300" aria-label="format drift">!</span>}
       </button>
     )
   }
