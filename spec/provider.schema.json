@@ -24,6 +24,9 @@
         "update": { "$ref": "#/$defs/argv", "description": "the CLI's own updater, run by `make update`" },
         "resume": { "$ref": "#/$defs/argv", "description": "argv to reopen a session; `{id}` is substituted" },
         "new": { "$ref": "#/$defs/argv", "description": "argv to start a fresh session in `{cwd}`" },
+        "prompt": { "$ref": "#/$defs/argv", "description": "argv to start an interactive session seeded with a prompt; `{prompt}` is substituted (AI hand-off)" },
+        "prompt": { "$ref": "#/$defs/argv", "description": "argv to start an interactive session seeded with a prompt; `{prompt}` is substituted (AI hand-off)" },
+        "prompt": { "$ref": "#/$defs/argv", "description": "argv to start an interactive session seeded with a prompt; `{prompt}` is substituted (AI hand-off)" },
         "env_home": { "type": "string", "description": "env var that points the CLI at a data home (CLAUDE_CONFIG_DIR, CODEX_HOME)" },
         "check_origin": { "type": "boolean", "description": "whether the terminal bridge must verify the request origin for this CLI" }
       }
@@ -187,14 +190,15 @@
     "capabilities": {
       "type": "object",
       "description": "what the UI may show for this provider; every key is required so a gap is explicit",
-      "required": ["projects", "sessions", "timeline", "tool_calls", "subagents", "memory", "mcp", "skills", "plugins", "usage_limits", "context_meter", "resume", "new_session", "delete_session", "history"],
+      "required": ["projects", "sessions", "timeline", "tool_calls", "subagents", "memory", "mcp", "skills", "plugins", "usage_limits", "context_meter", "resume", "new_session", "delete_session", "history", "ai_handoff"],
       "additionalProperties": false,
       "properties": {
         "projects": { "$ref": "#/$defs/cap" }, "sessions": { "$ref": "#/$defs/cap" }, "timeline": { "$ref": "#/$defs/cap" },
         "tool_calls": { "$ref": "#/$defs/cap" }, "subagents": { "$ref": "#/$defs/cap" }, "memory": { "$ref": "#/$defs/cap" },
         "mcp": { "$ref": "#/$defs/cap" }, "skills": { "$ref": "#/$defs/cap" }, "plugins": { "$ref": "#/$defs/cap" },
         "usage_limits": { "$ref": "#/$defs/cap" }, "context_meter": { "$ref": "#/$defs/cap" }, "resume": { "$ref": "#/$defs/cap" },
-        "new_session": { "$ref": "#/$defs/cap" }, "delete_session": { "$ref": "#/$defs/cap" }, "history": { "$ref": "#/$defs/cap" }
+        "new_session": { "$ref": "#/$defs/cap" }, "delete_session": { "$ref": "#/$defs/cap" }, "history": { "$ref": "#/$defs/cap" },
+        "ai_handoff": { "$ref": "#/$defs/cap", "description": "AgentDeck can open the CLI seeded with a brief (request + file + official docs); needs cli.prompt" }
       }
     },
 

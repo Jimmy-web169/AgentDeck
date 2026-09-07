@@ -14,6 +14,7 @@ cli:
   update: [update]
   resume: [resume, "{id}"]
   new: []
+  prompt: ["{prompt}"]          # `codex "<prompt>"` — interactive, seeded (AI hand-off)
   env_home: CODEX_HOME
   check_origin: true
 
@@ -142,6 +143,7 @@ capabilities:
   new_session:    { level: full }
   delete_session: { level: full, note: "trashes descendants too" }
   history:        { level: full }
+  ai_handoff:     { level: full, note: "codex \"<prompt>\" with a brief file: request + file + docs" }
 
 probe:
   sample: { glob: "sessions/*/*/*/rollout-*.jsonl", newest: 5, head: 200, tail: 200 }

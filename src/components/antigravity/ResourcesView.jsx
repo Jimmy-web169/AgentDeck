@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useProviderApi } from '../../lib/providerApi.js'
 import Markdown from '../shared/Markdown.jsx'
 import ReadOnlyNote from '../shared/ReadOnlyNote.jsx'
+import HandoffDialog, { HandoffButton } from '../shared/HandoffDialog.jsx'
 
 // What configures agy, in the same two-pane shape as the Codex and Claude Code
 // Config views: a grouped list on the left (instructions, skills, plugins,
@@ -85,6 +86,7 @@ export default function ResourcesView({ root, scope = 'user', slug }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [sel, setSel] = useState(null) // { kind, id? }
+  const [handoff, setHandoff] = useState(false)
 
   const projectMissing = scope === 'project' && !slug
   useEffect(() => {
@@ -112,6 +114,20 @@ export default function ResourcesView({ root, scope = 'user', slug }) {
   const trustedList = Array.isArray(trusted) ? trusted : trusted && typeof trusted === 'object' ? Object.keys(trusted) : []
   const settingsCount = [data.settings, data.sharedSettings, data.keybindings].filter(Boolean).length
   const is = (kind, id) => sel?.kind === kind && sel?.id === id
+
+  // what the hand-off brief says about the current selection; agy edits its own files
+  const handoffContext = () => {
+    const wd = data.configDir
+    if (sel?.kind === 'geminiMd') return { kind: 'GEMINI.md (instructions)', filePath: isProject ? `${data.base}/GEMINI.md` : '~/.gemini/GEMINI.md', content: data.geminiMd || '', docs: DOCS.rules }
+    if (sel?.kind === 'agentsMd') return { kind: 'AGENTS.md (instructions)', filePath: `${data.base}/AGENTS.md`, content: data.agentsMd || '', docs: DOCS.rules }
+    if (sel?.kind === 'skill') { const s = skills.find((x) => x.dir === sel.id); return { kind: `skill "${s?.name || ''}"`, filePath: `${sel.id}/SKILL.md`, content: s?.content || '', docs: DOCS.skill } }
+    if (sel?.kind === 'plugin') return { kind: 'plugin', filePath: sel.id, content: null, docs: DOCS.plugin }
+    if (sel?.kind === 'hooks') return { kind: 'hooks.json', filePath: sel.id, content: null, docs: DOCS.hooks }
+    if (sel?.kind === 'rule') { const r = rules.find((x) => x.path === sel.id); return { kind: `rule "${r?.name || ''}"`, filePath: sel.id, content: r?.text || '', docs: DOCS.rules } }
+    if (sel?.kind === 'mcp') { const m = mcp.find((x) => `${x.scope}/${x.name}` === sel.id); return { kind: `MCP server "${m?.name || ''}" (mcp_config.json)`, filePath: m?.sourcePath || `${wd}/mcp_config.json`, content: null, docs: DOCS.mcp } }
+    if (sel?.kind === 'settings') return { kind: 'settings.json', filePath: isProject ? `${wd}/settings.json` : `${data.base}/settings.json`, content: JSON.stringify(data.settings || {}, null, 2), docs: DOCS.settings }
+    return { kind: `${isProject ? 'workspace' : 'user'}-scope Antigravity configuration`, filePath: wd, content: null, docs: DOCS.overview }
+  }
 
   // ---- right pane for the current selection ----
   const renderPreview = () => {
@@ -282,8 +298,10 @@ export default function ResourcesView({ root, scope = 'user', slug }) {
         <span className="text-zinc-500 font-mono truncate">{data.configDir}</span>
         <ReadOnlyNote why={WHY} />
         <span className="flex-1" />
+        <HandoffButton onClick={() => setHandoff(true)} label="Ask agy" />
         <a href={DOCS.overview} target="_blank" rel="noreferrer" className="text-[11px] text-zinc-500 hover:text-sky-400 shrink-0">Antigravity CLI docs ↗</a>
       </div>
+      {handoff && <HandoffDialog api={api} providerId="antigravity" providerLabel="Antigravity" root={root} cwd={isProject ? slug : null} context={handoffContext()} onClose={() => setHandoff(false)} />}
 
       <div className="flex flex-1 min-h-0">
         {/* ---- left list ---- */}

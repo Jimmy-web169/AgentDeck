@@ -188,6 +188,17 @@ Precedence when the same name appears twice: local > project > user > plugin.
 5. Memory: expose codex thread memories under the same project tab (read-only) — yes?
 6. Antigravity: its transcripts carry no `cwd`; do we accept a "no project" bucket?
 
+## 7b. AI hand-off (implemented 2026-09-08)
+
+AgentDeck does not call models. `cli.prompt` in the descriptor is the argv that
+starts the CLI interactive and seeded (`claude "<prompt>"`, `codex "<prompt>"`,
+`agy -i "<prompt>"`); `POST /api/terminal` with a `brief` object writes
+`<configDir>/handoffs/<id>.md` (request, kind, file, current content, official
+docs URL from the UI's docs map, how to work) and starts the terminal with a
+one-line prompt pointing at that file (`server/shared/handoff.js`). Capability
+`ai_handoff`. Entry points: the three Config views (current selection as
+context) and Insights (the digest as context).
+
 ## 8. Reference
 
 - Agent Plugins 1.0 — https://agent-plugins.org/ (packaging only; Anthropic absent)

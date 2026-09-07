@@ -30,6 +30,8 @@ testproj/
 roots.claude.json
 roots.codex.json
 roots.antigravity.json
+# format-drift probe store (per provider), written next to roots.*.json by a server run from the repo
+probe.*.json
 .claude/
 
 # local research notes, handoffs, scratch — never committed (see CLAUDE.md)

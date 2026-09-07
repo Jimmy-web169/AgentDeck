@@ -54,6 +54,7 @@ export default {
   },
   contextMeter: { strategy: 'transcript' },
   capabilities: {
+    aiHandoff: true, // Config views + Insights can open the CLI seeded with a brief
     subagentModel: 'independent-sessions',
     skillAgentFlag: 'codex',
     inlineContextMeter: true,

@@ -208,19 +208,21 @@ export function loadFixture(fixtureDir) {
       return null
     }
   }
-  const roots = { claude: rootsOf('claude'), codex: rootsOf('codex') }
+  const roots = { claude: rootsOf('claude'), codex: rootsOf('codex'), antigravity: rootsOf('antigravity') }
   const target = (s) => ({ provider: s.provider, root: manifest.rootIds[s.provider], rootLabel: roots[s.provider]?.label || `~/.${s.provider}`, slug: s.slug, id: s.id, title: s.title || null, project: s.project, cwd: s.cwd })
   const byMinutes = (a, b) => b.minutes - a.minutes
   const claude = manifest.sessions.filter((s) => s.provider === 'claude')
   const codex = manifest.sessions.filter((s) => s.provider === 'codex')
   const claudeStar = claude.find((s) => s.subagents.length) || [...claude].sort(byMinutes)[0] || null
   const codexStar = codex.find((s) => s.subagents.length) || [...codex].sort(byMinutes)[0] || null
+  const agy = manifest.sessions.filter((s) => s.provider === 'antigravity')
+  const agyStar = [...agy].sort((a, b) => b.toolCalls - a.toolCalls || byMinutes(a, b))[0] || null
   const longest = [...manifest.sessions].sort(byMinutes)[0] || null
   const shared = manifest.projects.find((p) => p.providers.length > 1) || manifest.projects[0] || null
   const otherProject = manifest.projects.find((p) => p !== shared && p.providers.includes('codex')) || manifest.projects.find((p) => p !== shared) || null
   const projectTarget = (p, provider) => ({ kind: 'project', provider, root: manifest.rootIds[provider], rootLabel: roots[provider]?.label || `~/.${provider}`, slug: provider === 'claude' ? p.claudeSlug : p.cwd, cwd: p.cwd, project: p.name, id: null, title: null })
   const recent = [...manifest.sessions].sort((a, b) => new Date(b.end) - new Date(a.end)).slice(0, 6)
-  return { manifest, roots, target, claudeStar, codexStar, longest, shared, otherProject, projectTarget, recent }
+  return { manifest, roots, target, claudeStar, codexStar, agyStar, longest, shared, otherProject, projectTarget, recent }
 }
 
 export function seedsFor(fx, themeKey, level) {

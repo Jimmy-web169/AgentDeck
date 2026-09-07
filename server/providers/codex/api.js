@@ -21,6 +21,8 @@ import {
 } from './paths.js'
 import { safeTrash } from '../../shared/trash.js'
 import { probeStatus, runProbe, acceptProbe } from '../../shared/formatProbe.js'
+import { writeBrief, composeBrief, seedPrompt } from '../../shared/handoff.js'
+import { HOME as USER_HOME } from '../../shared/roots.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
 import { addTokens, tokenFields, zeroTokens as zeroTokensShared } from '../../shared/tokens.js'
 import { child } from '../../shared/children.js'
@@ -56,6 +58,7 @@ const TERMINAL_CONFIG = {
   title: 'codex',
   envKey: 'CODEX_HOME',
   resumeArgs: (id) => ['resume', id],
+  promptArgs: (p) => [p], // `codex "<prompt>"` — interactive, seeded (AI hand-off)
   checkOrigin: true,
 }
 
@@ -460,13 +463,24 @@ async function postTerminal(_q, body) {
   } else if (body.slug && path.isAbsolute(body.slug)) {
     cwd = body.slug // new conversation under an existing project (slug is the cwd)
     key = `${root.id}|new|${body.slug}`
+  } else if (body.brief) {
+    cwd = USER_HOME // a hand-off with no folder (Insights) runs from the home directory
+    key = `${root.id}|new|${cwd}`
   } else {
     throw httpErr(400, 'missing id or cwd')
   }
   if (!cwd || !fs.existsSync(cwd)) cwd = root.dir
+  // AI hand-off: the request + file + docs go into a brief file; the CLI starts
+  // seeded with a one-line prompt that points at it (server/shared/handoff.js)
+  let promptArgs = null
+  let briefFile = null
+  if (!resumeId && body.brief && typeof body.brief === 'object') {
+    briefFile = writeBrief(composeBrief({ ...body.brief, providerLabel: 'Codex', cwd }), { key })
+    promptArgs = TERMINAL_CONFIG.promptArgs(seedPrompt(briefFile))
+  }
   const meta = { root: root.id, slug: body.slug || null, id: resumeId, cwd, isNew: !resumeId, title: body.title || null }
-  const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, meta, config: TERMINAL_CONFIG })
-  return { ok: true, key, ...res }
+  const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, promptArgs, meta, config: TERMINAL_CONFIG })
+  return { ok: true, key, brief: briefFile, ...res }
 }
 
 function getTerminals() {

@@ -144,6 +144,14 @@ const SHOTS = [
     about: 'A Codex session (shell / apply_patch) with a child rollout',
   },
   {
+    name: 'session-antigravity',
+    hash: (fx) => (fx.agyStar ? sessionHash(fx.target(fx.agyStar)) : '#/'),
+    seed: 'full',
+    h: H,
+    ready: (fx) => sessionOpen((fx.agyStar?.title || '').slice(0, 24)),
+    about: 'An Antigravity (agy) session — thinking, tool calls paired with their results, tokens from its SQLite',
+  },
+  {
     name: 'stats',
     hash: '#/home/stats',
     seed: 'base',

@@ -18,6 +18,7 @@ cli:
   update: [update]                              # `agy update`; the CLI also self-updates on launch
   resume: [--conversation, "{id}"]              # verified: appends steps to the same brain/<id> + conversations/<id>.db; `-c` / `--continue` resumes the newest (docs/cli/conversations)
   new: []                                       # `agy` in {cwd}; an untrusted cwd is only mounted after the trust prompt (or with --add-dir {cwd})
+  prompt: [-i, "{prompt}"]                      # seeded interactive (docs/cli: -i / --prompt-interactive) — AI hand-off
   check_origin: true                            # guess
 
 roots:
@@ -161,6 +162,7 @@ capabilities:
   new_session:    { level: full, note: "trust prompt on first use of a cwd" }
   delete_session: { level: partial, note: "trash brain/<id>, conversations/<id>.db, annotations/<id>.pbtxt, presence/<id>.lock; also fix cache/last_conversations.json" }
   history:        { level: partial, note: "interactive prompts only" }
+  ai_handoff:     { level: full, note: "agy -i \"<prompt>\" with a brief file: request + file + docs" }
 
 probe:
   sample: { glob: "brain/*/.system_generated/logs/transcript_full.jsonl", newest: 5, head: 200, tail: 200 }

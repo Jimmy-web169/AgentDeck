@@ -15,6 +15,7 @@ cli:
   update: [update]
   resume: [--resume, "{id}"]
   new: []                       # `claude` in {cwd} starts a session
+  prompt: ["{prompt}"]          # `claude "<prompt>"` — interactive, seeded (AI hand-off)
   env_home: CLAUDE_CONFIG_DIR   # a second account = a second home dir
   check_origin: false
 
@@ -144,6 +145,7 @@ capabilities:
   new_session:    { level: full }
   delete_session: { level: full, note: "to the OS trash" }
   history:        { level: full }
+  ai_handoff:     { level: full, note: "claude \"<prompt>\" with a brief file: request + file + docs" }
 
 probe:
   sample: { glob: "projects/*/*.jsonl", newest: 5, head: 200, tail: 200 }

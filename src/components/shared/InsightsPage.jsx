@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createApi } from '../../api.js'
+import HandoffDialog, { HandoffButton } from './HandoffDialog.jsx'
 import { fmtRelative } from '../../lib/format.js'
 import { shortPath, projectName } from '../../lib/paths.js'
 
@@ -376,6 +377,7 @@ const toggleBtn = 'h-6 px-2 rounded-md border border-zinc-800 text-[11.5px] text
 // ---------- page ----------
 export default function InsightsPage({ provider, root, rootLabel = '', providerLabel = '', onOpen }) {
   const [data, setData] = useState(null)
+  const [handoff, setHandoff] = useState(false) // AI hand-off dialog with the digest
   const [err, setErr] = useState(null)
   const [table, setTable] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -611,9 +613,21 @@ export default function InsightsPage({ provider, root, rootLabel = '', providerL
         <button onClick={copy} className="px-3 py-1.5 rounded-md bg-ink-700 border border-zinc-700 text-[12px] text-zinc-200 hover:bg-ink-600">
           {copied ? '✓ copied' : 'Copy digest as Markdown'}
         </button>
-        <span>Paste it into any Claude or Codex session and ask for a read of your habits.</span>
+        <HandoffButton onClick={() => setHandoff(true)} label={`Ask ${providerLabel || 'the agent'} about it`} title="Open the CLI with this digest and a question about your habits" />
+        <span>Paste it into any agent session, or hand it over directly.</span>
         <span className="ml-auto text-zinc-600">A session counts on the day of its last activity.</span>
       </div>
+      {handoff && (
+        <HandoffDialog
+          api={createApi(provider)}
+          providerId={provider}
+          providerLabel={providerLabel || provider}
+          root={root}
+          context={{ kind: 'Insights digest (last 30 days)', filePath: null, content: digestMd(v, { providerLabel, rootLabel, range: data.range }), docs: null, need: 'Read the digest below and tell me the three habits worth changing, with one concrete experiment for each. Do not repeat the numbers back to me.' }}
+          placeholder="What do you want to know about how you work?"
+          onClose={() => setHandoff(false)}
+        />
+      )}
     </div>
   )
 }

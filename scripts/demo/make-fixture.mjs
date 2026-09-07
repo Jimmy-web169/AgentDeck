@@ -88,6 +88,128 @@ const CODEX_VERSION = '0.62.0'
 const MODELS = { opus: 'claude-opus-4-1-20250805', sonnet: 'claude-sonnet-4-5-20250929', haiku: 'claude-haiku-4-5-20251001' }
 const CODEX_MODEL = 'gpt-5-codex'
 
+// ---- Antigravity (agy) writer -------------------------------------------------------
+// One conversation = brain/<id>/.system_generated/logs/transcript_full.jsonl (steps:
+// USER_INPUT / PLANNER_RESPONSE / GENERIC results paired by adjacency) plus the
+// per-conversation SQLite the provider decodes for workspace, git, model and
+// tokens (raw protobuf blobs — see server/providers/antigravity/sqlite.js), an
+// annotations/<id>.pbtxt title, history.jsonl and cache/last_conversations.json.
+
+const AGY_VERSION = '1.1.27'
+const AGY_MODEL = 'gemini-3.8-flash-high'
+const AGY_MODEL_LABEL = 'Gemini 3.8 Flash (High)'
+let DatabaseSync = null
+try {
+  ;({ DatabaseSync } = await import('node:sqlite'))
+} catch {}
+// minimal protobuf wire-format encoder, enough for the three blobs the reader looks at
+const pbVarint = (n) => {
+  const out = []
+  let v = BigInt(n)
+  do {
+    let b = Number(v & 0x7fn)
+    v >>= 7n
+    if (v) b |= 0x80
+    out.push(b)
+  } while (v)
+  return Buffer.from(out)
+}
+const pbField = (num, wire, payload) => Buffer.concat([pbVarint((num << 3) | wire), payload])
+const pbInt = (num, n) => pbField(num, 0, pbVarint(n))
+const pbStr = (num, s) => pbField(num, 2, Buffer.concat([pbVarint(Buffer.byteLength(s)), Buffer.from(s)]))
+const pbMsg = (num, ...parts) => {
+  const body = Buffer.concat(parts)
+  return pbField(num, 2, Buffer.concat([pbVarint(body.length), body]))
+}
+const fileUri = (p) => 'file:///' + p.replace(/\\/g, '/').replace(/^\/+/, '')
+
+function agyToolCall(step, cwd) {
+  if (step.tool === 'shell') return { name: 'run_command', args: { CommandLine: step.cmd, Cwd: cwd, Blocking: true, toolAction: 'Running command', toolSummary: snippet(step.cmd, 40) } }
+  const target = `${cwd}${cwd.includes('\\') ? '\\' : '/'}${step.file.replace(/\//g, cwd.includes('\\') ? '\\' : '/')}`
+  if (step.add) return { name: 'write_to_file', args: { TargetFile: target, CodeContent: step.patch, EmptyFile: false, toolAction: 'Creating file', toolSummary: `Create ${step.file}` } }
+  return { name: 'replace_file_content', args: { TargetFile: target, ReplacementChunks: [{ AllowMultiple: false, TargetContent: '…', ReplacementContent: step.patch }], toolAction: 'Editing file', toolSummary: `Edit ${step.file}` } }
+}
+const agyToolResult = (step) => (step.tool === 'shell' ? step.out : step.add ? `Created ${step.file}.` : `Updated ${step.file}: 1 chunk replaced.`)
+
+function agySession(rng, ctx, entry, sid, startMs) {
+  const { cwd, tasks } = ctx
+  const iso = (ms) => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z')
+  const recs = []
+  const history = []
+  const usage = [] // one steps.metadata row per PLANNER_RESPONSE
+  const tokens = { input: 0, output: 0, cacheRead: 0, reasoning: 0 }
+  let step = 0
+  const push = (ms, source, type, rest) => recs.push({ step_index: step++, source, type, status: 'DONE', created_at: iso(ms), ...rest })
+  const planner = (ms, rest) => {
+    push(ms, 'MODEL', 'PLANNER_RESPONSE', rest)
+    const u = { input: rng.int(6000, 14000), output: rng.int(150, 700), cacheRead: 0, reasoning: rng.int(40, 300) }
+    u.cacheRead = Math.round(u.input * (0.5 + rng.next() * 0.35))
+    usage.push(u)
+    for (const k of Object.keys(tokens)) tokens[k] += u[k]
+  }
+  const result = (ms, content) => `Created At: ${iso(ms)}\nCompleted At: ${iso(ms)}\n${content}`
+  const wrapUser = (prompt, ms, first) =>
+    `<USER_REQUEST>\n${prompt}\n</USER_REQUEST>\n<ADDITIONAL_METADATA>\nThe current local time is: ${iso(ms)}.\n</ADDITIONAL_METADATA>` +
+    (first ? `\n<USER_SETTINGS_CHANGE>\nThe user changed setting \`Model Selection\` from None to ${AGY_MODEL_LABEL}. No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.\n</USER_SETTINGS_CHANGE>` : '')
+  const totalMs = entry.dur * 60000
+  const perTurn = totalMs / entry.turns
+  const off = entry.task ?? 0
+  let t = startMs
+  let title = null
+  let toolCalls = 0
+  for (let i = 0; i < entry.turns; i++) {
+    const turnStart = t
+    const task = i < tasks.length ? tasks[(off + i) % tasks.length] : FOLLOWUPS_CODEX[(i - tasks.length) % FOLLOWUPS_CODEX.length]
+    const prompt = i === 0 || i >= tasks.length ? task.prompt : `${rng.pick(['Next, ', 'Now ', 'Also: '])}${task.prompt[0].toLowerCase()}${task.prompt.slice(1)}`
+    if (i === 0) title = task.title || snippet(prompt)
+    push(t, 'USER_EXPLICIT', 'USER_INPUT', { content: wrapUser(prompt, t, i === 0) })
+    history.push({ display: prompt, timestamp: iso(t), workspace: cwd })
+    t += rng.int(3, 8) * 1000
+    // agy emits one PLANNER_RESPONSE per batch of tool calls, each answered by a GENERIC step
+    const steps = task.steps || []
+    for (let k = 0; k < steps.length; ) {
+      const batch = steps.slice(k, k + (k === 0 ? 1 : 2))
+      const rest = { tool_calls: batch.map((s) => agyToolCall(s, cwd)) }
+      if (k === 0 && task.reasoning) rest.thinking = `**${task.title || 'Planning the change'}**\n\n${task.reasoning}`
+      k += batch.length
+      planner(t, rest)
+      toolCalls += batch.length
+      for (const s of batch) {
+        t += rng.int(1, 20) * 1000
+        push(t, 'MODEL', 'GENERIC', { content: result(t, agyToolResult(s)) })
+      }
+      t += rng.int(3, 10) * 1000
+    }
+    planner(t, { content: task.reply })
+    t = Math.max(t + rng.int(10, 50) * 1000, turnStart + perTurn)
+  }
+  const lastTs = new Date(recs[recs.length - 1].created_at).getTime()
+  return { recs, history, lastTs, title, usage, tokens, toolCalls }
+}
+
+// conversations/<id>.db — the blobs server/providers/antigravity/sqlite.js decodes
+function agyWriteDb(file, { cwd, branch, name, usage }) {
+  if (!DatabaseSync) return false
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  const db = new DatabaseSync(file)
+  try {
+    db.exec('CREATE TABLE trajectory_metadata_blob (data BLOB); CREATE TABLE executor_metadata (id INTEGER, data BLOB); CREATE TABLE steps (step_index INTEGER, metadata BLOB)')
+    db.prepare('INSERT INTO trajectory_metadata_blob (data) VALUES (?)').run(pbMsg(1, pbStr(1, fileUri(cwd)), pbMsg(3, pbStr(1, `demo/${name}`), pbStr(2, `https://example.com/demo/${name}.git`)), pbStr(4, branch)))
+    db.prepare('INSERT INTO executor_metadata (id, data) VALUES (?, ?)').run(1, pbMsg(10, pbMsg(1, pbInt(1, 1318), pbInt(6, 65536), pbMsg(3, pbStr(28, AGY_MODEL)))))
+    const ins = db.prepare('INSERT INTO steps (step_index, metadata) VALUES (?, ?)')
+    usage.forEach((u, i) => ins.run(i, pbMsg(9, pbInt(2, u.input), pbInt(3, u.output), pbInt(5, u.cacheRead), pbInt(9, u.reasoning))))
+  } finally {
+    db.close()
+  }
+  return true
+}
+
+function agyHomeExtras(home, cwds) {
+  writeText(path.join(home, 'settings.json'), JSON.stringify({ version: AGY_VERSION, trustedWorkspaces: cwds, toolPermission: 'request-review', altScreenMode: 'default' }, null, 2) + '\n')
+  writeText(path.join(home, 'skills', 'release-notes', 'SKILL.md'), '---\nname: release-notes\ndescription: Draft release notes from the commits since the last tag\n---\n\nRun `git log --oneline <last-tag>..HEAD`, group by type, and write a short paragraph per group.\n')
+}
+
+
 // A "task" is one user turn with the tool steps the agent takes for it.
 //   claude step: { tool, input, result }      codex step: { tool: 'shell', cmd, out, exit? } | { tool: 'apply_patch', file, patch, add? }
 const P = {
@@ -450,6 +572,7 @@ function schedule(scenario) {
       { w: 0, d: -1, h: 9, m: 40, provider: 'claude', project: 'orbit-api', dur: 90, turns: 9, title: true },
       { w: 1, d: 3, h: 11, m: 0, provider: 'codex', project: 'orbit-api', dur: 30, turns: 4 },
       { w: 2, d: 2, h: 16, m: 15, provider: 'claude', project: 'orbit-api', dur: 20, turns: 3 },
+      { w: 0, d: -1, h: 16, m: 30, provider: 'antigravity', project: 'orbit-api', dur: 20, turns: 2 },
     ]
   }
   // v2-highlights — 24 sessions over 12 weeks, mornings-heavy, weekdays, a 4-day streak ending today
@@ -478,6 +601,9 @@ function schedule(scenario) {
     { w: 8, d: 3, h: 11, m: 0, provider: 'claude', project: 'orbit-api', dur: 33, turns: 4 },
     { w: 10, d: 2, h: 10, m: 0, provider: 'claude', project: 'atlas-mobile', dur: 31, turns: 4 },
     { w: 11, d: 4, h: 9, m: 30, provider: 'codex', project: 'orbit-api', dur: 42, turns: 5 },
+    { w: 0, d: 0, h: 16, m: 5, provider: 'antigravity', project: 'orbit-api', dur: 22, turns: 3, title: true },
+    { w: 1, d: 1, h: 10, m: 20, provider: 'antigravity', project: 'quill-editor', dur: 35, turns: 4 },
+    { w: 3, d: 5, h: 15, m: 0, provider: 'antigravity', project: 'meadow-cli', dur: 18, turns: 2 },
   ]
 }
 
@@ -737,20 +863,24 @@ export function generateFixture({ out = path.join(REPO, 'tmp', 'demo-root'), sce
   const nowMs = typeof now === 'number' ? now : new Date(now).getTime()
   const claudeHome = path.join(out, 'claude')
   const codexHome = path.join(out, 'codex')
+  const agyHome = path.join(out, 'antigravity')
   fs.mkdirSync(path.join(claudeHome, 'projects'), { recursive: true })
   fs.mkdirSync(path.join(codexHome, 'sessions'), { recursive: true })
+  fs.mkdirSync(path.join(agyHome, 'brain'), { recursive: true })
   claudeHomeExtras(claudeHome, platform)
   codexHomeExtras(codexHome)
 
-  const manifest = { generatedAt: new Date(nowMs).toISOString(), scenario, seed: Number(seed), platform, claudeHome, codexHome, rootIds: { claude: idFor(claudeHome), codex: idFor(codexHome) }, projects: [], sessions: [] }
+  const manifest = { generatedAt: new Date(nowMs).toISOString(), scenario, seed: Number(seed), platform, claudeHome, codexHome, agyHome, rootIds: { claude: idFor(claudeHome), codex: idFor(codexHome), antigravity: idFor(agyHome) }, projects: [], sessions: [] }
   const claudeHistory = []
   const codexHistory = []
+  const agyHistory = []
+  const agyLast = {} // cwd -> newest conversation id (cache/last_conversations.json)
   const projects = new Map()
   const projectCtx = (name, provider) => {
     const cwd = cwdFor(platform, name)
     if (!projects.has(name)) projects.set(name, { name, cwd, claudeSlug: claudeSlug(cwd), providers: new Set() })
     projects.get(name).providers.add(provider)
-    return { name, cwd, branch: P[name].branch, tasks: P[name][provider] }
+    return { name, cwd, branch: P[name].branch, tasks: P[name][provider] || P[name].codex } // agy borrows the Codex task scripts
   }
 
   const entries = schedule(scenario).map((e) => ({ ...e, start: startOf(e, nowMs) })).sort((a, b) => a.start - b.start)
@@ -782,6 +912,17 @@ export function generateFixture({ out = path.join(REPO, 'tmp', 'demo-root'), sce
       })
       if (P[entry.project].memory) memoryFor(claudeHome, slug)
       manifest.sessions.push({ provider: 'claude', id: sid, title: s.title, project: entry.project, slug, cwd: ctx.cwd, start: new Date(entry.start).toISOString(), end: new Date(s.lastTs).toISOString(), minutes: entry.dur, turns: entry.turns, toolCalls: s.recs.filter((r) => r.type === 'assistant' && r.message.content.some((b) => b.type === 'tool_use')).length, model: s.model, subagents: agents, file })
+    } else if (entry.provider === 'antigravity') {
+      const sid = rng.uuid(4)
+      const s = agySession(rng, ctx, entry, sid, entry.start)
+      const file = path.join(agyHome, 'brain', sid, '.system_generated', 'logs', 'transcript_full.jsonl')
+      writeJsonl(file, s.recs, s.lastTs)
+      writeText(path.join(agyHome, 'annotations', `${sid}.pbtxt`), `title:"${s.title.replace(/"/g, '\\"')}"\n`)
+      const hasDb = agyWriteDb(path.join(agyHome, 'conversations', `${sid}.db`), { cwd: ctx.cwd, branch: ctx.branch, name: ctx.name, usage: s.usage })
+      if (entry.title) writeText(path.join(agyHome, 'brain', sid, 'task.md'), `# ${s.title}\n\n- [x] read the routes and the auth plugin\n- [x] add the limiter\n- [x] run the order tests\n`)
+      agyHistory.push(...s.history)
+      if (!agyLast[ctx.cwd] || entry.start > agyLast[ctx.cwd].start) agyLast[ctx.cwd] = { id: sid, start: entry.start }
+      manifest.sessions.push({ provider: 'antigravity', id: sid, title: s.title, project: entry.project, slug: ctx.cwd, cwd: ctx.cwd, start: new Date(entry.start).toISOString(), end: new Date(s.lastTs).toISOString(), minutes: entry.dur, turns: entry.turns, toolCalls: s.toolCalls, model: hasDb ? AGY_MODEL : AGY_MODEL_LABEL, subagents: [], file, sqlite: hasDb })
     } else {
       const sid = rng.uuid(7)
       const s = codexSession(rng, ctx, entry, sid, entry.start)
@@ -807,12 +948,17 @@ export function generateFixture({ out = path.join(REPO, 'tmp', 'demo-root'), sce
   codexHistory.sort((a, b) => a.ts - b.ts)
   writeJsonl(path.join(claudeHome, 'history.jsonl'), claudeHistory)
   writeJsonl(path.join(codexHome, 'history.jsonl'), codexHistory)
+  agyHistory.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+  writeJsonl(path.join(agyHome, 'history.jsonl'), agyHistory)
+  writeText(path.join(agyHome, 'cache', 'last_conversations.json'), JSON.stringify(Object.fromEntries(Object.entries(agyLast).map(([cwd, v]) => [cwd, v.id])), null, 2) + '\n')
+  agyHomeExtras(agyHome, Object.keys(agyLast))
   manifest.projects = [...projects.values()].map((p) => ({ ...p, providers: [...p.providers].sort() }))
 
   // the roots files the server reads: label "~/.claude" / "~/.codex" so the UI
   // reads like a fresh install rather than showing the fixture's absolute path
   fs.writeFileSync(path.join(out, 'roots.claude.json'), JSON.stringify([{ id: manifest.rootIds.claude, label: '~/.claude', dir: claudeHome }], null, 2))
   fs.writeFileSync(path.join(out, 'roots.codex.json'), JSON.stringify([{ id: manifest.rootIds.codex, label: '~/.codex', dir: codexHome }], null, 2))
+  fs.writeFileSync(path.join(out, 'roots.antigravity.json'), JSON.stringify([{ id: manifest.rootIds.antigravity, label: '~/.gemini/antigravity-cli', dir: agyHome }], null, 2))
   fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify(manifest, null, 2))
   return manifest
 }

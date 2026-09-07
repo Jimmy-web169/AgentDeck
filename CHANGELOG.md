@@ -170,6 +170,15 @@ its real terminal.
   (`node:sqlite`, Node ≥ 22.5; without it the JSONL alone is shown). The
   descriptor `spec/providers/antigravity.yaml` is `experimental` and its
   fixture + golden run through `npm run check:spec` like the other two.
+- **Ask the agent (AI hand-off).** Every Config view (Claude Code, Codex,
+  Antigravity) and Insights have an “✦ Ask …” button: write what you want, and
+  AgentDeck writes a brief — the request, the kind of setting and its file, the
+  file's current content, the official docs page, and how to work (docs first,
+  only this file, explain every field) — into `<config dir>/handoffs/` and opens
+  the provider's own terminal seeded with a one-line prompt pointing at it
+  (`claude "<prompt>"`, `codex "<prompt>"`, `agy -i "<prompt>"`). AgentDeck
+  never calls a model and never edits a config file itself. Descriptors gain
+  `cli.prompt` and the `ai_handoff` capability.
 - **Format-drift probe.** Vendors change their transcript formats without
   notice; each provider descriptor's `probe:` block now drives a sampler that
   reads the newest transcripts of every tracked folder at start-up, hourly and

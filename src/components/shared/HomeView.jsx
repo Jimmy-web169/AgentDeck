@@ -3,6 +3,7 @@ import { fmtRelative } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
 import { HOME_VIEWS, homeViewLabel, normalizeView } from '../../lib/tabs.js'
 import { providerColor, providerLabel, statusDot, statusText } from '../../lib/providerColors.js'
+import AllFoldersStats from './AllFoldersStats.jsx'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import useActiveSessions, { toManagerItems } from '../../lib/useActiveSessions.js'
@@ -278,6 +279,9 @@ export default function HomeView({ providers = [], visible = true, target, scope
   const providerCfg = scope ? providers.find((p) => p.id === scope.provider) : null
   const Page = providerCfg?.homePages?.[view]
   const scoped = view !== 'activity'
+  // Stats can also sum every tracked folder (the fields all providers share)
+  const [statsAll, setStatsAll] = useState(false)
+  const allStats = view === 'stats' && statsAll
 
   return (
     <div className="h-full flex flex-col bg-ink-950">
@@ -297,6 +301,12 @@ export default function HomeView({ providers = [], visible = true, target, scope
           ))}
         </div>
         {/* the folder is chosen once, in the sidebar's chips — the pages follow that scope */}
+        {view === 'stats' && (
+          <div className="flex items-center gap-0.5 rounded-md bg-ink-800 border border-zinc-800 p-0.5" title="This folder (the sidebar's chip) or every tracked folder summed on the fields all providers share">
+            <button onClick={() => setStatsAll(false)} className={`h-7 px-2.5 rounded text-[12px] transition-colors ${!statsAll ? 'bg-ink-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-100 hover:bg-ink-700'}`}>This folder</button>
+            <button onClick={() => setStatsAll(true)} className={`h-7 px-2.5 rounded text-[12px] transition-colors ${statsAll ? 'bg-ink-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-100 hover:bg-ink-700'}`}>All folders</button>
+          </div>
+        )}
         <span className="flex-1" />
         <button onClick={onSearch} title="Search projects & sessions  (Ctrl+K)" className="flex items-center gap-2 h-8 px-3 rounded-md bg-ink-800 border border-zinc-700 text-[12px] text-zinc-300 hover:text-zinc-100 hover:bg-ink-700">
           <SearchIcon className="w-3.5 h-3.5" />
@@ -310,18 +320,23 @@ export default function HomeView({ providers = [], visible = true, target, scope
           <Activity providers={providers} visible={visible} index={index} live={live} termKeys={termKeys} onOpen={onOpen} />
         </div>
       )}
-      {scoped && !scope && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">No tracked folders yet — add one with the + next to the folder chips.</div>}
+      {allStats && (
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <AllFoldersStats providers={providers} index={index} onPick={(s) => { onScope?.(s); setStatsAll(false) }} />
+        </div>
+      )}
+      {scoped && !scope && !allStats && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">No tracked folders yet — add one with the + next to the folder chips.</div>}
       {scoped && scope && view === 'insights' && (
         <div key={`insights|${scope.provider}|${scope.root}`} className="flex-1 min-h-0 overflow-y-auto">
           <InsightsPage provider={scope.provider} root={scope.root} rootLabel={scopeInfo?.rootLabel || ''} providerLabel={providerLabel(providers, scope.provider)} onOpen={(t) => onOpen(scope.provider, { rootLabel: scopeInfo?.rootLabel, ...t })} />
         </div>
       )}
-      {scoped && scope && view !== 'insights' && Page && (
+      {scoped && scope && view !== 'insights' && !allStats && Page && (
         <div key={`${view}|${scope.provider}|${scope.root}`} className={view === 'resources' ? 'flex-1 min-h-0' : 'flex-1 min-h-0 overflow-y-auto'}>
           <Page root={scope.root} focus={target?.focus || null} onOpen={(t) => onOpen(scope.provider, { rootLabel: scopeInfo?.rootLabel, ...t })} />
         </div>
       )}
-      {scoped && scope && view !== 'insights' && !Page && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">This provider has no {homeViewLabel(view)} page.</div>}
+      {scoped && scope && view !== 'insights' && !allStats && !Page && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">This provider has no {homeViewLabel(view)} page.</div>}
     </div>
   )
 }

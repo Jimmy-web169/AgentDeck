@@ -89,17 +89,19 @@ test('generated fixture: v2-highlights parses through both providers (projects, 
   const P = await providers()
   const out = path.join(tmp(), 'root')
   const manifest = generateFixture({ out, scenario: 'v2-highlights', seed: 7, now: NOW, platform: 'win32' })
-  assert.ok(manifest.sessions.length >= 15 && manifest.sessions.length <= 25, `${manifest.sessions.length} sessions`)
+  assert.ok(manifest.sessions.length >= 15 && manifest.sessions.length <= 30, `${manifest.sessions.length} sessions`)
+  assert.ok(manifest.sessions.some((s) => s.provider === 'antigravity'), 'the story has Antigravity sessions too')
   assert.ok(manifest.projects.length >= 4 && manifest.projects.length <= 6, `${manifest.projects.length} projects`)
-  assert.ok(manifest.projects.some((p) => p.providers.length === 2), 'one project is present in both providers (workspace suggestion)')
+  assert.ok(manifest.projects.some((p) => p.providers.length >= 2), 'one project is present in several providers (workspace suggestion)')
   assert.ok(manifest.sessions.filter((s) => s.start.startsWith('2026-09-07')).length >= 2, 'two sessions from "today"')
-  for (const f of ['roots.claude.json', 'roots.codex.json', 'manifest.json']) assert.ok(fs.existsSync(path.join(out, f)), f)
+  for (const f of ['roots.claude.json', 'roots.codex.json', 'roots.antigravity.json', 'manifest.json']) assert.ok(fs.existsSync(path.join(out, f)), f)
 
+  const homes = { claude: manifest.claudeHome, codex: manifest.codexHome, antigravity: manifest.agyHome }
   await withConfigDir(out, async () => {
-    for (const id of ['claude', 'codex']) {
+    for (const id of ['claude', 'codex', 'antigravity']) {
       const roots = ok(await P[id].dispatch('GET', '/api/roots', q('')), `${id} roots`)
       assert.equal(roots.roots.length, 1)
-      assert.equal(roots.roots[0].dir, id === 'claude' ? manifest.claudeHome : manifest.codexHome)
+      assert.equal(roots.roots[0].dir, homes[id])
       const root = roots.roots[0].id
       assert.equal(root, manifest.rootIds[id])
 
@@ -124,9 +126,9 @@ test('generated fixture: v2-highlights parses through both providers (projects, 
           assert.ok(s.firstTs && s.lastTs && s.lastTs > s.firstTs, `${id} ${s.id}: timestamps`)
           assert.ok(s.models.length > 0, `${id} ${s.id}: model`)
           const t = s.tokens
-          assert.ok(t.input + t.output + t.cacheRead + t.cacheCreate > 0, `${id} ${s.id}: tokens`)
+          if (id !== 'antigravity' || roots.sqlite) assert.ok((t.input || 0) + (t.output || 0) + (t.cacheRead || 0) + (t.cacheCreate || 0) > 0, `${id} ${s.id}: tokens`)
           if (id === 'codex') assert.ok(t.total > 0 && s.contextWindow > 0, 'codex: token_count totals + context window')
-          const kinds = id === 'claude' ? ['Read', 'Edit', 'Bash'] : ['shell', 'apply_patch']
+          const kinds = id === 'claude' ? ['Read', 'Edit', 'Bash'] : id === 'codex' ? ['shell', 'apply_patch'] : ['run_command', 'replace_file_content', 'write_to_file']
           assert.ok(kinds.some((k) => s.toolCounts[k]), `${id} ${s.id}: uses ${kinds.join('/')}`)
 
           const full = ok(await P[id].dispatch('GET', '/api/session', q(`root=${root}&slug=${encodeURIComponent(p.slug)}&id=${s.id}`)), `${id} session`)
@@ -156,7 +158,7 @@ test('generated fixture: v2-highlights parses through both providers (projects, 
         }
       }
       assert.equal(sessions, manifest.sessions.filter((s) => s.provider === id).length, `${id}: every generated session is listed`)
-      assert.ok(withSubagents > 0, `${id}: at least one session has sub-agents`)
+      if (id !== 'antigravity') assert.ok(withSubagents > 0, `${id}: at least one session has sub-agents`) // the agy story has no spawned children yet
 
       const stats = ok(await P[id].dispatch('GET', '/api/stats', q(`root=${root}`)), `${id} stats`)
       assert.ok(stats.sessions > 0 && stats.toolCalls > 0 && stats.tokens.output > 0, `${id}: stats totals`)
@@ -183,7 +185,7 @@ test('generated fixture: single-project and empty scenarios; deterministic for a
 
   const single = generateFixture({ out: path.join(base, 'single'), scenario: 'single-project', seed: 3, now: NOW, platform: 'posix' })
   assert.equal(single.projects.length, 1)
-  assert.deepEqual(single.projects[0].providers, ['claude', 'codex'])
+  assert.deepEqual(single.projects[0].providers, ['antigravity', 'claude', 'codex'])
   assert.equal(single.projects[0].cwd, '/home/demo/code/orbit-api', 'posix paths on request')
   await withConfigDir(path.join(base, 'single'), async () => {
     for (const id of ['claude', 'codex']) {

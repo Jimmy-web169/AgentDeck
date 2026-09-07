@@ -151,9 +151,17 @@ export function valuesAt(rec, dotted) {
   }
   return cur
 }
+// a key that is really data (a file path, a UUID, a timestamp used as a map key)
+// is not part of the format — Claude's file-history snapshots are keyed by
+// absolute paths, and those must never end up in a fingerprint or on disk
+const DATA_KEY = /[\\/:\s]|^[0-9a-f-]{20,}$|^\d{4}-\d{2}-\d{2}/i
+const MAX_KEYS_PER_OBJECT = 40
 function collectKeys(rec, prefix, depth, into) {
   if (!rec || typeof rec !== 'object' || Array.isArray(rec)) return
-  for (const [k, v] of Object.entries(rec)) {
+  const entries = Object.entries(rec)
+  if (entries.length > MAX_KEYS_PER_OBJECT) return // a dictionary, not a record shape
+  for (const [k, v] of entries) {
+    if (DATA_KEY.test(k) || k.length > 64) continue
     const p = prefix ? `${prefix}.${k}` : k
     into.add(p)
     if (depth < MAX_KEY_DEPTH && v && typeof v === 'object' && !Array.isArray(v)) collectKeys(v, p, depth + 1, into)

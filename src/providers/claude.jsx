@@ -56,6 +56,7 @@ export default {
   },
   contextMeter: { strategy: 'usage-bridge' },
   capabilities: {
+    aiHandoff: true, // Config views + Insights can open the CLI seeded with a brief
     subagentModel: 'nested',
     skillAgentFlag: 'claude-code',
     inlineContextMeter: false,

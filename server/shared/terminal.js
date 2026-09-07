@@ -129,7 +129,7 @@ function err(status, message) {
 // Start (or reuse) a ttyd terminal running the provider's CLI (optionally
 // resuming a session). Resolves only after ttyd has had a moment to bind, so a
 // bad binary / taken port fails loudly instead of handing the browser a dead iframe.
-export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
+export function startTerminal({ key, cwd, configDir, resumeId, promptArgs = null, meta, config }) {
   const existing = sessions.get(key)
   if (existing && existing.proc && existing.proc.exitCode == null && !existing.proc.killed) {
     if (meta) existing.meta = { ...existing.meta, ...meta }
@@ -143,7 +143,8 @@ export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
   const port = pickPort()
   if (port == null) throw err(503, 'no free port for a terminal')
 
-  const cliArgs = resumeId ? config.resumeArgs(resumeId) : []
+  // resume an existing session, or start seeded with a prompt (AI hand-off), or plain
+  const cliArgs = resumeId ? config.resumeArgs(resumeId) : promptArgs && promptArgs.length ? promptArgs : []
 
   // Inside tmux when available (persistent, attachable); otherwise run the CLI
   // directly (ttyd's child). `tmux new-session -A` attaches an existing session

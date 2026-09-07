@@ -22,6 +22,11 @@ Per provider, in one UI:
 - **Conversations** — full transcript per session: prompts, replies, collapsible
   thinking, and every tool call with its input **and** output, plus token/model/time.
 - **Sub-agents** — open any sub-agent's complete transcript, or expand it inline under the tool call that spawned it.
+- **Ask the agent** — from any Config view or from Insights, say what you want
+  ("run prettier after every edit", "add this MCP server read-only") and AgentDeck
+  opens the provider's own terminal with a brief: your request, the file and its
+  current content, and the official docs page for that kind of setting. The CLI
+  does the work in front of you; AgentDeck never calls a model or edits a file itself.
 - **Raw** — line-by-line JSONL viewer with type filtering.
 - **Stats** — tool usage, models, and token totals aggregated across a tracked
   folder, drillable to project and session.

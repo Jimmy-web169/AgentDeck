@@ -33,6 +33,8 @@ import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../share
 import { withOversizeFallback } from '../../shared/transcriptGuard.js'
 import { safeTrash } from '../../shared/trash.js'
 import { probeStatus, runProbe, acceptProbe } from '../../shared/formatProbe.js'
+import { writeBrief, composeBrief, seedPrompt } from '../../shared/handoff.js'
+import { HOME as USER_HOME } from '../../shared/roots.js'
 import { makeDispatch } from '../../shared/dispatch.js'
 import { bucketActivity } from '../../shared/activity.js'
 import { openTool, pickFolderNative } from '../../shared/launch.js'
@@ -48,6 +50,7 @@ const TERMINAL_CONFIG = {
   title: 'agy',
   envKey: 'AGENTDECK_PROVIDER_HOME', // agy has no documented home-dir variable; the tracked folder is still recorded on the tmux session
   resumeArgs: (id) => ['--conversation', id],
+  promptArgs: (p) => ['-i', p], // `agy -i "<prompt>"` — seeded interactive (AI hand-off)
   checkOrigin: false,
 }
 const TOKEN_SPECIFIC = ['reasoning']
@@ -427,11 +430,22 @@ async function postTerminal(_q, body) {
   } else if (body.slug && path.isAbsolute(body.slug)) {
     cwd = body.slug
     key = `${root.id}|new|${body.slug}`
+  } else if (body.brief) {
+    cwd = USER_HOME // a hand-off with no folder (Insights) runs from the home directory
+    key = `${root.id}|new|${cwd}`
   } else throw httpErr(400, 'missing id or cwd')
   if (!cwd || !fs.existsSync(cwd)) cwd = os.homedir()
+  // AI hand-off: the request + file + docs go into a brief file; the CLI starts
+  // seeded with a one-line prompt that points at it (server/shared/handoff.js)
+  let promptArgs = null
+  let briefFile = null
+  if (!resumeId && body.brief && typeof body.brief === 'object') {
+    briefFile = writeBrief(composeBrief({ ...body.brief, providerLabel: 'Antigravity', cwd }), { key })
+    promptArgs = TERMINAL_CONFIG.promptArgs(seedPrompt(briefFile))
+  }
   const meta = { root: root.id, slug: body.slug || null, id: resumeId, cwd, isNew: !resumeId, title: body.title || null }
-  const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, meta, config: TERMINAL_CONFIG })
-  return { ok: true, key, ...res }
+  const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, promptArgs, meta, config: TERMINAL_CONFIG })
+  return { ok: true, key, brief: briefFile, ...res }
 }
 const getTerminals = () => ({ terminals: listTerminals() })
 const deleteTerminal = async (q) => stopTerminal(q.get('key'))

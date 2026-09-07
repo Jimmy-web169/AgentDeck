@@ -59,6 +59,7 @@ export default {
   },
   contextMeter: { strategy: 'none' },
   capabilities: {
+    aiHandoff: true, // Config views + Insights can open the CLI seeded with a brief
     subagentModel: 'independent-sessions',
     skillAgentFlag: null, // agy has no skill-run flag; resources are read-only here
     inlineContextMeter: false,

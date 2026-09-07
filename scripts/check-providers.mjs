@@ -82,7 +82,17 @@ function readTerminalConfig(id) {
 
   const title = strings(body.match(/\btitle\s*:\s*((['"`]).*?\2)/)?.[1])[0] || id
   const envKey = strings(body.match(/\benvKey\s*:\s*((['"`]).*?\2)/)?.[1])[0] || null
-  return { id, file: rel(file), names, extra, resumeArgs, title, envKey }
+  // promptArgs (AI hand-off): (p) => [...]; only its flag tokens can be checked against --help
+  const pa = body.match(/promptArgs\s*:\s*\(\s*(\w+)\s*\)\s*=>\s*\[([^\]]*)\]/)
+  const promptFlags = pa
+    ? pa[2]
+        .split(',')
+        .map((t) => t.trim())
+        .filter((t) => t && t !== pa[1])
+        .map((t) => strings(t)[0] ?? t)
+        .filter((t) => t.startsWith('-'))
+    : []
+  return { id, file: rel(file), names, extra, resumeArgs, promptFlags, title, envKey }
 }
 
 // --- running the CLIs (help/version only) ----------------------------------
@@ -127,6 +137,8 @@ function checkProvider(cfg) {
   const helpOk = !h.error && /\S/.test(h.out)
   row.checks.push({ what: '--help', ok: helpOk, detail: h.error || (helpOk ? '' : 'no output') })
 
+  // the hand-off seed flag (`agy -i`), when the CLI has one
+  for (const tok of cfg.promptFlags || []) row.checks.push({ what: `${tok} (hand-off)`, ok: helpOk && hasFlag(h.out, tok), detail: helpOk ? 'flag not in --help' : 'no help text' })
   for (const tok of cfg.resumeArgs) {
     if (tok === '<id>') continue
     if (tok.startsWith('-')) {

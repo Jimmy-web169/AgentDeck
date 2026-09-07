@@ -467,6 +467,12 @@ export default function App() {
   const openTabKeys = useMemo(() => new Set(tabs.map((t) => targetKey(t.target)).filter(Boolean)), [tabs])
   const showHome = isHome(activeTarget)
   const openSession = useCallback((providerId, target, opts) => openTarget({ provider: providerId, ...target }, opts), [openTarget])
+  // a hand-off dialog (Config views, Insights) started a terminal: enter it the way the Live panel does
+  useEffect(() => {
+    const h = (e) => e.detail?.provider && openSession(e.detail.provider, e.detail)
+    window.addEventListener('agentdeck:open-terminal', h)
+    return () => window.removeEventListener('agentdeck:open-terminal', h)
+  }, [openSession])
 
   return (
     <div className="h-full flex flex-col">
