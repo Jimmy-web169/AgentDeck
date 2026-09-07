@@ -9,6 +9,7 @@ import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import useActiveSessions, { toManagerItems } from '../../lib/useActiveSessions.js'
 import { PencilIcon, PinIcon, SearchIcon, TerminalIcon } from './shellIcons.jsx'
 import FolderChips from './FolderChips.jsx'
+import useConfirm from '../../lib/useConfirm.jsx'
 import { ShortcutChips } from './ShortcutHints.jsx'
 
 // Home pages — the main area when a tab points at Home. The page switch is in
@@ -280,7 +281,17 @@ function Folders({ providers, index }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
   const [editing, setEditing] = useState(null) // { provider, id, label }
+  const [confirmEl, confirm] = useConfirm()
   const cfg = providers.find((p) => p.id === prov)
+  const untrack = async (r) => {
+    const ok = await confirm({
+      title: `Stop tracking “${r.label}”?`,
+      message: 'AgentDeck forgets this folder. Nothing on disk is touched.',
+      detail: r.dir,
+      confirmLabel: 'Untrack',
+    })
+    if (ok) run(() => apis[r.provider].removeRoot(r.id))
+  }
   const rows = providers.flatMap((p) => (index.roots[p.id] || []).map((r) => ({ ...r, provider: p.id, statusField: p.rootStatusField || 'hasProjects' })))
 
   const run = async (fn) => {
@@ -305,6 +316,7 @@ function Folders({ providers, index }) {
 
   return (
     <div className="max-w-3xl mx-auto px-6 py-6 space-y-7">
+      {confirmEl}
       <Section title="Tracked folders" count={rows.length}>
         <Panel className="overflow-hidden divide-y divide-zinc-800/70">
           {rows.map((r) => (
@@ -335,7 +347,7 @@ function Folders({ providers, index }) {
                 <span className={r.exists ? 'text-emerald-400' : 'text-red-400'}>{r.exists ? 'exists' : 'missing'}</span>
                 <span className={r[r.statusField] ? 'text-sky-400' : 'text-zinc-600'}>{r[r.statusField] ? 'has history' : 'config only'}</span>
               </div>
-              <button onClick={() => run(() => apis[r.provider].removeRoot(r.id))} disabled={busy} title="Stop tracking this folder. Does NOT delete it from disk." className="text-[11px] px-2 py-1 rounded bg-zinc-500/15 text-zinc-300 hover:bg-zinc-500/25 disabled:opacity-40 shrink-0">
+              <button onClick={() => untrack(r)} disabled={busy} title="Stop tracking this folder. Does NOT delete it from disk." className="text-[11px] px-2 py-1 rounded bg-zinc-500/15 text-zinc-300 hover:bg-zinc-500/25 disabled:opacity-40 shrink-0">
                 untrack
               </button>
             </div>

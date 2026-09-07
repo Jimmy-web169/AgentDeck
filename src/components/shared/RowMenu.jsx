@@ -4,31 +4,31 @@ import { PlusIcon } from './shellIcons.jsx'
 
 // The "⋯" menu of a sidebar row. Every row gets the same two hover controls —
 // pin and ⋯ — and everything else lives in here: workspace membership toggles
-// (for a project or a session), plus row-specific actions such as "Select
-// sessions…" or "Move to trash" (with an inline confirm).
+// (for a project or a session) and row-specific actions. Destructive actions
+// confirm in the centered dialog (useConfirm), never inline.
 //
-//   items: [{ label, onClick, danger, confirm, disabled }]   confirm → two-step
+//   items: [{ label, onClick, danger, disabled }]
 //   workspaceItem: the project / session to toggle in workspaces (optional)
 export default function RowMenu({ open, onClose, items = [], workspaceItem, workspaces = [] }) {
   const ref = useRef(null)
-  const [confirming, setConfirming] = useState(null)
+  const onCloseRef = useRef(onClose)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
+  useEffect(() => void (onCloseRef.current = onClose), [onClose])
 
   useEffect(() => {
     if (!open) return
-    setConfirming(null)
     setCreating(false)
     setName('')
-    const off = (e) => !ref.current?.contains(e.target) && onClose()
-    const key = (e) => e.key === 'Escape' && onClose()
+    const off = (e) => !ref.current?.contains(e.target) && onCloseRef.current()
+    const key = (e) => e.key === 'Escape' && onCloseRef.current()
     window.addEventListener('mousedown', off)
     window.addEventListener('keydown', key)
     return () => {
       window.removeEventListener('mousedown', off)
       window.removeEventListener('keydown', key)
     }
-  }, [open, onClose])
+  }, [open])
   if (!open) return null
 
   const create = () => {
@@ -40,36 +40,19 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
 
   return (
     <div ref={ref} onMouseDown={(e) => e.stopPropagation()} className="absolute right-2 top-full z-30 mt-0.5 w-60 rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl py-1">
-      {items.map((it) =>
-        it.confirm && confirming === it.label ? (
-          <div key={it.label} className="flex items-center gap-1.5 px-3 py-1.5 text-[12px]">
-            <span className="text-red-300 flex-1 truncate">{it.confirm}</span>
-            <button
-              onClick={() => {
-                it.onClick()
-                onClose()
-              }}
-              className="px-1.5 py-0.5 rounded bg-red-500/30 text-red-200"
-            >
-              yes
-            </button>
-            <button onClick={() => setConfirming(null)} className="px-1.5 py-0.5 rounded bg-ink-600 text-zinc-300">no</button>
-          </div>
-        ) : (
-          <button
-            key={it.label}
-            disabled={it.disabled}
-            onClick={() => {
-              if (it.confirm) return setConfirming(it.label)
-              it.onClick()
-              onClose()
-            }}
-            className={`${row} ${it.danger ? 'text-red-300 hover:text-red-200' : ''}`}
-          >
-            {it.label}
-          </button>
-        )
-      )}
+      {items.map((it) => (
+        <button
+          key={it.label}
+          disabled={it.disabled}
+          onClick={() => {
+            onClose()
+            it.onClick()
+          }}
+          className={`${row} ${it.danger ? 'text-red-300 hover:text-red-200' : ''}`}
+        >
+          {it.label}
+        </button>
+      ))}
       {workspaceItem && (
         <>
           {items.length > 0 && <div className="my-1 border-t border-zinc-800" />}

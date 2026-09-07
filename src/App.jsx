@@ -370,10 +370,6 @@ export default function App() {
     afterDelete(sc, slug)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index.loadSessions, index.refresh])
-  const newConversation = useCallback(
-    (sc, p) => openTarget({ provider: sc.provider, root: sc.root, rootLabel: p.rootLabel, slug: p.slug, cwd: p.cwd, project: p.name, draft: true, title: 'New conversation', newConversation: true }),
-    [openTarget]
-  )
   const newProject = useCallback(
     (sc, cwd) => openTarget({ provider: sc.provider, root: sc.root, cwd, project: baseName(cwd), draft: true, title: 'New conversation', newConversation: true }),
     [openTarget]
@@ -483,7 +479,6 @@ export default function App() {
                 activeTarget={activeTarget}
                 onOpenHome={openHome}
                 onOpenTarget={(t, opts) => openTarget({ ...t }, opts)}
-                onNewConversation={newConversation}
                 onNewProject={newProject}
                 onDeleteSession={deleteSession}
                 onDeleteSessions={deleteSessions}

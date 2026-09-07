@@ -40,7 +40,10 @@ its real terminal.
   filter the list. The sidebar suggests groups for folders it sees in several
   places. Pinned projects expand in place too.
 - Tracked folders can be relabelled from Folders (click the label), so a
-  second account's home reads as "work" rather than `~\.claude-info`.
+  second account's home reads as "work" rather than `~\.claude-info`; pins
+  and workspaces pick the new label up immediately.
+- Every destructive action — trash a session, trash several, delete a
+  workspace, untrack a folder — confirms in one centered dialog (Enter / Esc).
 - **Memory is project-level** for both providers: a Memory tab next to Config
   (Claude: `projects/<slug>/memory/*.md`; Codex: the memories of that
   project's threads, filtered by cwd).

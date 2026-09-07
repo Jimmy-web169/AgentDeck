@@ -3,13 +3,14 @@ import { createApi } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
-import { createWorkspace, deleteWorkspace, projectKey, removeFromWorkspace, renameWorkspace, sourceKey, suggestWorkspaces, useWorkspaces, workspaceSources } from '../../lib/workspaces.js'
+import { createWorkspace, deleteWorkspace, dismissSuggestion, projectKey, removeFromWorkspace, renameWorkspace, sourceKey, suggestWorkspaces, useWorkspaces, workspaceSources } from '../../lib/workspaces.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { providerColor, providerLabel } from '../../lib/providerColors.js'
 import { ChevronRightIcon, CloseIcon, DotsIcon, LayersIcon, PinIcon, PlusIcon } from './shellIcons.jsx'
 import PathPicker from './PathPicker.jsx'
 import FolderChips from './FolderChips.jsx'
 import RowMenu from './RowMenu.jsx'
+import useConfirm from '../../lib/useConfirm.jsx'
 
 // The one sidebar. It belongs to the shell, so it is the same column whether
 // the active tab shows Home or a session — only the highlights move.
@@ -84,12 +85,7 @@ function SessionLine({ ctx, src, s, indent = 'pl-7', showSource = false, menuKey
   const t = sessionTarget(src, s)
   const items = [
     ...extraItems,
-    onDeleteSession && {
-      label: 'Move to trash',
-      danger: true,
-      confirm: `${dot || isRecent(s) ? 'Active! ' : ''}Trash this session?`,
-      onClick: () => onDeleteSession({ provider: src.provider, root: src.root }, src.slug, s),
-    },
+    onDeleteSession && { label: 'Move to trash', danger: true, onClick: () => ctx.askTrash(src, s, !!dot || isRecent(s)) },
   ].filter(Boolean)
   return (
     <div className={`group relative flex items-stretch hover:bg-ink-700/50 ${selectable && checked ? 'bg-red-500/10' : active ? 'bg-sky-500/10 border-l-2 border-sky-500' : ''}`}>
@@ -199,7 +195,6 @@ export default function AppSidebar({
   activeTarget,
   onOpenHome,
   onOpenTarget,
-  onNewConversation,
   onNewProject,
   onDeleteSession,
   onDeleteSessions,
@@ -216,8 +211,8 @@ export default function AppSidebar({
   const [menuFor, setMenuFor] = useState(null) // key of the open ⋯ menu
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState(() => new Set())
-  const [confirmBatch, setConfirmBatch] = useState(false)
   const [batchBusy, setBatchBusy] = useState(false)
+  const [confirmEl, confirm] = useConfirm()
   const [newWs, setNewWs] = useState(null) // '' while typing a new workspace name
   const [renaming, setRenaming] = useState(null) // { id, name }
   const batchEpoch = useRef(0)
@@ -268,15 +263,11 @@ export default function AppSidebar({
     batchEpoch.current++
     setSelectMode(false)
     setSelected(new Set())
-    setConfirmBatch(false)
     setMenuFor(null)
   }, [provider, root, openSlug])
 
   const list = sessions || []
   const selCount = list.filter((s) => selected.has(s.id)).length
-  useEffect(() => {
-    if (confirmBatch && selCount === 0) setConfirmBatch(false)
-  }, [confirmBatch, selCount])
 
   const toggleSelected = (id) =>
     setSelected((prev) => {
@@ -288,12 +279,19 @@ export default function AppSidebar({
   const exitSelectMode = () => {
     setSelectMode(false)
     setSelected(new Set())
-    setConfirmBatch(false)
   }
-  const runBatchDelete = async () => {
+  const askBatchDelete = async () => {
     if (batchBusy) return
     const picked = list.filter((s) => selected.has(s.id))
-    if (!picked.length) return setConfirmBatch(false)
+    if (!picked.length) return
+    const activeN = picked.filter((s) => dotFor(provider, root, s.id) || isRecent(s)).length
+    const ok = await confirm({
+      title: `Move ${picked.length} session${picked.length === 1 ? '' : 's'} to the trash?`,
+      message: activeN ? `${activeN} of them ${activeN === 1 ? 'is' : 'are'} active right now — a transcript still being written ends up truncated.` : 'They go to the OS trash and can be restored from there.',
+      detail: picked.slice(0, 4).map((s) => s.title).join(' · ') + (picked.length > 4 ? ` · +${picked.length - 4} more` : ''),
+      confirmLabel: 'Move to trash',
+    })
+    if (!ok) return
     const epoch = batchEpoch.current
     setBatchBusy(true)
     try {
@@ -342,7 +340,7 @@ export default function AppSidebar({
         const k = `${it.provider}|${it.root}|${s.id}`
         if (seen.has(k)) continue
         seen.add(k)
-        rows.push({ src: srcOf(it), s, item: it })
+        rows.push({ src: srcL(it), s, item: it })
       }
     }
     for (const it of w.items) {
@@ -352,13 +350,40 @@ export default function AppSidebar({
       seen.add(k)
       const lst = index.sessionsFor(it.provider, it.root, it.slug)
       const fresh = lst?.find((x) => x.id === it.id)
-      rows.push({ src: srcOf(it), s: fresh || { id: it.id, title: it.title || it.id.slice(0, 8), lastTs: null, toolCalls: null }, item: it })
+      rows.push({ src: srcL(it), s: fresh || { id: it.id, title: it.title || it.id.slice(0, 8), lastTs: null, toolCalls: null }, item: it })
     }
     rows.sort((a, b) => String(b.s.lastTs || '').localeCompare(String(a.s.lastTs || '')))
     return { rows, loading }
   }
 
-  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, menuFor, setMenuFor, workspaces, openKeys, toggleKey }
+  // labels come from the live folder list, never from what was stored when a
+  // pin / workspace item was created — a relabelled folder updates everywhere
+  const labelOf = (prov, r, fallback = '') => index.scopes.find((x) => x.provider === prov && x.root === r)?.rootLabel || fallback
+  const srcL = (p) => {
+    const src = srcL(p)
+    return { ...src, rootLabel: labelOf(src.provider, src.root, src.rootLabel) }
+  }
+
+  const askTrash = async (src, s, active) => {
+    const ok = await confirm({
+      title: 'Move this session to the trash?',
+      message: s.title,
+      detail: `${providerLabel(providers, src.provider)} · ${src.project} · ${src.rootLabel}${active ? ' — active right now: a transcript still being written ends up truncated.' : ''}`,
+      confirmLabel: 'Move to trash',
+    })
+    if (ok) onDeleteSession?.({ provider: src.provider, root: src.root }, src.slug, s)
+  }
+  const askDeleteWorkspace = async (w) => {
+    const ok = await confirm({
+      title: `Delete workspace “${w.name}”?`,
+      message: 'Only the grouping goes away.',
+      detail: `Its ${w.items.length} project${w.items.length === 1 ? '' : 's'} and sessions stay where they are.`,
+      confirmLabel: 'Delete workspace',
+    })
+    if (ok) deleteWorkspace(w.id)
+  }
+
+  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, askTrash, menuFor, setMenuFor, workspaces, openKeys, toggleKey }
 
   const filtered = projects.filter((p) => {
     if (!filter) return true
@@ -416,7 +441,7 @@ export default function AppSidebar({
                 )}
                 {workspaces.map((w) => {
                   const open = openWs.has(w.id)
-                  const sources = workspaceSources(w)
+                  const sources = workspaceSources(w).map((x) => ({ ...x, rootLabel: labelOf(x.provider, x.root, x.rootLabel) }))
                   const filt = wsFilter[w.id]
                   const { rows, loading } = open ? wsRows(w) : { rows: [], loading: false }
                   const visible = filt?.size ? rows.filter((r) => filt.has(sourceKey(r.src))) : rows
@@ -463,7 +488,7 @@ export default function AppSidebar({
                           onClose={() => setMenuFor(null)}
                           items={[
                             { label: 'Rename', onClick: () => setRenaming({ id: w.id, name: w.name }) },
-                            { label: 'Delete workspace', danger: true, confirm: 'Delete? Projects and sessions stay.', onClick: () => deleteWorkspace(w.id) },
+                            { label: 'Delete workspace', danger: true, onClick: () => askDeleteWorkspace(w) },
                           ]}
                         />
                       </div>
@@ -525,6 +550,7 @@ export default function AppSidebar({
                         <span className="flex-1 min-w-0 text-[12px] text-zinc-300 truncate" title={s.cwd}>{s.name}</span>
                         <span className="text-[10.5px] text-zinc-600 shrink-0">{s.sources.length}</span>
                         <button onClick={() => { const id = createWorkspace(s.name, s.items); setOpenWs((o) => new Set(o).add(id)) }} className="shrink-0 text-[11px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-200 hover:bg-sky-500/25">Group</button>
+                        <button onClick={() => dismissSuggestion(s.cwd)} title="Don't suggest this folder again" className={`${iconBtn} text-zinc-600 hover:text-zinc-200 hover:bg-ink-600`}><CloseIcon /></button>
                       </div>
                     ))}
                   </div>
@@ -542,7 +568,7 @@ export default function AppSidebar({
               <>
                 {pinnedProjects.map((p) => {
                   const k = projectKey(p)
-                  const src = srcOf(p)
+                  const src = srcL(p)
                   return (
                     <ProjectLine ctx={ctx} key={k} src={src} open={openKeys.has(k)} onToggle={() => toggleKey(k)} menuKey={`pin|${k}`}>
                       {openKeys.has(k) && <ProjectSessions ctx={ctx} src={src} keyPrefix={`pin|${k}`} />}
@@ -550,7 +576,7 @@ export default function AppSidebar({
                   )
                 })}
                 {pinnedSessions.map((p) => (
-                  <SessionLine ctx={ctx} key={`${projectKey(p)}|${p.id}`} src={srcOf(p)} s={{ id: p.id, title: p.title || p.id.slice(0, 8), lastTs: null, toolCalls: null }} indent="pl-3" showSource menuKey={`pin|${projectKey(p)}|${p.id}`} />
+                  <SessionLine ctx={ctx} key={`${projectKey(p)}|${p.id}`} src={srcL(p)} s={{ id: p.id, title: p.title || p.id.slice(0, 8), lastTs: null, toolCalls: null }} indent="pl-3" showSource menuKey={`pin|${projectKey(p)}|${p.id}`} />
                 ))}
               </>
             )}
@@ -563,7 +589,7 @@ export default function AppSidebar({
           {(sections.projects || !!filter) &&
             filtered.map((p) => {
               const isOpen = p.slug === openSlug
-              const src = srcOf({ ...p, provider, root, rootLabel })
+              const src = srcL({ ...p, provider, root, rootLabel })
               const pinned = isPinned({ provider, root, slug: p.slug })
               const pk = projectKey({ provider, root, slug: p.slug })
               const mk = `proj|${pk}`
@@ -589,7 +615,6 @@ export default function AppSidebar({
                       open={menuFor === mk}
                       onClose={() => setMenuFor(null)}
                       items={[
-                        { label: 'New conversation here', onClick: () => onNewConversation(scope, p) },
                         onDeleteSessions && { label: 'Select sessions to trash…', disabled: !p.sessionCount, onClick: () => { setOpenSlug(p.slug); setSelectMode(true) } },
                       ].filter(Boolean)}
                       workspaceItem={projectItem(src)}
@@ -599,9 +624,6 @@ export default function AppSidebar({
 
                   {isOpen && (
                     <div className="pb-1">
-                      <button onClick={() => onNewConversation(scope, p)} className="w-full text-left pl-7 pr-2 py-1.5 text-[12px] text-emerald-300/80 hover:text-emerald-200 hover:bg-ink-700/50" title="Start a new conversation in this project">
-                        + New conversation
-                      </button>
                       {selectMode && (
                         <div className="pl-7 pr-2 py-1 flex items-center gap-1.5 text-[11px]">
                           <span className="text-zinc-400">{selCount} selected</span>
@@ -611,15 +633,9 @@ export default function AppSidebar({
                           <span className="flex-1" />
                           {batchBusy ? (
                             <span className="text-zinc-500">trashing…</span>
-                          ) : confirmBatch ? (
-                            <>
-                              <span className="text-red-300">trash {selCount}{list.some((s) => selected.has(s.id) && (dotFor(provider, root, s.id) || isRecent(s))) ? ' (incl. active!)' : ''}?</span>
-                              <button onClick={runBatchDelete} className="px-1.5 py-0.5 rounded bg-red-500/30 text-red-200">yes</button>
-                              <button onClick={() => setConfirmBatch(false)} className="px-1.5 py-0.5 rounded bg-ink-600 text-zinc-300">no</button>
-                            </>
                           ) : (
                             <>
-                              <button onClick={() => setConfirmBatch(true)} disabled={selCount === 0} className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-40">Delete</button>
+                              <button onClick={askBatchDelete} disabled={selCount === 0} className="px-1.5 py-0.5 rounded bg-red-500/10 text-red-300 hover:bg-red-500/20 disabled:opacity-40">Delete…</button>
                               <button onClick={exitSelectMode} className="px-1.5 py-0.5 rounded bg-ink-600 text-zinc-300">Cancel</button>
                             </>
                           )}
@@ -639,6 +655,7 @@ export default function AppSidebar({
         </div>
       </div>
 
+      {confirmEl}
       {pickerOpen && api && (
         <PathPicker
           apiClient={api}
