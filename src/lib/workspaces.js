@@ -6,10 +6,13 @@ import { baseName, shortPath } from './paths.js'
 // Claude Code, by a second Claude account and by Codex shows up as three
 // projects; a workspace puts them under one name and shows their sessions as
 // one list.
-//   workspace = { id, name, items: [item], at, color? }   color = any hex (lib/accent.js; legacy names still resolve)
+//   workspace = { id, name, items: [item], at, color?, icon? }
+//                color = any hex (lib/accent.js; legacy names still resolve) — tints the icon only
+//                icon  = one of WORKSPACE_ICON_KEYS (glyphs in components/shared/workspaceIcons.jsx)
 //   item      = { kind: 'project' | 'session', provider, root, rootLabel, slug, cwd, project, id?, title? }
 const KEY = 'agentdeck_workspaces'
 import { normalizeColor } from './accent.js'
+export const WORKSPACE_ICON_KEYS = ['layers', 'folder', 'star', 'bolt', 'rocket', 'flask', 'book', 'briefcase', 'globe', 'code', 'heart', 'tag']
 
 export const projectKey = (p) => `${p?.provider || ''}|${p?.root || ''}|${p?.slug || ''}`
 export const itemKey = (it) => `${projectKey(it)}|${it?.kind === 'session' || it?.id ? it.id || '' : ''}`
@@ -42,6 +45,7 @@ function load() {
         name: w.name,
         at: w.at || 0,
         color: normalizeColor(w.color),
+        icon: WORKSPACE_ICON_KEYS.includes(w.icon) ? w.icon : null,
         // v1 stored `projects`; fold them into `items`
         items: [...(Array.isArray(w.items) ? w.items : []), ...(Array.isArray(w.projects) ? w.projects.map((p) => ({ ...p, kind: 'project' })) : [])].map(normItem).filter(Boolean),
       }))
@@ -113,6 +117,11 @@ export function deleteWorkspace(id) {
 export function setWorkspaceColor(id, color) {
   const c = normalizeColor(color)
   save(workspaces.map((w) => (w.id === id ? { ...w, color: c } : w)))
+}
+
+export function setWorkspaceIcon(id, icon) {
+  const i = WORKSPACE_ICON_KEYS.includes(icon) ? icon : null
+  save(workspaces.map((w) => (w.id === id ? { ...w, icon: i } : w)))
 }
 
 // The workspace that holds this project or session, or null. Grouping moves a

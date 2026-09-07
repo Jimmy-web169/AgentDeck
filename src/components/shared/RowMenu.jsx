@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { addToWorkspace, createWorkspace, inWorkspace, removeFromWorkspace } from '../../lib/workspaces.js'
 import AccentField from './AccentPicker.jsx'
+import { IconField } from './workspaceIcons.jsx'
 import { PlusIcon } from './shellIcons.jsx'
 
 // The "⋯" menu of a sidebar row. Every row gets the same two hover controls —
@@ -11,7 +12,8 @@ import { PlusIcon } from './shellIcons.jsx'
 //   items: [{ label, onClick, danger, disabled }]
 //   workspaceItem: the project / session to toggle in workspaces (optional)
 //   accent: { value, defaultValue?, onChange, onReset?, resetLabel? } — a colour picker (a workspace's colour)
-export default function RowMenu({ open, onClose, items = [], workspaceItem, workspaces = [], accent = null }) {
+//   icon:   { value, onPick, accentStyle? } — a glyph picker (a workspace's icon)
+export default function RowMenu({ open, onClose, items = [], workspaceItem, workspaces = [], accent = null, icon = null }) {
   const ref = useRef(null)
   const onCloseRef = useRef(onClose)
   const [creating, setCreating] = useState(false)
@@ -41,7 +43,7 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
   const row = 'w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] text-zinc-300 hover:bg-ink-600 hover:text-zinc-100 disabled:opacity-40 disabled:hover:bg-transparent'
 
   return (
-    <div ref={ref} onMouseDown={(e) => e.stopPropagation()} className={`absolute right-2 top-full z-30 mt-0.5 ${accent ? 'w-64' : 'w-60'} rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl py-1`}>
+    <div ref={ref} onMouseDown={(e) => e.stopPropagation()} className={`absolute right-2 top-full z-30 mt-0.5 ${accent || icon ? 'w-64' : 'w-60'} rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl py-1`}>
       {items.map((it) => (
         <button
           key={it.label}
@@ -55,17 +57,18 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
           {it.label}
         </button>
       ))}
-      {accent && (
+      {(icon || accent) && (
         <>
           {items.length > 0 && <div className="my-1 border-t border-zinc-800" />}
           <div className="px-3 pb-1">
-            <AccentField label="Colour" value={accent.value} defaultValue={accent.defaultValue} onChange={accent.onChange} onReset={accent.onReset} resetLabel={accent.resetLabel || 'clear'} />
+            {icon && <IconField value={icon.value} onPick={icon.onPick} accentStyle={icon.accentStyle} />}
+            {accent && <AccentField label="Colour" value={accent.value} defaultValue={accent.defaultValue} onChange={accent.onChange} onReset={accent.onReset} resetLabel={accent.resetLabel || 'clear'} />}
           </div>
         </>
       )}
       {workspaceItem && (
         <>
-          {(items.length > 0 || accent) && <div className="my-1 border-t border-zinc-800" />}
+          {(items.length > 0 || accent || icon) && <div className="my-1 border-t border-zinc-800" />}
           <div className="px-3 pt-1 pb-0.5 text-[10.5px] uppercase tracking-wider text-zinc-600">Workspaces</div>
           {workspaces.map((w) => {
             const member = inWorkspace(w, workspaceItem)

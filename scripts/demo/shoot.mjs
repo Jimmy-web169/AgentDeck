@@ -181,11 +181,12 @@ const SHOTS = [
         const more = row && row.querySelector('button[title="More"]'); if (more) more.click();
         return !!more })()`)
       await cdp.waitFor(`!!document.querySelector('[data-accent-chip]')`, { timeout: 3000 })
-      await cdp.eval(`(() => { const c = document.querySelector('[data-accent-chip]'); if (c) c.click(); return !!c })()`)
-      await cdp.waitFor(`!!document.querySelector('[data-swatch]')`, { timeout: 3000 })
+      // unfold the icon grid (the colour tray stays folded — one thing at a time)
+      await cdp.eval(`(() => { const c = document.querySelector('[data-icon-chip]'); if (c) c.click(); return !!c })()`)
+      await cdp.waitFor(`!!document.querySelector('[data-icon-choice]')`, { timeout: 3000 })
       await sleep(400)
     },
-    about: 'A workspace ⋯ menu (rename, delete, colour)',
+    about: 'A workspace ⋯ menu (rename, delete, icon, colour)',
   },
 ]
 

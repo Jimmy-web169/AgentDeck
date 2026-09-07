@@ -87,7 +87,7 @@ a **navigation-first workbench**. The short version:
 - Ctrl+K: fuzzy search over every project and session of every provider and folder.
 - Home with Activity (live terminals, latest sessions, pins, recent projects) and Insights (how *you* work: rhythm, streaks, session shape, neglected projects).
 - One shared sidebar: colour-coded folder chips as the only scope picker, workspaces, pinned rows, projects — pinning or grouping *moves* a row, so nothing is listed twice.
-- Workspaces across providers and folders, listed per project, each with its own colour; suggestions when the same folder shows up in several places (can be switched off).
+- Workspaces across providers and folders, listed per project, each with its own icon and colour; suggestions when the same folder shows up in several places (can be switched off).
 - Inline sub-agent threads under the tool call that spawned them (Claude `Agent`/`Task`, Codex `spawn_agent`).
 - Preferences: three themes, two densities, provider and workspace colours picked freely (hue and saturation sliders, the system colour dialog, a hex, your own saved swatches), sidebar sections on/off.
 - A memory tab per project for both providers; the "+" folder dialog; the terminal as the only way to continue a session.

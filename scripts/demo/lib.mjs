@@ -242,7 +242,7 @@ export function seedsFor(fx, themeKey, level) {
   }
   seeds.agentdeck_pins = pins
   // one workspace: the project that lives in both providers, grouped and coloured
-  if (shared) seeds.agentdeck_workspaces = [{ id: 'demo-ws-1', name: shared.name, at: now - 86400e3, color: '#a78bfa', items: shared.providers.map((prov) => projectTarget(shared, prov)) }]
+  if (shared) seeds.agentdeck_workspaces = [{ id: 'demo-ws-1', name: shared.name, at: now - 86400e3, color: '#a78bfa', icon: 'rocket', items: shared.providers.map((prov) => projectTarget(shared, prov)) }]
   // MRU for the quick switcher
   seeds.agentdeck_recent = recent.map((s, i) => ({ ...target(s), at: now - (i + 1) * 900e3 }))
   // a lived-in tab strip: Home + the two showcase sessions (the hash decides which is active)

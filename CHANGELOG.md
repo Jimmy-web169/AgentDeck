@@ -127,9 +127,12 @@ its real terminal.
   placeholder home paths so `check:privacy` stays green. README records the
   v1 → v2 progression and shows both releases' material.
 
+- **A workspace's own glyph.** Its ⋯ menu picks one of a dozen icons (layers,
+  folder, star, bolt, rocket, flask, book, briefcase, globe, code, heart, tag);
+  the workspace colour tints that glyph only, the name stays plain text.
 - **Any colour you like.** Preferences › Colours sets each provider's accent
   (tab dot, active-tab bar, folder chips, source tags) and a workspace's ⋯ menu
-  sets its own (icon and name) — each a quiet row (chip, hex, "change") whose
+  sets its own (the glyph) — each a quiet row (chip, hex, "change") whose
   picker unfolds only when you click it, and a free picker rather than a fixed
   palette: your own saved swatches, a hue slider, a saturation slider, a hex
   field and the system colour dialog. A colour is stored as hex; the UI keeps its hue
