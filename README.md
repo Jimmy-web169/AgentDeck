@@ -165,7 +165,8 @@ The quickest path uses the bundled `Makefile`:
 
 ```bash
 make init        # first-time setup: npm install + optional ttyd + checks for the CLI
-make all         # API server (:47841) + Vite UI (:47842), both hot-reload
+make all         # update the provider CLIs, then API server (:47841) + Vite UI (:47842), both hot-reload
+make update      # just the CLI updates (claude update, codex update); AGENTDECK_SKIP_UPDATE=1 skips them
 ```
 
 Open <http://localhost:47842>. On first run it auto-detects `~/.claude` and

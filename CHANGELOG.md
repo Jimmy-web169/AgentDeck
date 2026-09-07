@@ -83,7 +83,17 @@ its real terminal.
   `test/dispatch.test.js` cover the activity profile, tracked-folder
   add/rename/remove and the shared dispatcher (incl. both providers' route tables).
 
+- `make all` now runs `make update` first: every tracked provider CLI updates
+  itself (`claude update`, `codex update`) before the servers start; failures
+  only warn, `AGENTDECK_SKIP_UPDATE=1` skips it offline.
+- `PROVIDER-SPEC.md` — a draft contract for providers: the normalized core
+  components, the shared route table, known claude/codex misalignments, a
+  format-drift probe design and MCP-config normalization. For discussion.
+
 ### Changed
+- The "+" next to the folder chips opens a centered **Tracked folders** dialog
+  (list with editable labels, untrack, one add form) instead of a Home page;
+  `#/home/folders` links fall back to Home › Activity.
 - Sidebar hierarchy: projects carry a folder glyph and medium weight, sessions
   are lighter and smaller, so the two never read alike; "Show earlier
   messages" is a full-width bar instead of a small pill.

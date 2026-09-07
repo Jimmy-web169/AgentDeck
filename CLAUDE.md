@@ -23,6 +23,9 @@ here; the codebase itself is described in `README.md`, `CONTRIBUTING.md` and
 - The maintainer runs AgentDeck on **47841 (API) / 47842 (Vite)**. Never run
   `npm run dev`, `npm run server` or `npm run stop` — their `free-ports` pre-hook
   kills those ports.
+- Never run `make all`, `make be` or `make update` from a session either: `make all`
+  frees the maintainer's port and `make update` upgrades the CLIs the maintainer is
+  using right now.
 - Verify on side ports instead: `AGENTDECK_PORT=47851 AGENTDECK_WEB_PORT=47852
   node server/index.js` after `npx vite build` (it serves `dist/`). Kill only the
   PID listening on 47851 when done.
