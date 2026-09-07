@@ -360,7 +360,7 @@ export default function AppSidebar({
   // pin / workspace item was created — a relabelled folder updates everywhere
   const labelOf = (prov, r, fallback = '') => index.scopes.find((x) => x.provider === prov && x.root === r)?.rootLabel || fallback
   const srcL = (p) => {
-    const src = srcL(p)
+    const src = srcOf(p)
     return { ...src, rootLabel: labelOf(src.provider, src.root, src.rootLabel) }
   }
 
