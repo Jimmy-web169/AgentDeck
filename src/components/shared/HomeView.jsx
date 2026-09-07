@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { createApi } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
 import { HOME_VIEWS, homeViewLabel, normalizeView } from '../../lib/tabs.js'
@@ -7,9 +6,8 @@ import { providerColor, providerLabel } from '../../lib/providerColors.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import useActiveSessions, { toManagerItems } from '../../lib/useActiveSessions.js'
-import { PencilIcon, PinIcon, SearchIcon, TerminalIcon } from './shellIcons.jsx'
+import { PinIcon, SearchIcon, TerminalIcon } from './shellIcons.jsx'
 import FolderChips from './FolderChips.jsx'
-import useConfirm from '../../lib/useConfirm.jsx'
 import InsightsPage from './InsightsPage.jsx'
 import { usePrefs } from '../../lib/prefs.js'
 import { ShortcutChips } from './ShortcutHints.jsx'
@@ -20,9 +18,9 @@ import { ShortcutChips } from './ShortcutHints.jsx'
 // per-folder pages comes from the shell's sidebar.
 //   Activity   what is going on across every provider: running terminals,
 //              the latest sessions, pinned items, recent projects, shortcuts
-//   Stats / History / Plugins / Resources   for the sidebar's scope
-//   Folders    tracked folders of every provider — one list, one add form
-//              (reached from the "+" next to the folder chips)
+//   Stats / Insights / History / Plugins / Resources   for the sidebar's scope
+// Tracked folders are managed in FoldersDialog (the "+" next to the folder
+// chips), not on a page of their own.
 
 const RECENT_PROJECTS_SCANNED = 10 // projects whose session lists feed "Latest sessions"
 const LATEST_SESSIONS = 14
@@ -275,133 +273,18 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
   )
 }
 
-// One list of every tracked folder, one add form (pick the provider, type a path).
-function Folders({ providers, index }) {
-  const apis = useMemo(() => Object.fromEntries(providers.map((p) => [p.id, createApi(p.id)])), [providers])
-  const [prov, setProv] = useState(providers[0]?.id)
-  const [path, setPath] = useState('')
-  const [label, setLabel] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState(null)
-  const [editing, setEditing] = useState(null) // { provider, id, label }
-  const [confirmEl, confirm] = useConfirm()
-  const cfg = providers.find((p) => p.id === prov)
-  const untrack = async (r) => {
-    const ok = await confirm({
-      title: `Stop tracking “${r.label}”?`,
-      message: 'AgentDeck forgets this folder. Nothing on disk is touched.',
-      detail: r.dir,
-      confirmLabel: 'Untrack',
-    })
-    if (ok) run(() => apis[r.provider].removeRoot(r.id))
-  }
-  const rows = providers.flatMap((p) => (index.roots[p.id] || []).map((r) => ({ ...r, provider: p.id, statusField: p.rootStatusField || 'hasProjects' })))
-
-  const run = async (fn) => {
-    setBusy(true)
-    setErr(null)
-    try {
-      await fn()
-      await index.refresh(true)
-    } catch (e) {
-      setErr(e.message)
-    } finally {
-      setBusy(false)
-    }
-  }
-  const add = () =>
-    path.trim() &&
-    run(async () => {
-      await apis[prov].addRoot(path.trim(), label.trim())
-      setPath('')
-      setLabel('')
-    })
-
-  return (
-    <div className="max-w-3xl mx-auto px-6 py-6 space-y-7">
-      {confirmEl}
-      <Section title="Tracked folders" count={rows.length}>
-        <Panel className="overflow-hidden divide-y divide-zinc-800/70">
-          {rows.map((r) => (
-            <div key={`${r.provider}|${r.id}`} className="flex items-center gap-3 px-3 py-2.5">
-              <ProviderBadge providers={providers} id={r.provider} />
-              <div className="min-w-0 flex-1">
-                {editing?.provider === r.provider && editing?.id === r.id ? (
-                  <input
-                    autoFocus
-                    value={editing.label}
-                    onChange={(e) => setEditing({ ...editing, label: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') run(() => apis[r.provider].relabelRoot(r.id, editing.label)).then(() => setEditing(null))
-                      else if (e.key === 'Escape') setEditing(null)
-                    }}
-                    placeholder="label (empty = default)"
-                    className="w-full bg-ink-700 border border-zinc-700 rounded px-2 py-0.5 text-[13px] text-zinc-100 placeholder-zinc-600"
-                  />
-                ) : (
-                  <button onClick={() => setEditing({ provider: r.provider, id: r.id, label: r.label })} className="group flex items-center gap-1.5 max-w-full text-left" title="Rename this folder's label">
-                    <span className="text-[13px] text-zinc-200 truncate">{r.label}</span>
-                    <PencilIcon className="w-3 h-3 text-zinc-600 opacity-0 group-hover:opacity-100 shrink-0" />
-                  </button>
-                )}
-                <div className="text-[11px] text-zinc-500 font-mono truncate">{r.dir}</div>
-              </div>
-              <div className="text-[10.5px] flex gap-2 shrink-0">
-                <span className={r.exists ? 'text-emerald-400' : 'text-red-400'}>{r.exists ? 'exists' : 'missing'}</span>
-                <span className={r[r.statusField] ? 'text-sky-400' : 'text-zinc-600'}>{r[r.statusField] ? 'has history' : 'config only'}</span>
-              </div>
-              <button onClick={() => untrack(r)} disabled={busy} title="Stop tracking this folder. Does NOT delete it from disk." className="text-[11px] px-2 py-1 rounded bg-zinc-500/15 text-zinc-300 hover:bg-zinc-500/25 disabled:opacity-40 shrink-0">
-                untrack
-              </button>
-            </div>
-          ))}
-          {rows.length === 0 && <div className="px-3 py-4 text-[12px] text-zinc-600">No folders tracked yet — add one below.</div>}
-        </Panel>
-      </Section>
-
-      <Section title="Add a folder">
-        <Panel className="p-4 space-y-3">
-          <div className="flex rounded-md bg-ink-800 border border-zinc-800 p-0.5 w-fit">
-            {providers.map((p) => {
-              const c = providerColor(providers, p.id)
-              const active = prov === p.id
-              return (
-                <button key={p.id} onClick={() => setProv(p.id)} className={`flex items-center gap-1.5 h-7 px-3 rounded text-[12px] transition-colors ${active ? 'bg-ink-600 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200 hover:bg-ink-700'}`}>
-                  <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-                  {p.label}
-                </button>
-              )
-            })}
-          </div>
-          <input value={path} onChange={(e) => setPath(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder={cfg?.id === 'codex' ? '/path/to/.codex  or  ~/.codex' : '/path/to/.claude  or  ~/my-project'} className="w-full bg-ink-700 border border-zinc-700 rounded px-2.5 py-1.5 text-[13px] text-zinc-100 font-mono placeholder-zinc-600" />
-          <div className="flex gap-2">
-            <input value={label} onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} placeholder="label (optional)" className="flex-1 bg-ink-700 border border-zinc-700 rounded px-2.5 py-1.5 text-[13px] text-zinc-200 placeholder-zinc-600" />
-            <button onClick={add} disabled={busy || !path.trim()} className="px-4 py-1.5 rounded bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30 text-[13px] disabled:opacity-40">
-              {busy ? '…' : 'Add'}
-            </button>
-          </div>
-          {err && <div className="text-[12px] text-red-300">{err}</div>}
-          <div className="text-[11px] text-zinc-600">
-            A folder is a CLI home (<span className="font-mono">~/.claude</span>, <span className="font-mono">~/.codex</span>) or any directory with a <span className="font-mono">.claude/</span> config. Click a label above to rename it (a second account's home, say). <span className="text-zinc-400">untrack</span> only removes it from this list.
-          </div>
-        </Panel>
-      </Section>
-    </div>
-  )
-}
-
-export default function HomeView({ providers = [], visible = true, target, scope, onScope, index, live, termKeys, onOpen, onNavigate, onOpenHome, onSearch }) {
+export default function HomeView({ providers = [], visible = true, target, scope, onScope, index, live, termKeys, onOpen, onNavigate, onOpenHome, onManageFolders, onSearch }) {
   const view = normalizeView(target?.view)
   const scopeInfo = scope ? index.scopes.find((s) => s.provider === scope.provider && s.root === scope.root) : null
   const providerCfg = scope ? providers.find((p) => p.id === scope.provider) : null
   const Page = providerCfg?.homePages?.[view]
-  const scoped = view !== 'activity' && view !== 'folders'
+  const scoped = view !== 'activity'
 
   return (
     <div className="h-full flex flex-col bg-ink-950">
       <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-zinc-800 bg-ink-900/70">
         <div className="flex items-center gap-0.5 rounded-md bg-ink-800 border border-zinc-800 p-0.5">
-          {HOME_VIEWS.filter((v) => v.nav !== false).map((v) => (
+          {HOME_VIEWS.map((v) => (
             <button
               key={v.k}
               onClick={(e) => (e.ctrlKey || e.metaKey ? onOpenHome?.({ view: v.k }, { newTab: true }) : onNavigate?.({ view: v.k, focus: null }))}
@@ -414,10 +297,9 @@ export default function HomeView({ providers = [], visible = true, target, scope
             </button>
           ))}
         </div>
-        {view === 'folders' && <span className="text-[13px] font-medium text-zinc-100">Folders</span>}
         {scoped && (
           <div className="min-w-0 flex-1">
-            <FolderChips compact scopes={index.scopes} providers={providers} value={scope} onPick={onScope} />
+            <FolderChips compact scopes={index.scopes} providers={providers} value={scope} onPick={onScope} onManage={onManageFolders} />
           </div>
         )}
         {!scoped && <span className="flex-1" />}
@@ -431,11 +313,6 @@ export default function HomeView({ providers = [], visible = true, target, scope
       {view === 'activity' && (
         <div className="flex-1 min-h-0 overflow-y-auto">
           <Activity providers={providers} visible={visible} index={index} live={live} termKeys={termKeys} onOpen={onOpen} />
-        </div>
-      )}
-      {view === 'folders' && (
-        <div className="flex-1 min-h-0 overflow-y-auto">
-          <Folders providers={providers} index={index} />
         </div>
       )}
       {scoped && !scope && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">No tracked folders yet — add one with the + next to the folder chips.</div>}

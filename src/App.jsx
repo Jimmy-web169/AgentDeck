@@ -4,6 +4,7 @@ import HomeView from './components/shared/HomeView.jsx'
 import AppSidebar from './components/shared/AppSidebar.jsx'
 import TabStrip from './components/shared/TabStrip.jsx'
 import QuickSwitcher from './components/shared/QuickSwitcher.jsx'
+import FoldersDialog from './components/shared/FoldersDialog.jsx'
 import { PROVIDER_LIST } from './providers/index.js'
 import { emptyTab, forgetRecent, isHome, loadRecent, loadTabs, normalizeView, pushRecent, sameTarget, saveTabs, targetKey } from './lib/tabs.js'
 import { forgetPins } from './lib/pins.js'
@@ -17,8 +18,8 @@ import useNavIndex from './lib/useNavIndex.js'
 // shows Home or a provider's app depending on the active tab.
 //
 // Each tab holds a target (see lib/tabs.js). A target with a provider shows
-// that provider's app; without one it shows Home (activity / stats / history /
-// plugins / resources / folders — `view` says which). The apps stay mounted at
+// that provider's app; without one it shows Home (activity / stats / insights /
+// history / plugins / resources — `view` says which). The apps stay mounted at
 // all times (their terminals + sockets survive a switch), so a tab switch is
 // instant.
 //
@@ -109,6 +110,7 @@ export default function App() {
   const [pendingOpen, setPendingOpen] = useState(null)
   const pendingRef = useRef(null)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [foldersOpen, setFoldersOpen] = useState(false) // FoldersDialog — the "+" next to the folder chips
   const [recent, setRecent] = useState(loadRecent)
   const [sticky, setSticky] = useState(() => loadJson(SCOPE_KEY, null)) // last scope picked while on Home
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('agentdeck_collapsed') === '1')
@@ -494,7 +496,7 @@ export default function App() {
                 scope={scope}
                 onScope={onScope}
                 activeTarget={activeTarget}
-                onOpenHome={openHome}
+                onManageFolders={() => setFoldersOpen(true)}
                 onOpenTarget={(t, opts) => openTarget({ ...t }, opts)}
                 onNewProject={newProject}
                 onDeleteSession={deleteSession}
@@ -525,7 +527,7 @@ export default function App() {
             )
           })}
           <div className="absolute inset-0" style={{ display: showHome ? 'block' : 'none' }}>
-            <HomeView providers={PROVIDER_LIST} visible={showHome} target={showHome ? activeTarget : null} scope={scope} onScope={onScope} index={index} live={live} termKeys={termKeys} onOpen={openSession} onNavigate={updateHome} onOpenHome={openHome} onSearch={() => setSearchOpen(true)} />
+            <HomeView providers={PROVIDER_LIST} visible={showHome} target={showHome ? activeTarget : null} scope={scope} onScope={onScope} index={index} live={live} termKeys={termKeys} onOpen={openSession} onNavigate={updateHome} onOpenHome={openHome} onManageFolders={() => setFoldersOpen(true)} onSearch={() => setSearchOpen(true)} />
           </div>
         </div>
       </div>
@@ -546,6 +548,7 @@ export default function App() {
           openTarget({ provider: p.provider, root: p.root, rootLabel: p.rootLabel, slug: p.slug, cwd: p.cwd, project: p.name, draft: true, title: 'New conversation', newConversation: true })
         }}
       />
+      <FoldersDialog open={foldersOpen} onClose={() => setFoldersOpen(false)} providers={PROVIDER_LIST} index={index} />
     </div>
   )
 }

@@ -3,7 +3,7 @@
 // A tab = { key, target }. `target` says where the tab is:
 //   { provider, root, rootLabel, slug, id, title, project, cwd, draft, view }
 // Everything is optional. No provider → Home: `view` picks the page
-// (activity, stats, history, plugins, resources, folders); the per-folder
+// (activity, stats, insights, history, plugins, resources); the per-folder
 // pages use the sidebar's scope. A provider without a session shows that
 // provider's app as it is. `draft` marks a not-yet-saved "new conversation".
 // `view` remembers which in-app tab (conversation / sub-agents / raw / memory /
@@ -14,8 +14,7 @@ export const TABS_KEY = 'agentdeck_tabs'
 export const RECENT_KEY = 'agentdeck_recent'
 const RECENT_MAX = 40
 
-// Home pages. `nav: false` keeps a page reachable (deep link, the "+" next to
-// the folder chips) without a button of its own.
+// Home pages — every entry gets a button in Home's header.
 export const HOME_VIEWS = [
   { k: 'activity', label: 'Activity' },
   { k: 'stats', label: 'Stats' },
@@ -23,9 +22,11 @@ export const HOME_VIEWS = [
   { k: 'history', label: 'History' },
   { k: 'plugins', label: 'Plugins' },
   { k: 'resources', label: 'Resources' },
-  { k: 'folders', label: 'Folders', nav: false },
 ]
-const LEGACY_VIEWS = { overview: 'activity', memory: 'activity' }
+// Views that no longer exist, so old deep links (#/home/<view>) and persisted
+// tabs still land on Home. `folders` became FoldersDialog (the "+" next to
+// the folder chips).
+const LEGACY_VIEWS = { overview: 'activity', memory: 'activity', folders: 'activity' }
 export const normalizeView = (v) => (HOME_VIEWS.some((x) => x.k === v) ? v : LEGACY_VIEWS[v] || 'activity')
 export const homeViewLabel = (k) => HOME_VIEWS.find((v) => v.k === normalizeView(k))?.label || ''
 

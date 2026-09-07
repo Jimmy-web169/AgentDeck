@@ -206,7 +206,7 @@ export default function AppSidebar({
   scope,
   onScope,
   activeTarget,
-  onOpenHome,
+  onManageFolders,
   onOpenTarget,
   onNewProject,
   onDeleteSession,
@@ -436,7 +436,7 @@ export default function AppSidebar({
   return (
     <aside className="w-full h-full flex flex-col bg-ink-900 border-r border-zinc-800">
       <div className="p-3 border-b border-zinc-800 space-y-2.5">
-        <FolderChips scopes={index.scopes} providers={providers} value={scope} onPick={onScope} onManage={() => onOpenHome({ view: 'folders' })} />
+        <FolderChips scopes={index.scopes} providers={providers} value={scope} onPick={onScope} onManage={onManageFolders} />
         <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter projects…" className="w-full bg-ink-700 border border-zinc-700 rounded-md px-2.5 py-1.5 text-[13px] text-zinc-200 placeholder-zinc-600 focus:border-zinc-500 outline-none" />
         <button onClick={newProjectFlow} disabled={picking || !api} className="w-full text-left text-[12px] text-emerald-300/80 hover:text-emerald-200 disabled:opacity-60" title="Pick a folder (opens Finder/Explorer) and start a new conversation there">
           {picking ? '+ opening folder chooser…' : '+ New project (choose a folder)'}

@@ -115,7 +115,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     if (!appActive) return
     reloadRoots().catch((e) => setError(e.message))
   }, [reloadRoots, appActive])
-  // tracked folders can change on Home › Folders — pick them up
+  // tracked folders can change in the Tracked folders dialog — pick them up
   useEffect(() => {
     if (!appActive) return
     const list = (scopes || []).filter((s) => s.provider === 'claude')
