@@ -57,7 +57,23 @@ its real terminal.
 - Batch-select and pin are proper icon buttons; Stats uses the full width
   with the tool list folded to its top 10.
 
+- **Insights** (Home): a 12-week activity heatmap, the last 30 days as bars
+  (sessions / prompts / tool calls / tokens, with a table view), hour-of-day
+  and weekday profiles, busiest projects, model mix, streaks — per tracked
+  folder, from a new `GET /api/<provider>/activity` endpoint. "Copy digest as
+  Markdown" hands the numbers to any Claude / Codex session for an AI read.
+- **Themes and Preferences**: Midnight (new default, cool slate), Graphite (the
+  1.x dark) and Paper; a density switch (compact hides the per-row meta line);
+  toggles for the Workspaces / Pinned sections and for first prompts under
+  session titles — all behind the gear in the tab strip.
+- Backend tests: `test/activity.test.js`, `test/roots.test.js`,
+  `test/dispatch.test.js` cover the activity profile, tracked-folder
+  add/rename/remove and the shared dispatcher (incl. both providers' route tables).
+
 ### Changed
+- Sidebar hierarchy: projects carry a folder glyph and medium weight, sessions
+  are lighter and smaller, so the two never read alike; "Show earlier
+  messages" is a full-width bar instead of a small pill.
 - **Terminal only.** Continuing a conversation always runs the real CLI in
   the embedded terminal (tmux + ttyd / node-pty). The SDK chat engine, its
   permission prompts and the `/chat/<provider>` WebSockets are gone, along with

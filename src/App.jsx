@@ -168,6 +168,23 @@ export default function App() {
     return index.scopes[0] ? { provider: index.scopes[0].provider, root: index.scopes[0].root } : null
   }, [activeTarget, sticky, index.scopes])
 
+  // a relabelled folder renames the tabs that show it
+  useEffect(() => {
+    if (!index.scopes.length) return
+    const cur = stateRef.current
+    let changed = false
+    const next = cur.tabs.map((t) => {
+      const tg = t.target
+      if (!tg?.provider || !tg.root) return t
+      const s = index.scopes.find((x) => x.provider === tg.provider && x.root === tg.root)
+      if (!s || s.rootLabel === tg.rootLabel) return t
+      changed = true
+      return { ...t, target: { ...tg, rootLabel: s.rootLabel } }
+    })
+    if (changed) commit({ ...cur, tabs: next })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index.scopes])
+
   // ---- persistence + deep link ----
   useEffect(() => saveTabs(tabs, activeKey), [tabs, activeKey])
   useEffect(() => replaceHash(toHash(activeTarget)), [activeTarget])

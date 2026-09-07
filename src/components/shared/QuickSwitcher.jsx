@@ -5,6 +5,7 @@ import { targetKey } from '../../lib/tabs.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import { providerColor } from '../../lib/providerColors.js'
 import { liveProjectKey, liveSessionKey } from '../../lib/useLiveKeys.js'
+import { usePrefs } from '../../lib/prefs.js'
 import { ChevronRightIcon, PinIcon, PlusIcon, SearchIcon } from './shellIcons.jsx'
 
 // Quick switcher (Ctrl+K): jump to any project or session across every
@@ -71,7 +72,7 @@ export function pinTargetOf(row) {
   return null
 }
 
-function buildGroups({ q, level, index, recent, pins, live, openTabs, providers }) {
+function buildGroups({ q, level, index, recent, pins, live, openTabs, providers, showPrompt = true }) {
   const isLiveS = (t) => live.ids.has(liveSessionKey(t.provider, t.root, t.id))
   const isLiveP = (p) => live.slugs.has(liveProjectKey(p.provider, p.root, p.slug))
   const plabel = (id) => providers.find((p) => p.id === id)?.label || id
@@ -89,9 +90,9 @@ function buildGroups({ q, level, index, recent, pins, live, openTabs, providers 
   const sessRow = (s, hits, project, metaTs) => ({
     kind: 'session',
     key: `s|${targetKey(s)}`,
-    target: { provider: s.provider, root: s.root, rootLabel: s.rootLabel, slug: s.slug, id: s.id, title: s.title, project: project || s.project || null, cwd: s.cwd || null },
+    target: { provider: s.provider, root: s.root, rootLabel: index.labelOf(s.provider, s.root, s.rootLabel), slug: s.slug, id: s.id, title: s.title, project: project || s.project || null, cwd: s.cwd || null },
     primary: s.title || String(s.id || '').slice(0, 8),
-    secondary: s.firstPrompt && s.firstPrompt !== s.title ? s.firstPrompt : '',
+    secondary: showPrompt && s.firstPrompt && s.firstPrompt !== s.title ? s.firstPrompt : '',
     context: [project || s.project, plabel(s.provider)].filter(Boolean).join(' · '),
     meta: metaTs ? fmtRelative(metaTs) : '',
     live: isLiveS(s),
@@ -179,6 +180,7 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, onP
   const [busy, setBusy] = useState(false)
   const [cursor, setCursor] = useState({ top: 0, height: 0, visible: false })
   const pins = usePins()
+  const prefs = usePrefs()
   const inputRef = useRef(null)
   const listRef = useRef(null)
   const rowEls = useRef([])
@@ -194,9 +196,9 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, onP
 
   const q = query.trim()
   const groups = useMemo(
-    () => buildGroups({ q, level, index, recent, pins, live, openTabs, providers }),
+    () => buildGroups({ q, level, index, recent, pins, live, openTabs, providers, showPrompt: prefs.showFirstPrompt }),
     // index is a fresh object whenever the shell re-renders (a session list landed)
-    [q, level, index, recent, pins, live, openTabs, providers]
+    [q, level, index, recent, pins, live, openTabs, providers, prefs.showFirstPrompt]
   )
   const flat = useMemo(() => groups.flatMap((g) => g.rows).filter((r) => r.kind !== 'loading' && r.kind !== 'empty'), [groups])
   const flatKeys = flat.map((r) => r.key).join('|')

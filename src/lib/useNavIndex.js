@@ -167,5 +167,9 @@ export default function useNavIndex(providers, { enabled = true } = {}) {
     loadedAt.current = Math.min(loadedAt.current, Date.now() - INDEX_TTL + 4000)
   }, [])
 
-  return { projects, roots, scopes, loading, refresh, loadSessions, sessionsFor, invalidate }
+  // the current display label of a tracked folder (pins / workspaces store a
+  // snapshot; the live one wins)
+  const labelOf = useCallback((provider, root, fallback = '') => scopes.find((s) => s.provider === provider && s.root === root)?.rootLabel || fallback, [scopes])
+
+  return { projects, roots, scopes, loading, refresh, loadSessions, sessionsFor, invalidate, labelOf }
 }

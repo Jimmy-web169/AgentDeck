@@ -139,26 +139,6 @@ const normCwd = (c) =>
     .replace(/\\/g, '/')
     .toLowerCase()
 
-// dismissed suggestions (normalized cwd) never come back
-const DISMISS_KEY = 'agentdeck_ws_dismissed'
-const loadDismissed = () => {
-  try {
-    const a = JSON.parse(localStorage.getItem(DISMISS_KEY) || '[]')
-    return new Set(Array.isArray(a) ? a : [])
-  } catch {
-    return new Set()
-  }
-}
-let dismissed = loadDismissed()
-export function dismissSuggestion(cwd) {
-  dismissed = new Set([...dismissed, normCwd(cwd)])
-  workspaces = workspaces.slice() // new snapshot, so useWorkspaces() consumers recompute suggestions
-  try {
-    localStorage.setItem(DISMISS_KEY, JSON.stringify([...dismissed]))
-  } catch {}
-  emit()
-}
-
 export function suggestWorkspaces(indexProjects = [], current = workspaces) {
   // a folder group counts as "dealt with" as soon as ANY of its projects is in
   // some workspace — the user made a call about it
@@ -171,10 +151,9 @@ export function suggestWorkspaces(indexProjects = [], current = workspaces) {
     byCwd.get(k).push(p)
   }
   const out = []
-  for (const [k, list] of byCwd) {
+  for (const [, list] of byCwd) {
     const sources = new Set(list.map(sourceKey))
     if (sources.size < 2) continue
-    if (dismissed.has(k)) continue
     if (list.some((p) => grouped.has(projectKey(p)))) continue
     out.push({ name: baseName(list[0].cwd), cwd: list[0].cwd, items: list.map((p) => normItem({ ...p, kind: 'project' })), sources: list.map((p) => ({ provider: p.provider, root: p.root, rootLabel: p.rootLabel })) })
   }

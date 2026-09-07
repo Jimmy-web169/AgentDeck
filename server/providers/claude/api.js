@@ -40,6 +40,7 @@ import { parseSkillsAdd, runSkillsAdd } from '../../shared/skills.js'
 import { SKILL_CONFIG } from './skills.js'
 import { openTool, pickFolderNative } from '../../shared/launch.js'
 import { makeDispatch } from '../../shared/dispatch.js'
+import { bucketActivity } from '../../shared/activity.js'
 import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } from '../../shared/terminal.js'
 
 const TERMINAL_CONFIG = {
@@ -691,6 +692,7 @@ const ROUTES = {
   'GET /api/roots': getRoots,
   'POST /api/roots': postRoots,
   'POST /api/roots/label': postRootLabel,
+  'GET /api/activity': getActivity,
   'DELETE /api/roots': deleteRoots,
   'GET /api/projects': getProjects,
   'GET /api/sessions': getSessions,
@@ -723,3 +725,30 @@ const ROUTES = {
 }
 
 export const dispatch = makeDispatch(ROUTES)
+
+// --- activity ----------------------------------------------------------------
+// GET /api/activity?root=&days= — per-day / hour / weekday usage profile of one
+// tracked folder (see server/shared/activity.js for the attribution rules).
+function getActivity(q) {
+  const root = resolveRoot(q.get('root'))
+  const days = Number(q.get('days')) || 84
+  const list = []
+  for (const slug of listProjectSlugs(root.dir)) {
+    const files = sessionFiles(root.dir, slug)
+    if (!files.length) continue
+    let cwd = null
+    for (const f of files) {
+      let fp = null
+      try {
+        fp = fingerprintOf(f.file)
+      } catch {}
+      const s = withOversizeFallback(
+        () => sessionSummary(f.file, f.id, fp || undefined),
+        (e) => oversizeStub(f.id, e)
+      )
+      if (!cwd) cwd = readCwd(f.file)
+      list.push({ id: f.id, slug, cwd, title: s.title, firstTs: s.firstTs, lastTs: s.lastTs, userTurns: s.userTurns, toolCalls: s.toolCalls, tokens: s.tokens, models: s.models })
+    }
+  }
+  return { root: root.id, ...bucketActivity(list, { days }) }
+}

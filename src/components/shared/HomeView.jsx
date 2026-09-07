@@ -10,6 +10,8 @@ import useActiveSessions, { toManagerItems } from '../../lib/useActiveSessions.j
 import { PencilIcon, PinIcon, SearchIcon, TerminalIcon } from './shellIcons.jsx'
 import FolderChips from './FolderChips.jsx'
 import useConfirm from '../../lib/useConfirm.jsx'
+import InsightsPage from './InsightsPage.jsx'
+import { usePrefs } from '../../lib/prefs.js'
 import { ShortcutChips } from './ShortcutHints.jsx'
 
 // Home pages — the main area when a tab points at Home. The page switch is in
@@ -54,7 +56,7 @@ const Panel = ({ children, className = '' }) => <div className={`rounded-lg bord
 
 // a session row: dot (terminal red › writing green › provider), title, first
 // prompt, project · folder, time, pin
-function SessionRow({ s, providers, live, termKeys, onOpen }) {
+function SessionRow({ s, providers, live, termKeys, onOpen, showPrompt = true }) {
   const k = liveSessionKey(s.provider, s.root, s.id)
   const term = termKeys?.has(k)
   const writing = live?.ids?.has(k)
@@ -76,7 +78,7 @@ function SessionRow({ s, providers, live, termKeys, onOpen }) {
           {term && <span className="shrink-0 text-[9.5px] uppercase tracking-wide text-red-300">terminal</span>}
           <span className="ml-auto shrink-0 text-[10.5px] text-zinc-600">{fmtRelative(s.lastTs)}</span>
         </div>
-        {s.firstPrompt && s.firstPrompt !== s.title && <div className="text-[11.5px] text-zinc-500 truncate">{s.firstPrompt}</div>}
+        {showPrompt && s.firstPrompt && s.firstPrompt !== s.title && <div className="text-[11.5px] text-zinc-500 truncate">{s.firstPrompt}</div>}
         <div className="text-[10.5px] text-zinc-600 truncate">
           <span className={c.text}>{providerLabel(providers, s.provider)}</span> · {s.project} · {s.rootLabel}
         </div>
@@ -92,6 +94,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
   const active = useActiveSessions(providers, { enabled: visible })
   const liveItems = toManagerItems(active)
   const pins = usePins()
+  const prefs = usePrefs()
   const [ended, setEnded] = useState(() => new Set())
   const [copied, setCopied] = useState(null)
   const [versions, setVersions] = useState({})
@@ -200,7 +203,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
           ) : (
             <Panel>
               {latest.map((s) => (
-                <SessionRow key={`${s.provider}|${s.root}|${s.id}`} s={s} providers={providers} live={live} termKeys={termKeys} onOpen={onOpen} />
+                <SessionRow key={`${s.provider}|${s.root}|${s.id}`} s={s} providers={providers} live={live} termKeys={termKeys} onOpen={onOpen} showPrompt={prefs.showFirstPrompt} />
               ))}
             </Panel>
           )}
@@ -222,7 +225,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
                     <button onClick={(e) => onOpen(p.provider, { root: p.root, rootLabel: p.rootLabel, slug: p.slug, id: p.id, title: p.title, project: p.project, cwd: p.cwd }, { newTab: e.ctrlKey || e.metaKey })} className="min-w-0 flex-1 text-left">
                       <div className="text-[12.5px] text-zinc-200 truncate">{p.id ? p.title || p.id.slice(0, 8) : p.project || p.slug}</div>
-                      <div className="text-[10.5px] text-zinc-600 truncate">{p.id ? p.project : shortPath(p.cwd || p.slug)} · {p.rootLabel}</div>
+                      <div className="text-[10.5px] text-zinc-600 truncate">{p.id ? p.project : shortPath(p.cwd || p.slug)} · {index.labelOf(p.provider, p.root, p.rootLabel)}</div>
                     </button>
                     <button onClick={() => togglePin(p)} title="Unpin" className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-amber-300 opacity-0 group-hover:opacity-100 hover:bg-ink-700">
                       <PinIcon className="w-3.5 h-3.5" filled />
@@ -436,12 +439,17 @@ export default function HomeView({ providers = [], visible = true, target, scope
         </div>
       )}
       {scoped && !scope && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">No tracked folders yet — add one with the + next to the folder chips.</div>}
-      {scoped && scope && Page && (
+      {scoped && scope && view === 'insights' && (
+        <div key={`insights|${scope.provider}|${scope.root}`} className="flex-1 min-h-0 overflow-y-auto">
+          <InsightsPage provider={scope.provider} root={scope.root} rootLabel={scopeInfo?.rootLabel || ''} providerLabel={providerLabel(providers, scope.provider)} />
+        </div>
+      )}
+      {scoped && scope && view !== 'insights' && Page && (
         <div key={`${view}|${scope.provider}|${scope.root}`} className={view === 'resources' ? 'flex-1 min-h-0' : 'flex-1 min-h-0 overflow-y-auto'}>
           <Page root={scope.root} focus={target?.focus || null} onOpen={(t) => onOpen(scope.provider, { rootLabel: scopeInfo?.rootLabel, ...t })} />
         </div>
       )}
-      {scoped && scope && !Page && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">This provider has no {homeViewLabel(view)} page.</div>}
+      {scoped && scope && view !== 'insights' && !Page && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">This provider has no {homeViewLabel(view)} page.</div>}
     </div>
   )
 }

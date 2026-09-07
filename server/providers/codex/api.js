@@ -44,6 +44,7 @@ import { parseSkillsAdd, runSkillsAdd } from '../../shared/skills.js'
 import { SKILL_CONFIG } from './skills.js'
 import { readMemories, readPlugins } from './codex-data.js'
 import { makeDispatch } from '../../shared/dispatch.js'
+import { bucketActivity } from '../../shared/activity.js'
 import { openTool, pickFolderNative } from '../../shared/launch.js'
 import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } from '../../shared/terminal.js'
 
@@ -505,6 +506,7 @@ const ROUTES = {
   'GET /api/roots': getRoots,
   'POST /api/roots': postRoots,
   'POST /api/roots/label': postRootLabel,
+  'GET /api/activity': getActivity,
   'DELETE /api/roots': deleteRoots,
   'GET /api/projects': getProjects,
   'GET /api/sessions': getSessions,
@@ -533,3 +535,22 @@ const ROUTES = {
 }
 
 export const dispatch = makeDispatch(ROUTES)
+
+// --- activity ----------------------------------------------------------------
+// GET /api/activity?root=&days= — per-day / hour / weekday usage profile of one
+// Codex home (see server/shared/activity.js for the attribution rules).
+function getActivity(q) {
+  const root = resolveRoot(q.get('root'))
+  const days = Number(q.get('days')) || 84
+  const list = []
+  for (const proj of listProjects(root.dir)) {
+    for (const f of sessionFiles(root.dir, proj.slug)) {
+      const s = withOversizeFallback(
+        () => sessionSummary(f.file, f.id),
+        (e) => oversizeStub(f.id, e)
+      )
+      list.push({ id: f.id, slug: proj.slug, cwd: proj.cwd, title: s.title, firstTs: s.firstTs, lastTs: s.lastTs, userTurns: s.userTurns, toolCalls: s.toolCalls, tokens: s.tokens, models: s.models })
+    }
+  }
+  return { root: root.id, ...bucketActivity(list, { days }) }
+}

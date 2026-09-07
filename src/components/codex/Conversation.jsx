@@ -99,11 +99,15 @@ function Conversation({ data, onOpenSession }) {
 
       <div className="space-y-6">
         {startIdx > 0 && (
-          <div className="text-center">
-            <button onClick={() => setStartIdx(0)} className="text-[12px] text-zinc-400 hover:text-zinc-200 bg-ink-700/60 border border-zinc-700/60 rounded-full px-3 py-1">
-              Show {startIdx} earlier {startIdx > 1 ? 'messages' : 'message'}
-            </button>
-          </div>
+          <button
+            onClick={() => setStartIdx(0)}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-sky-500/30 bg-sky-500/10 text-[13px] text-sky-200 hover:bg-sky-500/20 hover:border-sky-500/50 transition-colors"
+            title="Only the latest messages are rendered at first; click to load the whole conversation"
+          >
+            <span aria-hidden>↑</span>
+            Show {startIdx} earlier {startIdx > 1 ? 'messages' : 'message'}
+            <span className="text-[11px] text-sky-300/70">· {timeline.length} in total</span>
+          </button>
         )}
         {visible.map((ev, i) => {
           const k = startIdx + i

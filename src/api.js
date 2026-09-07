@@ -72,6 +72,7 @@ export function createApi(provider) {
   projects: (root) => get('projects', { root }),
   sessions: (root, slug) => get('sessions', { root, slug }),
   stats: (root) => get('stats', { root }),
+  activity: (root, days) => get('activity', { root, days }),
   history: (root) => get('history', { root }),
   usage: (root) => get('usage', { root }),
   plugins: (root) => get('plugins', { root }),

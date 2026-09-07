@@ -3,10 +3,12 @@ import { createApi } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
-import { createWorkspace, deleteWorkspace, dismissSuggestion, projectKey, removeFromWorkspace, renameWorkspace, sourceKey, suggestWorkspaces, useWorkspaces, workspaceSources } from '../../lib/workspaces.js'
+import { createWorkspace, deleteWorkspace, projectKey, removeFromWorkspace, renameWorkspace, sourceKey, suggestWorkspaces, useWorkspaces, workspaceSources } from '../../lib/workspaces.js'
+import { usePrefs } from '../../lib/prefs.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { providerColor, providerLabel } from '../../lib/providerColors.js'
 import { ChevronRightIcon, CloseIcon, DotsIcon, LayersIcon, PinIcon, PlusIcon } from './shellIcons.jsx'
+import { FolderIcon } from './icons.jsx'
 import PathPicker from './PathPicker.jsx'
 import FolderChips from './FolderChips.jsx'
 import RowMenu from './RowMenu.jsx'
@@ -94,9 +96,9 @@ function SessionLine({ ctx, src, s, indent = 'pl-7', showSource = false, menuKey
         onMouseDown={(e) => e.button === 1 && e.preventDefault()}
         onAuxClick={(e) => e.button === 1 && !selectable && onOpenTarget(t, { newTab: true })}
         title={selectable ? undefined : `${s.title}\nOpen here · Ctrl+click or middle-click opens in a new tab`}
-        className={`flex-1 min-w-0 text-left ${indent} pr-2 py-1.5`}
+        className={`flex-1 min-w-0 text-left ${indent} pr-2 sb-row`}
       >
-        <div className="text-[12.5px] text-zinc-300 truncate flex items-center gap-1.5">
+        <div className="text-[12px] text-zinc-400 group-hover:text-zinc-200 truncate flex items-center gap-1.5">
           {selectable && <span className={`shrink-0 ${checked ? 'text-red-300' : 'text-zinc-600'}`}>{checked ? '☑' : '☐'}</span>}
           {dot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} title={dot.startsWith('bg-red') ? 'terminal running' : 'being written'} />}
           {s.isSubagent && <span className="shrink-0 text-violet-400" title={`subagent${s.agentRole ? ` · ${s.agentRole}` : ''}`}>⤷</span>}
@@ -104,7 +106,7 @@ function SessionLine({ ctx, src, s, indent = 'pl-7', showSource = false, menuKey
           {pinned && !selectable && <PinIcon className="w-3 h-3 text-amber-300 shrink-0" filled />}
           <span className="truncate">{s.title}</span>
         </div>
-        <div className="flex items-center gap-1.5 text-[10.5px] text-zinc-600 min-w-0">
+        <div className="sb-meta flex items-center gap-1.5 text-[10.5px] text-zinc-600 min-w-0">
           {showSource && <SourceTag providers={providers} provider={src.provider} rootLabel={src.rootLabel} className="max-w-[45%]" />}
           {showSource && <span className="truncate">{src.project}</span>}
           {showSource && <span>·</span>}
@@ -141,14 +143,13 @@ function ProjectLine({ ctx, src, open, onToggle, menuKey, children }) {
         <button onClick={onToggle} className="w-6 shrink-0 flex items-center justify-center text-zinc-600 hover:text-zinc-300" title={open ? 'Collapse' : 'Show sessions'}>
           <ChevronRightIcon className={`w-3 h-3 transition-transform ${open ? 'rotate-90' : ''}`} />
         </button>
-        <button onClick={(e) => onOpenTarget(t, { newTab: e.ctrlKey || e.metaKey })} className="flex-1 min-w-0 text-left pr-1 py-1.5" title={`${src.cwd || src.slug}\nOpen the project · Ctrl+click for a new tab`}>
+        <button onClick={(e) => onOpenTarget(t, { newTab: e.ctrlKey || e.metaKey })} className="flex-1 min-w-0 text-left pr-1 sb-row-lg" title={`${src.cwd || src.slug}\nOpen the project · Ctrl+click for a new tab`}>
           <div className="flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.dot}`} />
-            <span className="text-[12.5px] text-zinc-200 truncate">{src.project}</span>
+            <FolderIcon className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.dot}`} />
+            <span className="text-[13px] font-medium text-zinc-200 truncate">{src.project}</span>
           </div>
-          <div className="text-[10.5px] text-zinc-600 truncate pl-3">
-            {providerLabel(providers, src.provider)} · {src.rootLabel}
-          </div>
+          <div className="sb-meta text-[10.5px] text-zinc-600 truncate pl-5">{providerLabel(providers, src.provider)} · {src.rootLabel}</div>
         </button>
         <div className="flex items-center gap-0.5 pr-1.5">
           <button onClick={() => togglePin(t)} title={pinned ? 'Unpin project' : 'Pin project'} className={`${hoverBtn} ${pinned ? 'text-amber-300 opacity-100' : ''}`}>
@@ -218,6 +219,7 @@ export default function AppSidebar({
   const batchEpoch = useRef(0)
   const pins = usePins()
   const workspaces = useWorkspaces()
+  const prefs = usePrefs()
 
   const provider = scope?.provider || null
   const root = scope?.root || null
@@ -329,8 +331,14 @@ export default function AppSidebar({
     const rows = []
     const seen = new Set()
     let loading = false
+    const tracked = (it) => index.scopes.some((x) => x.provider === it.provider && x.root === it.root)
+    let untracked = 0
     for (const it of w.items) {
       if (it.kind !== 'project') continue
+      if (!tracked(it)) {
+        untracked++
+        continue
+      }
       const lst = index.sessionsFor(it.provider, it.root, it.slug)
       if (lst === null) {
         loading = true
@@ -345,6 +353,10 @@ export default function AppSidebar({
     }
     for (const it of w.items) {
       if (it.kind !== 'session') continue
+      if (!tracked(it)) {
+        untracked++
+        continue
+      }
       const k = `${it.provider}|${it.root}|${it.id}`
       if (seen.has(k)) continue
       seen.add(k)
@@ -353,7 +365,7 @@ export default function AppSidebar({
       rows.push({ src: srcL(it), s: fresh || { id: it.id, title: it.title || it.id.slice(0, 8), lastTs: null, toolCalls: null }, item: it })
     }
     rows.sort((a, b) => String(b.s.lastTs || '').localeCompare(String(a.s.lastTs || '')))
-    return { rows, loading }
+    return { rows, loading, untracked }
   }
 
   // labels come from the live folder list, never from what was stored when a
@@ -405,7 +417,7 @@ export default function AppSidebar({
 
       <div className="flex-1 overflow-y-auto">
         {/* ---- Workspaces ---- */}
-        {!filter && (
+        {!filter && prefs.showWorkspaces && (
           <div className="border-b border-zinc-800/60 pb-1">
             <SectionHeader
               title="Workspaces"
@@ -443,7 +455,7 @@ export default function AppSidebar({
                   const open = openWs.has(w.id)
                   const sources = workspaceSources(w).map((x) => ({ ...x, rootLabel: labelOf(x.provider, x.root, x.rootLabel) }))
                   const filt = wsFilter[w.id]
-                  const { rows, loading } = open ? wsRows(w) : { rows: [], loading: false }
+                  const { rows, loading, untracked } = open ? wsRows(w) : { rows: [], loading: false, untracked: 0 }
                   const visible = filt?.size ? rows.filter((r) => filt.has(sourceKey(r.src))) : rows
                   const shown = wsAll.has(w.id) ? visible : visible.slice(0, WS_SESSIONS)
                   const mk = `ws|${w.id}`
@@ -525,6 +537,7 @@ export default function AppSidebar({
                             />
                           ))}
                           {loading && <div className="pl-7 pr-2 py-1.5 text-[11.5px] text-zinc-600">loading…</div>}
+                          {untracked > 0 && <div className="pl-7 pr-2 py-1 text-[11px] text-zinc-600">{untracked} member{untracked === 1 ? '' : 's'} in a folder that is no longer tracked — hidden</div>}
                           {!loading && !rows.length && <div className="pl-7 pr-2 py-1.5 text-[11.5px] text-zinc-600">Empty — open ⋯ on a project or session and tick this workspace.</div>}
                           {visible.length > WS_SESSIONS && (
                             <button onClick={() => toggleWsAll(w.id)} className="pl-7 pr-2 py-1 text-[11px] text-sky-400 hover:text-sky-300">
@@ -550,7 +563,6 @@ export default function AppSidebar({
                         <span className="flex-1 min-w-0 text-[12px] text-zinc-300 truncate" title={s.cwd}>{s.name}</span>
                         <span className="text-[10.5px] text-zinc-600 shrink-0">{s.sources.length}</span>
                         <button onClick={() => { const id = createWorkspace(s.name, s.items); setOpenWs((o) => new Set(o).add(id)) }} className="shrink-0 text-[11px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-200 hover:bg-sky-500/25">Group</button>
-                        <button onClick={() => dismissSuggestion(s.cwd)} title="Don't suggest this folder again" className={`${iconBtn} text-zinc-600 hover:text-zinc-200 hover:bg-ink-600`}><CloseIcon /></button>
                       </div>
                     ))}
                   </div>
@@ -561,7 +573,7 @@ export default function AppSidebar({
         )}
 
         {/* ---- Pinned: every provider ---- */}
-        {!filter && pins.length > 0 && (
+        {!filter && prefs.showPinned && pins.length > 0 && (
           <div className="border-b border-zinc-800/60 pb-1">
             <SectionHeader title="Pinned" count={pins.length} open={sections.pinned} onToggle={() => toggleSection('pinned')} />
             {sections.pinned && (
@@ -596,10 +608,11 @@ export default function AppSidebar({
               return (
                 <div key={p.slug} className="border-b border-zinc-800/60 last:border-0">
                   <div className={`group relative flex items-stretch hover:bg-ink-700/50 ${isOpen ? 'bg-ink-700/40' : ''}`}>
-                    <button onClick={() => setOpenSlug(isOpen ? null : p.slug)} className="flex-1 min-w-0 text-left pl-3 pr-1 py-2">
+                    <button onClick={() => setOpenSlug(isOpen ? null : p.slug)} className="flex-1 min-w-0 text-left pl-3 pr-1 sb-row-lg">
                       <div className="flex items-center gap-1.5">
                         <span className="text-zinc-600 text-xs w-3 shrink-0">{isOpen ? '▾' : '▸'}</span>
-                        <span className="text-[13px] text-zinc-200 truncate flex-1" title={p.cwd || p.slug}>{shortPath(p.cwd || p.slug)}</span>
+                        <FolderIcon className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                        <span className="text-[13px] font-medium text-zinc-200 truncate flex-1" title={p.cwd || p.slug}>{shortPath(p.cwd || p.slug)}</span>
                         <span className="text-[11px] text-zinc-600 shrink-0">{p.sessionCount}</span>
                       </div>
                     </button>

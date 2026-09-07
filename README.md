@@ -24,6 +24,10 @@ Per provider, in one UI:
 - **Raw** — line-by-line JSONL viewer with type filtering.
 - **Stats** — tool usage, models, and token totals aggregated across a tracked
   folder, drillable to project and session.
+- **Insights** — your recent usage as a picture: a 12-week activity heatmap,
+  30-day bars (sessions / prompts / tool calls / tokens), hour-of-day and
+  weekday profiles, busiest projects, model mix, streaks; copy the digest as
+  Markdown for an AI read.
 - **History** — searchable list of past prompt inputs.
 - **Resources** — view, create, edit, and delete agents, skills, hooks, MCP
   servers, rules, and instructions, at both user and project scope; import skills

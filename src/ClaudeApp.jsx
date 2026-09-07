@@ -119,7 +119,8 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
   useEffect(() => {
     if (!appActive) return
     const list = (scopes || []).filter((s) => s.provider === 'claude')
-    if (list.length && list.length !== roots.length) reloadRoots().catch(() => {})
+    const sig = (xs, id, label) => xs.map((x) => `${x[id]}:${x[label]}`).sort().join('|')
+    if (list.length && sig(list, 'root', 'rootLabel') !== sig(roots, 'id', 'label')) reloadRoots().catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopes, appActive])
 

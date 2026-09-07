@@ -19,6 +19,7 @@ const RECENT_MAX = 40
 export const HOME_VIEWS = [
   { k: 'activity', label: 'Activity' },
   { k: 'stats', label: 'Stats' },
+  { k: 'insights', label: 'Insights' },
   { k: 'history', label: 'History' },
   { k: 'plugins', label: 'Plugins' },
   { k: 'resources', label: 'Resources' },
