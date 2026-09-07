@@ -13,6 +13,21 @@ import { NAMED, hexToHsl, normalizeColor } from './accent.js'
 // values, and the theme still owns the lightness (--accent-l-* in index.css).
 
 let registered = []
+
+// the two status dots every list paints: a session whose terminal is running,
+// and a transcript being written right now. Built-in red / green, but a user
+// whose provider accent is red would not tell them apart — so they are accents
+// too (Preferences › Colours › Status) and get the same generated classes.
+export const STATUS_KINDS = [
+  { k: 'terminal', label: 'Running terminal', hint: 'terminal open' },
+  { k: 'writing', label: 'Being written', hint: 'transcript changing now' },
+]
+export const STATUS_DEFAULTS = { terminal: '#f87171', writing: '#34d399' }
+export function statusColorValue(kind) {
+  return normalizeColor(getPrefs().statusColors?.[kind]) || STATUS_DEFAULTS[kind]
+}
+export const statusDot = (kind) => `ac-status-${kind}-dot animate-pulse`
+export const statusText = (kind) => `ac-status-${kind}-text`
 const cls = (id) => String(id || '').replace(/[^a-z0-9_-]/gi, '_')
 const NEUTRAL = { hex: NAMED.zinc, dot: 'bg-zinc-500', text: 'text-zinc-400', bar: 'rgb(var(--zinc-500))' }
 
@@ -45,6 +60,13 @@ export function applyProviderAccents() {
   for (const p of registered) {
     const k = cls(p.id)
     const { h, s } = hexToHsl(providerColorValue(registered, p.id))
+    root.style.setProperty(`--ac-${k}-h`, String(h))
+    root.style.setProperty(`--ac-${k}-s`, `${s}%`)
+    css += `.ac-${k}-dot{background-color:hsl(var(--ac-${k}-h) var(--ac-${k}-s) var(--accent-l-dot))}\n.ac-${k}-text{color:hsl(var(--ac-${k}-h) var(--ac-${k}-s) var(--accent-l-text))}\n`
+  }
+  for (const kind of Object.keys(STATUS_DEFAULTS)) {
+    const k = `status-${kind}`
+    const { h, s } = hexToHsl(statusColorValue(kind))
     root.style.setProperty(`--ac-${k}-h`, String(h))
     root.style.setProperty(`--ac-${k}-s`, `${s}%`)
     css += `.ac-${k}-dot{background-color:hsl(var(--ac-${k}-h) var(--ac-${k}-s) var(--accent-l-dot))}\n.ac-${k}-text{color:hsl(var(--ac-${k}-h) var(--ac-${k}-s) var(--accent-l-text))}\n`

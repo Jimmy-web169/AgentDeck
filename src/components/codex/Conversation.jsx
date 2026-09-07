@@ -85,7 +85,7 @@ function Conversation({ data, onOpenSession, subagentCtx = null, compact = false
   const { summary, timeline } = data
   const children = data.children || []
   const rootRef = useRef(null)
-  const { startIdx, visible, showEarlier, topRef, chunk } = useEarlier(timeline, rootRef)
+  const { startIdx, visible, showEarlier, topRef, chunk } = useEarlier(timeline, rootRef, { memoKey: summary?.id })
 
   const { inlineSubagents } = usePrefs()
   const depth = subagentCtx?.depth || 0

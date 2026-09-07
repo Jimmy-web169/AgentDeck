@@ -214,9 +214,12 @@ reads `brain/<id>/.system_generated/logs/transcript_full.jsonl` for the
 conversation and decodes the protobuf blobs in `conversations/<id>.db` for the
 workspace, git branch, model and token usage (field numbers verified against
 `agy` 1.1.27's own `/usage` output — see `spec/providers/antigravity.yaml`).
-Config, plugins and MCP are shown read-only; `agy plugin …` / `agy mcp …` stay
-the writers. Print-mode runs in an untrusted folder record no workspace, so
-they land in a "(no workspace)" project.
+Config, plugins, MCP, hooks and rules are shown read-only (locations per the
+[official docs](https://antigravity.google/docs/cli/overview): `.agents/` in the
+workspace, `~/.gemini/config/` shared, the CLI's own `settings.json`);
+`agy plugin …` / `agy mcp …` / the `/config` overlay stay the writers. Print-mode
+runs in an untrusted folder record no workspace, so they land in a
+"(no workspace)" project.
 
 ## Quick start
 

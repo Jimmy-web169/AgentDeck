@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { claudeApi as api } from './api.js'
 import Conversation from './components/claude/Conversation.jsx'
 import RawView from './components/shared/RawView.jsx'
+import Stats from './components/shared/Stats.jsx'
 import SubagentsView from './components/claude/SubagentsView.jsx'
 import Resources from './components/claude/Resources.jsx'
 import MemoryView from './components/claude/MemoryView.jsx'
@@ -26,6 +27,7 @@ const SESSION_TABS = [
   { k: 'conversation', need: 'session', label: 'Conversation' },
   { k: 'subagents', need: 'subagents', label: 'Sub-agents' },
   { k: 'raw', need: 'session', label: 'Raw' },
+  { k: 'stats', need: 'session', label: 'Stats' },
   { k: 'memory', need: 'project', label: 'Memory' },
   { k: 'config', need: 'project', label: 'Config' },
 ]
@@ -42,6 +44,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
   const [sessionData, setSessionData] = useState(null)
   const [subagents, setSubagents] = useState(null)
   const [raw, setRaw] = useState(null)
+  const [stats, setStats] = useState(null) // folder stats for the session Stats tab
   const [usage, setUsage] = useState(null)
   const [tab, setTab] = useState('conversation')
   const [conn, setConn] = useState('connecting')
@@ -68,6 +71,18 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
   useEffect(() => void (openSlugRef.current = openSlug), [openSlug])
   useEffect(() => void (tabRef.current = tab), [tab])
   useEffect(() => void (termDraftRef.current = termDraft), [termDraft])
+  const sessionDataRef = useRef(null)
+  useEffect(() => void (sessionDataRef.current = sessionData), [sessionData])
+  // per-session pane memory: what was loaded and where the reader was, so coming
+  // back to a session (another tab, the sidebar) restores it instead of reloading
+  // and jumping to the end
+  const paneMemo = useRef(new Map())
+  const restoreScroll = useRef(null)
+  const rememberPane = () => {
+    const a = activeRef.current
+    if (!a) return
+    paneMemo.current.set(a.id, { scrollTop: mainRef.current?.scrollTop ?? 0, data: sessionDataRef.current })
+  }
   useEffect(() => void (rootsRef.current = roots), [roots])
   useEffect(() => void (projectsRef.current = projects), [projects])
   useEffect(() => void (onNavigateRef.current = onNavigate), [onNavigate])
@@ -147,6 +162,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     setSessions([])
     loadedSessionsFor.current = null
     sessionsReqId.current++
+    rememberPane()
     setActive(null)
     setSessionData(null)
     setSubagents(null)
@@ -181,14 +197,23 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
 
   const selectSession = (s, { view } = {}) => {
     const v = view && VIEWS.has(view) ? view : 'conversation'
+    rememberPane()
     setTermDraft(null)
     setActive(s)
-    setSessionData(null)
+    const memo = paneMemo.current.get(s.id)
+    if (memo?.data) {
+      // seen before: show it exactly as it was, refresh quietly underneath
+      setSessionData(memo.data)
+      restoreScroll.current = memo.scrollTop
+      stickBottom.current = false
+    } else {
+      setSessionData(null)
+      stickBottom.current = true
+    }
     setSubagents(null)
     setRaw(null)
     setTab(v)
     tabRef.current = v
-    stickBottom.current = true
     report({ slug: openSlug, id: s.id, title: s.title, view: v })
     if (s.oversized) return
     api.session(root, openSlug, s.id).then((d) => setSessionData(d)).catch((e) => setError(e.message))
@@ -203,6 +228,17 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     if (tabRef.current === 'subagents') api.subagents(r, slug, a.id).then((d) => setSubagents({ ...d, _for: a.id })).catch(() => {})
     if (tabRef.current === 'raw') api.raw(r, slug, a.id).then(setRaw).catch(() => {})
   }, [])
+
+  // the session Stats tab: this folder's stats, drilled to the open session
+  useEffect(() => {
+    if (!appActive || tab !== 'stats' || !root) return
+    let cancelled = false
+    api.stats(root).then((d) => !cancelled && setStats(d)).catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [appActive, tab, root, active?.id])
+  const statsFocus = useMemo(() => (active && openSlug ? { slug: openSlug, id: active.id } : null), [active?.id, openSlug])
 
   // ---- terminals: keep the running list fresh for auto-reattach ----
   const refreshTerminals = useCallback(() => {
@@ -237,6 +273,22 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
   const liveCount = activeSessions.count
   const managerItems = toManagerItems(activeSessions)
   const runningTermKeys = new Set([...terminals.map((t) => t.key), ...activeSessions.tmux.map((t) => t.key).filter(Boolean)])
+  const runningSig = [...runningTermKeys].sort().join('|')
+  // one TerminalPanel per session that has a terminal, kept mounted while it runs:
+  // switching tabs and coming back finds the same iframe instead of a reconnect.
+  // The open session always has a panel (collapsed until started).
+  const [termPanes, setTermPanes] = useState([])
+  const curTermKey = active && root && openSlug ? `${root}|${openSlug}|${active.id}` : null
+  useEffect(() => {
+    setTermPanes((ps) => {
+      const cur = curTermKey ? { key: curTermKey, root, slug: openSlug, id: active.id, title: active.title } : null
+      let next = ps.filter((p) => runningTermKeys.has(p.key) || (cur && p.key === cur.key))
+      if (cur && !next.some((p) => p.key === cur.key)) next = [...next, cur]
+      return next.length === ps.length && next.every((p, i) => p === ps[i]) ? ps : next
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runningSig, curTermKey])
+  const shownPanes = curTermKey && !termPanes.some((p) => p.key === curTermKey) ? [...termPanes, { key: curTermKey, root, slug: openSlug, id: active.id, title: active.title }] : termPanes
 
   const onManagerEnter = (it) => {
     setShowLive(false)
@@ -248,11 +300,6 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
       .catch(refreshTerminals)
   }
 
-  // Session → Stats: this session's token stats live on Home › Stats
-  const viewSessionStats = () => {
-    if (!active || !openSlug) return
-    onOpenHome?.({ view: 'stats', scope: { provider: 'claude', root }, focus: { slug: openSlug, id: active.id } })
-  }
 
   // tell the shell where this app is whenever it's on screen without being
   // steered by it (first paint, folder switch) so the tab label matches
@@ -286,6 +333,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     //    tmux by the same key postTerminal used
     if (!pendingOpen.id && (pendingOpen.draft || pendingOpen.kind === 'tmux' || pendingOpen.newConversation) && (pendingOpen.slug || pendingOpen.cwd)) {
       if (pendingOpen.slug && openSlug !== pendingOpen.slug) openProject(pendingOpen.slug)
+      rememberPane()
       setActive(null)
       setSessionData(null)
       setTermDraft(
@@ -318,6 +366,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     } else {
       // a folder- or project-level tab shows no session
       if (activeRef.current || termDraftRef.current) {
+        rememberPane()
         setActive(null)
         setSessionData(null)
         setSubagents(null)
@@ -429,10 +478,13 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     if (!el) return
     stickBottom.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 80
   }
-  useEffect(() => {
-    if (tab === 'conversation' && stickBottom.current && mainRef.current) {
-      mainRef.current.scrollTop = mainRef.current.scrollHeight
-    }
+  useLayoutEffect(() => {
+    const el = mainRef.current
+    if (tab !== 'conversation' || !el || !sessionData) return
+    if (restoreScroll.current != null) {
+      el.scrollTop = restoreScroll.current
+      restoreScroll.current = null
+    } else if (stickBottom.current) el.scrollTop = el.scrollHeight
   }, [sessionData, tab])
 
   const sinceEvent = lastEvent ? Math.round((Date.now() - lastEvent) / 1000) : null
@@ -457,11 +509,6 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
               {t.label}
             </button>
           ))}
-          {active && (
-            <button onClick={viewSessionStats} title="This session's token stats (Home › Stats)" className="ml-1 text-[13px] px-3 py-1.5 rounded-md text-sky-400/90 hover:text-sky-300 hover:bg-ink-700/40">
-              Stats →
-            </button>
-          )}
         </div>
         <div className="flex-1" />
         <div className="flex items-center gap-1.5">
@@ -505,9 +552,16 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
             </div>
             {termDraft ? (
               <TerminalPanel root={termDraft.root} slug={termDraft.slug} cwd={termDraft.cwd} title={termDraft.title} isNew onClose={() => setTermDraft(null)} onChange={refreshTerminals} runningKeys={runningTermKeys} onOpenTool={(what) => api.open(termDraft.root, termDraft.slug || null, null, what, termDraft.cwd)} />
-            ) : active ? (
-              <TerminalPanel root={root} slug={openSlug} id={active.id} title={active.title} contextUsed={termCtxUsed} onChange={refreshTerminals} runningKeys={runningTermKeys} onOpenTool={(what) => api.open(root, openSlug, active.id, what)} />
-            ) : null}
+            ) : (
+              shownPanes.map((p) => {
+                const isCur = p.key === curTermKey
+                return (
+                  <div key={p.key} className={isCur ? 'contents' : 'hidden'}>
+                    <TerminalPanel root={p.root} slug={p.slug} id={p.id} title={isCur ? active.title : p.title} contextUsed={isCur ? termCtxUsed : null} onChange={refreshTerminals} runningKeys={runningTermKeys} onOpenTool={(what) => api.open(p.root, p.slug, p.id, what)} />
+                  </div>
+                )
+              })
+            )}
         </div>
       </ErrorBoundary>
       {tab !== 'conversation' && (
@@ -515,6 +569,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
           <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
             {tab === 'subagents' && <SubagentsView key={(active && active.id) || 'none'} data={subagents} version={active ? getSessionVersion(sessionVersions, 'claude', root, active.id) : 0} active={appActive} />}
             {tab === 'raw' && raw && <RawView records={raw.records} />}
+            {tab === 'stats' && active && openSlug && <Stats apiClient={api} root={root} stats={stats} focus={statsFocus} onOpenSession={(slug, s) => onOpenSession?.('claude', { root, slug, id: s.id, title: s.title })} />}
             {tab === 'memory' && root && openSlug && <MemoryView key={`mem-${root}-${openSlug}`} root={root} slug={openSlug} />}
             {tab === 'config' && root && openSlug && <Resources key={`cfg-${root}-${openSlug}`} root={root} slug={openSlug} />}
           </ErrorBoundary>

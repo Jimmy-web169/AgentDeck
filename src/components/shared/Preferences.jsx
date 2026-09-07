@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { DENSITIES, THEMES, setPref, usePrefs } from '../../lib/prefs.js'
-import { providerColorValue, providerDefaultColor } from '../../lib/providerColors.js'
+import { providerColorValue, providerDefaultColor, STATUS_KINDS, STATUS_DEFAULTS, statusColorValue } from '../../lib/providerColors.js'
 import AccentField from './AccentPicker.jsx'
 import { GearIcon } from './shellIcons.jsx'
 
@@ -47,6 +47,37 @@ function Toggle({ label, hint, value, onChange }) {
   )
 }
 
+// The two status dots (running terminal / being written) as accent rows.
+function StatusColors({ prefs }) {
+  const [openK, setOpenK] = useState(null)
+  return STATUS_KINDS.map(({ k, label, hint }) => {
+    const value = statusColorValue(k)
+    const def = STATUS_DEFAULTS[k]
+    const overridden = !!prefs.statusColors?.[k] && value !== def
+    return (
+      <AccentField
+        key={k}
+        label={label}
+        hint={hint}
+        value={value}
+        defaultValue={def}
+        open={openK === k}
+        onToggle={(o) => setOpenK(o ? k : null)}
+        onChange={(hex) => setPref('statusColors', { ...(prefs.statusColors || {}), [k]: hex })}
+        onReset={
+          overridden
+            ? () => {
+                const next = { ...(prefs.statusColors || {}) }
+                delete next[k]
+                setPref('statusColors', next)
+              }
+            : null
+        }
+      />
+    )
+  })
+}
+
 // One quiet row per provider (chip + hex + "change"); the picker unfolds under
 // the row you click, one at a time. "default" restores the registry colour.
 function ProviderColors({ providers, prefs }) {
@@ -59,6 +90,7 @@ function ProviderColors({ providers, prefs }) {
       <AccentField
         key={p.id}
         label={p.label}
+        hint={p.vendor || null}
         value={value}
         defaultValue={def}
         open={openId === p.id}
@@ -112,7 +144,10 @@ export default function Preferences({ className = '', providers = [] }) {
           {providers.length > 0 && (
             <Group title="Colours">
               <ProviderColors providers={providers} prefs={prefs} />
-              <div className="text-[11px] text-zinc-500 mt-0.5">A workspace's colour is in its ⋯ menu.</div>
+              <div className="text-[11px] text-zinc-500 mt-0.5 mb-2">Each provider ships its own accent (its registry entry); pick anything here to override it — the theme keeps the lightness. A workspace's colour is in its ⋯ menu.</div>
+              <div className="text-[10.5px] uppercase tracking-wide text-zinc-600 mb-0.5">Status</div>
+              <StatusColors prefs={prefs} />
+              <div className="text-[11px] text-zinc-500 mt-0.5">The pulsing dots on sessions and tabs — change them if a provider accent looks too alike.</div>
             </Group>
           )}
           <Group title="Sidebar">

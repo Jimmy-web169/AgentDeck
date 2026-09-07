@@ -4,6 +4,7 @@ import Conversation from './components/codex/Conversation.jsx'
 import SubagentsView from './components/codex/SubagentsView.jsx'
 import TerminalPanel from './components/codex/TerminalPanel.jsx'
 import RateLimitsBar from './components/codex/RateLimitsBar.jsx'
+import Stats from './components/codex/Stats.jsx'
 import ResourcesView from './components/antigravity/ResourcesView.jsx'
 import MemoryView from './components/antigravity/MemoryView.jsx'
 import subagentAdapter from './components/antigravity/subagentAdapter.js'
@@ -18,6 +19,7 @@ const SESSION_TABS = [
   { k: 'conversation', need: 'session', label: 'Conversation' },
   { k: 'subagents', need: 'session', label: 'Sub-agents' },
   { k: 'raw', need: 'session', label: 'Raw' },
+  { k: 'stats', need: 'session', label: 'Stats' },
   { k: 'memory', need: 'project', label: 'Artifacts' },
   { k: 'config', need: 'project', label: 'Config' },
 ]
@@ -31,10 +33,11 @@ export default makeIdApp({
   MemoryView,
   TerminalPanel,
   RateLimitsBar,
+  Stats,
   subagentAdapter,
   rawTypeOf: AGY_RAW_TYPE,
   sessionTabs: SESSION_TABS,
-  docsUrl: 'https://antigravity.google/docs/cli',
+  docsUrl: 'https://antigravity.google/docs/cli/overview',
   docsTitle: 'Antigravity CLI documentation',
   usageInfo: 'Antigravity reports its quota through `agy /usage` (5-hour and weekly buckets per model group). AgentDeck asks at most every five minutes, so this is a recent snapshot, not a live meter.',
 })

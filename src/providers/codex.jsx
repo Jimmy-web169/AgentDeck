@@ -14,6 +14,8 @@ import { HOME_PAGES } from '../components/codex/HomePages.jsx'
 export default {
   id: 'codex',
   label: 'Codex',
+  vendor: 'OpenAI',
+  homeHint: '~/.codex',
   // the provider's top-level app (the shell renders this — no hardcoding in App.jsx)
   App,
   // badge classes for this provider (Dashboard + Live panel)
@@ -39,6 +41,7 @@ export default {
     { k: 'conversation', need: 'session', label: 'Conversation' },
     { k: 'subagents', need: 'session', label: 'Sub-agents' },
     { k: 'raw', need: 'session', label: 'Raw' },
+    { k: 'stats', need: 'session', label: 'Stats' },
     { k: 'config', need: 'project', label: 'Config' },
   ],
   // home-scoped pages rendered by Home (stats, history, memory, plugins, resources)

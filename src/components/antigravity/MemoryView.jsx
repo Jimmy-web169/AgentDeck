@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useProviderApi } from '../../lib/providerApi.js'
 import Markdown from '../shared/Markdown.jsx'
 import { fmtRelative } from '../../lib/format.js'
+import ReadOnlyNote from '../shared/ReadOnlyNote.jsx'
 
 // Antigravity has no memory store; the closest thing is the Markdown
 // artifacts a conversation writes into its brain folder (task plans, walk-
@@ -31,9 +32,11 @@ export default function MemoryView({ root, cwd }) {
       <div className="flex items-baseline gap-2 mb-1">
         <h2 className="text-[15px] font-semibold text-zinc-100">Artifacts</h2>
         <span className="text-[11px] text-zinc-600">{mems.length}{cwd && all.length !== mems.length ? ` of ${all.length} in this home` : ''}</span>
+        <ReadOnlyNote why="agy writes these while it works (task plans, walkthroughs, notes) into brain/<id>/. AgentDeck shows them; review or edit them in agy itself (/artifact)." />
       </div>
       <p className="text-[12px] text-zinc-500 mb-4">
-        Antigravity keeps no memory store; these are the Markdown artifacts its conversations wrote (<span className="font-mono">brain/&lt;id&gt;/*.md</span>). Read-only.
+        Antigravity keeps no memory store; these are the Markdown artifacts its conversations wrote (<span className="font-mono">brain/&lt;id&gt;/*.md</span>).{' '}
+        <a href="https://antigravity.google/docs/cli/artifacts" target="_blank" rel="noreferrer" className="text-sky-400 hover:text-sky-300">Reviewing artifacts ↗</a>
       </p>
       {mems.length === 0 ? (
         <div className="text-center text-zinc-600 py-10">No artifacts yet — agy writes these while it works on a task.</div>

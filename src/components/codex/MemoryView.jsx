@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useProviderApi } from '../../lib/providerApi.js'
 import Markdown from '../shared/Markdown.jsx'
+import ReadOnlyNote from '../shared/ReadOnlyNote.jsx'
 
 // Codex auto-generated per-conversation memories (from memories_1.sqlite).
 // Each memory belongs to a thread, and threads carry their cwd, so a project
@@ -29,9 +30,10 @@ export default function MemoryView({ root, cwd }) {
       <div className="flex items-baseline gap-2 mb-1">
         <h2 className="text-[15px] font-semibold text-zinc-100">Memory</h2>
         <span className="text-[11px] text-zinc-600">{mems.length}{cwd && all.length !== mems.length ? ` of ${all.length} in this home` : ''}</span>
+        <ReadOnlyNote why="Codex generates and maintains these itself in memories_1.sqlite as it works. AgentDeck reads that database and never writes to it, so there is no add or edit here — unlike Claude Code's memory, which is plain Markdown you own." />
       </div>
       <p className="text-[12px] text-zinc-500 mb-4">
-        Codex auto-generates a memory per conversation thread (stored in <span className="font-mono">memories_1.sqlite</span>){cwd ? ' — showing the threads of this project' : ''}. Read-only.
+        Codex auto-generates a memory per conversation thread (stored in <span className="font-mono">memories_1.sqlite</span>){cwd ? ' — showing the threads of this project' : ''}.
       </p>
       {mems.length === 0 ? (
         <div className="text-center text-zinc-600 py-10">

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { fmtRelative } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
 import { HOME_VIEWS, homeViewLabel, normalizeView } from '../../lib/tabs.js'
-import { providerColor, providerLabel } from '../../lib/providerColors.js'
+import { providerColor, providerLabel, statusDot, statusText } from '../../lib/providerColors.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import useActiveSessions, { toManagerItems } from '../../lib/useActiveSessions.js'
@@ -62,7 +62,7 @@ function SessionRow({ s, providers, live, termKeys, onOpen, showPrompt = true })
   const pinned = isPinned(pinT)
   return (
     <div className="group flex items-start gap-2.5 px-3 py-2 hover:bg-ink-800 border-b border-zinc-800/60 last:border-0">
-      <span className={`mt-[7px] w-1.5 h-1.5 rounded-full shrink-0 ${term ? 'bg-red-400 animate-pulse' : writing ? 'bg-emerald-400 animate-pulse' : c.dot}`} />
+      <span className={`mt-[7px] w-1.5 h-1.5 rounded-full shrink-0 ${term ? statusDot('terminal') : writing ? statusDot('writing') : c.dot}`} />
       <button
         onClick={(e) => onOpen(s.provider, pinT, { newTab: e.ctrlKey || e.metaKey })}
         onMouseDown={(e) => e.button === 1 && e.preventDefault()}
@@ -173,8 +173,8 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
                 <Panel key={it.key} className="px-3 py-3 flex flex-col gap-2 border-red-500/30">
                   <div className="flex items-center gap-2">
                     <ProviderBadge providers={providers} id={it.provider} />
-                    <TerminalIcon className="w-3.5 h-3.5 text-red-300" />
-                    <span className="ml-auto w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                    <TerminalIcon className={`w-3.5 h-3.5 ${statusText('terminal')}`} />
+                    <span className={`ml-auto w-1.5 h-1.5 rounded-full ${statusDot('terminal')}`} />
                     <span className="text-[10px] text-zinc-600">{it.attached ? 'attached' : 'detached'}</span>
                   </div>
                   <div className="text-[13px] text-zinc-200 truncate" title={it.cwd || it.slug || ''}>{it.title}</div>
@@ -216,7 +216,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
               {pins.map((p) => {
                 const k = p.id ? liveSessionKey(p.provider, p.root, p.id) : null
                 const c = providerColor(providers, p.provider)
-                const dot = k && termKeys?.has(k) ? 'bg-red-400 animate-pulse' : k && live?.ids?.has(k) ? 'bg-emerald-400 animate-pulse' : c.dot
+                const dot = k && termKeys?.has(k) ? statusDot('terminal') : k && live?.ids?.has(k) ? statusDot('writing') : c.dot
                 return (
                   <div key={`${p.provider}|${p.root}|${p.slug}|${p.id || ''}`} className="group flex items-center gap-2.5 px-3 py-2 hover:bg-ink-800 border-b border-zinc-800/60 last:border-0">
                     <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />

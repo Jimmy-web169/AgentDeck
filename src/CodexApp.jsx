@@ -6,6 +6,7 @@ import SubagentsView from './components/codex/SubagentsView.jsx'
 import MemoryView from './components/codex/MemoryView.jsx'
 import TerminalPanel from './components/codex/TerminalPanel.jsx'
 import RateLimitsBar from './components/codex/RateLimitsBar.jsx'
+import Stats from './components/codex/Stats.jsx'
 import subagentAdapter from './components/codex/subagentAdapter.js'
 
 // codex raw-record discriminator (records are wrapped: response_item/event_msg)
@@ -21,6 +22,7 @@ const SESSION_TABS = [
   { k: 'conversation', need: 'session', label: 'Conversation' },
   { k: 'subagents', need: 'session', label: 'Sub-agents' },
   { k: 'raw', need: 'session', label: 'Raw' },
+  { k: 'stats', need: 'session', label: 'Stats' },
   { k: 'memory', need: 'project', label: 'Memory' },
   { k: 'config', need: 'project', label: 'Config' },
 ]
@@ -34,6 +36,7 @@ export default makeIdApp({
   MemoryView,
   TerminalPanel,
   RateLimitsBar,
+  Stats,
   subagentAdapter,
   rawTypeOf: CODEX_RAW_TYPE,
   sessionTabs: SESSION_TABS,

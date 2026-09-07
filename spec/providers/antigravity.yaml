@@ -9,14 +9,14 @@ spec: agentdeck/provider/v1
 id: antigravity
 label: Antigravity
 accent: violet                                  # guess — any hue not taken by claude (emerald) / codex (sky)
-docs: https://antigravity.google/docs/cli/reference
+docs: https://antigravity.google/docs/cli/overview          # CLI pages under /docs/cli/…; skills / mcp / plugins / hooks / rules under /docs/… (shared with the IDE)
 status: experimental
 
 cli:
   bin: agy
   version: [--version]                          # prints "1.1.27"
   update: [update]                              # `agy update`; the CLI also self-updates on launch
-  resume: [--conversation, "{id}"]              # verified: appends steps to the same brain/<id> + conversations/<id>.db
+  resume: [--conversation, "{id}"]              # verified: appends steps to the same brain/<id> + conversations/<id>.db; `-c` / `--continue` resumes the newest (docs/cli/conversations)
   new: []                                       # `agy` in {cwd}; an untrusted cwd is only mounted after the trust prompt (or with --add-dir {cwd})
   check_origin: true                            # guess
 
@@ -107,27 +107,33 @@ memory:
 
 mcp:
   - scope: user
-    path: "~/.gemini/config/mcp_config.json"    # 0 B on this machine; shape from the bundled agy-customizations docs
+    path: "~/.gemini/config/mcp_config.json"    # docs/mcp: shared by IDE + CLI; 0 B on this machine
     format: json
     key: mcpServers
-    transport: { command: stdio, serverUrl: sse }                  # `agy mcp add --type http` output key unverified  # guess
-    fields: { command: command, args: args, env: env, serverUrl: url, disabled: enabled, disabledTools: toolDeny }   # disabled is negated  # guess
+    transport: { command: stdio, serverUrl: http }                 # docs/mcp: `command` = stdio, `serverUrl` = Streamable HTTP / SSE
+    fields: { command: command, args: args, env: env, cwd: cwd, headers: headers, serverUrl: url, disabled: enabled, disabledTools: toolDeny }   # disabled is negated
   - scope: plugin
     path: "~/.gemini/config/plugins/*/mcp_config.json"
     format: json
     key: mcpServers
   - scope: project
-    path: "{cwd}/.agents/mcp_config.json"       # guess — customization root per docs; not observed
+    path: "{cwd}/.agents/mcp_config.json"       # docs/mcp (workspace); .agent/ is the pre-2.0 name, still honoured
     format: json
     key: mcpServers
 
 instructions:
   - kind: AGENTS.md
-    paths: ["{cwd}/AGENTS.md", "{cwd}/GEMINI.md", "~/.gemini/GEMINI.md", "~/.gemini/config/plugins/*/rules/AGENTS.md"]   # walk-up from cwd to repo root
+    paths: ["{cwd}/AGENTS.md", "{cwd}/GEMINI.md", "~/.gemini/GEMINI.md"]   # both names supported (docs/cli); walk-up from cwd to repo root
+  - kind: rules
+    paths: ["{cwd}/.agents/rules.md", "{cwd}/.agents/rules/*.md", "~/.gemini/config/rules.md", "~/.gemini/config/rules/*.md", "~/.gemini/config/plugins/*/rules/*.md"]   # docs/rules-workflows
+  - kind: hooks
+    paths: ["{cwd}/.agents/hooks.json", "~/.gemini/config/hooks.json", "~/.gemini/config/plugins/*/hooks.json"]   # docs/hooks — event → handlers (hooks.json, not instructions, but the same read-only inventory)
 skills:
-  paths: ["builtin/skills/*/SKILL.md", "skills/*/SKILL.md", "~/.gemini/skills/*/SKILL.md", "~/.gemini/config/plugins/*/skills/*/SKILL.md", "{cwd}/.agents/skills/*/SKILL.md"]
+  # docs/skills: workspace .agents/skills (was .agent/skills), global ~/.gemini/config/skills; the CLI also loads its own
+  # ~/.gemini/antigravity-cli/skills, the built-ins and the Gemini-CLI-era ~/.gemini/skills
+  paths: ["{cwd}/.agents/skills/*/SKILL.md", "~/.gemini/config/skills/*/SKILL.md", "skills/*/SKILL.md", "builtin/skills/*/SKILL.md", "~/.gemini/skills/*/SKILL.md", "~/.gemini/config/plugins/*/skills/*/SKILL.md", "{cwd}/.agents/plugins/*/skills/*/SKILL.md"]
 plugins:
-  path: "~/.gemini/config/plugins/*/plugin.json"                  # enabled map: ~/.gemini/config/config.json → plugins.<dir>.enabled
+  path: "~/.gemini/config/plugins/*/plugin.json"                  # docs/plugins; workspace plugins in {cwd}/.agents/plugins/*; enabled map: ~/.gemini/config/config.json → plugins.<dir>.enabled
   format: json
 usage:
   source: api                                   # `agy -p /usage --output-format json` → command.data.groups[].buckets[]; no conversation is created; needs keyring auth

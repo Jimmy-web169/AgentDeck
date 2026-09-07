@@ -518,6 +518,13 @@ body {
 :root[data-density='compact'] .sb-meta {
   display: none;
 }
+/* the meta line is gone in compact — a small "2h ago" stays at the end of the title row */
+.sb-time {
+  display: none;
+}
+:root[data-density='compact'] .sb-time {
+  display: inline;
+}
 
 /* ---- accents chosen by the user (lib/accent.js, lib/providerColors.js) ----
    A colour is stored as hex; the UI keeps only its hue (--ah / --ac-<id>-h)

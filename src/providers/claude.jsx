@@ -13,6 +13,8 @@ import { HOME_PAGES } from '../components/claude/HomePages.jsx'
 export default {
   id: 'claude',
   label: 'Claude Code',
+  vendor: 'Anthropic',
+  homeHint: '~/.claude',
   // the provider's top-level app (the shell renders this — no hardcoding in App.jsx)
   App,
   // badge classes for this provider (Dashboard + Live panel)
@@ -41,6 +43,7 @@ export default {
     { k: 'conversation', need: 'session', label: 'Conversation' },
     { k: 'subagents', need: 'subagents', label: 'Sub-agents' },
     { k: 'raw', need: 'session', label: 'Raw' },
+    { k: 'stats', need: 'session', label: 'Stats' },
     { k: 'config', need: 'project', label: 'Config' },
   ],
   // Folder-scoped pages rendered by Home (stats, history, memory, plugins, resources)

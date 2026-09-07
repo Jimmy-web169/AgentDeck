@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { tabLabel } from '../../lib/tabs.js'
-import { providerColor } from '../../lib/providerColors.js'
+import { providerColor, statusDot } from '../../lib/providerColors.js'
 import { usePrefs } from '../../lib/prefs.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { ActivityIcon } from './icons.jsx'
@@ -133,7 +133,7 @@ export default function TabStrip({
             (t.id ? termKeys?.has(liveSessionKey(t.provider, t.root, t.id)) : t.draft && (termKeys?.has(`${t.provider}|${t.root}|new|${t.slug}`) || termKeys?.has(`${t.provider}|${t.root}|new|${t.cwd}`)))
           )
           const entering = !seen.current.has(tab.key)
-          const dot = hasTerm ? 'bg-red-400 animate-pulse' : isLive ? 'bg-emerald-400 animate-pulse' : t?.provider ? color.dot : 'bg-zinc-600'
+          const dot = hasTerm ? statusDot('terminal') : isLive ? statusDot('writing') : t?.provider ? color.dot : 'bg-zinc-600'
           return (
             <div
               key={tab.key}

@@ -3,7 +3,7 @@ import { highlightChunks, matchFields } from '../../lib/fuzzy.js'
 import { fmtRelative } from '../../lib/format.js'
 import { targetKey } from '../../lib/tabs.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
-import { providerColor } from '../../lib/providerColors.js'
+import { providerColor, statusDot } from '../../lib/providerColors.js'
 import { liveProjectKey, liveSessionKey } from '../../lib/useLiveKeys.js'
 import { usePrefs } from '../../lib/prefs.js'
 import { ChevronRightIcon, PinIcon, PlusIcon, SearchIcon } from './shellIcons.jsx'
@@ -356,7 +356,7 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, onP
                   const i = ++rowIndex
                   const selected = i === sel
                   const color = providerColor(providers, row.target?.provider)
-                  const dot = row.live ? 'bg-emerald-400 animate-pulse' : color.dot
+                  const dot = row.live ? statusDot('writing') : color.dot
                   const pinT = pinTargetOf(row)
                   const pinned = pinT ? isPinned(pinT) : false
                   return (

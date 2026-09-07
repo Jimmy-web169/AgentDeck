@@ -19,9 +19,21 @@ function scrollParentOf(el) {
   return null
 }
 
-// rootRef: the conversation's root element (to find the scroll container)
-export function useEarlier(timeline, rootRef, { tail = INITIAL_TAIL, chunk = EARLIER_CHUNK } = {}) {
-  const [startIdx, setStartIdx] = useState(() => Math.max(0, timeline.length - tail))
+// how far back each conversation was expanded, so re-opening it (another tab,
+// the sidebar) shows the same extent and a remembered scroll position lands right
+const START_MEMO = new Map()
+
+// rootRef: the conversation's root element (to find the scroll container);
+// memoKey: the conversation's id (optional) for the extent memo above
+export function useEarlier(timeline, rootRef, { tail = INITIAL_TAIL, chunk = EARLIER_CHUNK, memoKey = null } = {}) {
+  const [startIdx, setStartIdx] = useState(() => {
+    const base = Math.max(0, timeline.length - tail)
+    const m = memoKey ? START_MEMO.get(memoKey) : undefined
+    return m !== undefined ? Math.min(m, base) : base
+  })
+  useEffect(() => {
+    if (memoKey) START_MEMO.set(memoKey, startIdx)
+  }, [memoKey, startIdx])
   const anchor = useRef(null)
   const topRef = useRef(null)
 

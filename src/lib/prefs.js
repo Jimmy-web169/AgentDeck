@@ -23,8 +23,10 @@ export const DENSITIES = [
 // providerColors: { <providerId>: <hex> } — the user's override of a provider's
 // shell accent (see lib/providerColors.js); absent = the registry default.
 // customAccents: the user's own saved swatches (hex), shown in every colour picker.
+// statusColors: { terminal?: hex, writing?: hex } — the pulsing status dots (a session
+// with a running terminal / a transcript being written); absent = the built-in red / green.
 // showSuggestions: the "Suggested · same folder in several places" box under Workspaces.
-const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {}, customAccents: [] }
+const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {}, customAccents: [], statusColors: {} }
 const MAX_SWATCHES = 24
 
 function load() {
@@ -41,6 +43,13 @@ function load() {
   const pc = prefs.providerColors && typeof prefs.providerColors === 'object' ? prefs.providerColors : {}
   prefs.providerColors = Object.fromEntries(
     Object.entries(pc)
+      .map(([k, v]) => [k, normalizeColor(v)])
+      .filter(([, v]) => v)
+  )
+  const sc = prefs.statusColors && typeof prefs.statusColors === 'object' ? prefs.statusColors : {}
+  prefs.statusColors = Object.fromEntries(
+    Object.entries(sc)
+      .filter(([k]) => k === 'terminal' || k === 'writing')
       .map(([k, v]) => [k, normalizeColor(v)])
       .filter(([, v]) => v)
   )

@@ -170,8 +170,39 @@ its real terminal.
   (`node:sqlite`, Node ≥ 22.5; without it the JSONL alone is shown). The
   descriptor `spec/providers/antigravity.yaml` is `experimental` and its
   fixture + golden run through `npm run check:spec` like the other two.
+- **Stats is a session tab.** Next to Conversation / Sub-agents / Raw, drilled
+  to the open session (breadcrumbs climb to the project and the folder); the
+  old "Stats →" link that left for Home is gone, so the session tab is never
+  lost. Home › Stats stays for a whole folder.
+- **A session remembers where you were.** Coming back to a session — from
+  another tab, the sidebar or Ctrl+K — shows it exactly as you left it (scroll
+  position, how far back it was expanded) and refreshes quietly underneath,
+  instead of reloading and jumping to the end. A running terminal stays
+  mounted per session while it runs, so switching tabs and back finds the
+  same terminal rather than a reconnect.
+- **Status colours are yours too.** The pulsing dots for a running terminal
+  (red) and a transcript being written (green) are accents in Preferences ›
+  Colours › Status — change them when a provider accent looks too alike; the
+  theme still paints the lightness.
+- **Read-only, and why.** Codex memories, Codex / Antigravity plugins and
+  Antigravity's config and artifacts carry a small read-only badge whose ⓘ
+  says who writes them (the CLI itself) and where.
+- **Antigravity config shows what agy actually reads**, per its official
+  docs: skills from the workspace `.agents/skills`, the shared
+  `~/.gemini/config/skills`, the CLI's own and built-in folders and plugins;
+  MCP servers, hooks and rules at workspace / shared / plugin scope; trusted
+  workspaces, permission grants, settings; GEMINI.md / AGENTS.md — each
+  section linking to the matching docs page.
 
 ### Changed
+- **Providers are cards, not a switch.** Folders › Add a folder offers one
+  card per provider (accent dot, name, vendor, default home) generated from
+  the registry, and Preferences › Colours names whose default each accent is
+  (Anthropic's, OpenAI's, Google's) — a new provider brings its own card and
+  colour with its registry entry, nothing is hard-coded.
+- **Compact density keeps the time.** The sidebar's meta line is hidden in
+  compact density, so a small "2h ago" now sits at the end of each session
+  row instead.
 - **One main area for id-addressed providers.** `src/IdApp.jsx` is the app
   Codex had, made a factory (`makeIdApp(cfg)`); Codex and Antigravity
   instantiate it with their own views. The Codex Conversation / Sub-agents /

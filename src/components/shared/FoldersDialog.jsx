@@ -137,14 +137,19 @@ function Dialog({ onClose, providers, index }) {
             <section>
               <div className="text-[11px] uppercase tracking-wide text-zinc-500 mb-2.5">Add a folder</div>
               <div className="rounded-lg border border-zinc-800 bg-ink-950/40 p-4 space-y-3">
-                <div className="flex rounded-md bg-ink-800 border border-zinc-800 p-0.5 w-fit">
+                {/* one card per provider: its accent dot, name, vendor and default home —
+                    the list grows with the registry, nothing here names a provider */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {providers.map((p) => {
                     const c = providerColor(providers, p.id)
                     const active = prov === p.id
                     return (
-                      <button key={p.id} onClick={() => setProv(p.id)} className={`flex items-center gap-1.5 h-7 px-3 rounded text-[12px] transition-colors ${active ? 'bg-ink-600 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200 hover:bg-ink-700'}`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
-                        {p.label}
+                      <button key={p.id} onClick={() => setProv(p.id)} className={`text-left rounded-md border px-3 py-2 transition-colors ${active ? 'border-zinc-500 bg-ink-700 text-zinc-100' : 'border-zinc-800 bg-ink-800/60 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'}`}>
+                        <span className="flex items-center gap-1.5 text-[12.5px]">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${c.dot}`} />
+                          <span className="truncate">{p.label}</span>
+                        </span>
+                        <span className="block text-[10.5px] text-zinc-600 truncate mt-0.5">{[p.vendor, p.homeHint].filter(Boolean).join(' · ') || ' '}</span>
                       </button>
                     )
                   })}
@@ -154,7 +159,7 @@ function Dialog({ onClose, providers, index }) {
                   value={path}
                   onChange={(e) => setPath(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && add()}
-                  placeholder={cfg?.id === 'codex' ? '/path/to/.codex  or  ~/.codex' : cfg?.id === 'antigravity' ? '~/.gemini/antigravity-cli' : '/path/to/.claude  or  ~/my-project'}
+                  placeholder={cfg?.homeHint ? `${cfg.homeHint}${cfg.apiAddr === 'slug+id' ? '  or  ~/my-project' : ''}` : '/path/to/the CLI home'}
                   className="w-full bg-ink-700 border border-zinc-700 rounded px-2.5 py-1.5 text-[13px] text-zinc-100 font-mono placeholder-zinc-600"
                 />
                 <div className="flex gap-2">
@@ -165,7 +170,7 @@ function Dialog({ onClose, providers, index }) {
                 </div>
                 {err && <div className="text-[12px] text-red-300">{err}</div>}
                 <div className="text-[11px] text-zinc-600">
-                  A folder is a CLI home (<span className="font-mono">~/.claude</span>, <span className="font-mono">~/.codex</span>, <span className="font-mono">~/.gemini/antigravity-cli</span>) or any directory with a <span className="font-mono">.claude/</span> config. Click a label above to rename it (a second account's home, say). <span className="text-zinc-400">untrack</span> only removes it from this list.
+                  A folder is a CLI home ({providers.filter((p) => p.homeHint).map((p, i) => <span key={p.id}>{i > 0 && ', '}<span className="font-mono">{p.homeHint}</span></span>)}) or, for Claude Code, any project directory with a <span className="font-mono">.claude/</span> config. Click a label above to rename it (a second account's home, say). <span className="text-zinc-400">untrack</span> only removes it from this list.
                 </div>
               </div>
             </section>

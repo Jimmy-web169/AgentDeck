@@ -7,7 +7,7 @@ import { createWorkspace, deleteWorkspace, projectKey, removeFromWorkspace, rena
 import { WorkspaceIcon } from './workspaceIcons.jsx'
 import { usePrefs } from '../../lib/prefs.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
-import { providerColor, providerLabel } from '../../lib/providerColors.js'
+import { providerColor, providerLabel, statusDot } from '../../lib/providerColors.js'
 import { accentStyle } from '../../lib/accent.js'
 import { ChevronRightIcon, CloseIcon, DotsIcon, LayersIcon, PinIcon, PlusIcon } from './shellIcons.jsx'
 import { FolderIcon } from './icons.jsx'
@@ -105,11 +105,12 @@ function SessionLine({ ctx, src, s, indent = 'pl-7', showSource = false, menuKey
       >
         <div className="text-[12px] text-zinc-400 group-hover:text-zinc-200 truncate flex items-center gap-1.5">
           {selectable && <span className={`shrink-0 ${checked ? 'text-red-300' : 'text-zinc-600'}`}>{checked ? '☑' : '☐'}</span>}
-          {dot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} title={dot.startsWith('bg-red') ? 'terminal running' : 'being written'} />}
+          {dot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} title={dot.includes('terminal') ? 'terminal running' : 'being written'} />}
           {s.isSubagent && <span className="shrink-0 text-violet-400" title={`subagent${s.agentRole ? ` · ${s.agentRole}` : ''}`}>⤷</span>}
           {s.oversized && <span className="shrink-0 text-amber-400" title="Transcript exceeds the parse limit — it can't be opened">⚠</span>}
           {pinned && !selectable && <PinIcon className="w-3 h-3 text-amber-300 shrink-0" filled />}
           <span className="truncate">{s.title}</span>
+          {s.lastTs && <span className="sb-time ml-auto pl-2 shrink-0 text-[10px] text-zinc-600 tabular-nums">{fmtRelative(s.lastTs)}</span>}
         </div>
         <div className="sb-meta flex items-center gap-1.5 text-[10.5px] text-zinc-600 min-w-0">
           {showSource && <SourceTag providers={providers} provider={src.provider} rootLabel={src.rootLabel} className="max-w-[45%]" />}
@@ -361,7 +362,7 @@ export default function AppSidebar({
   // terminal running › being written › nothing
   const dotFor = (prov, r, id) => {
     const k = liveSessionKey(prov, r, id)
-    return termKeys?.has(k) ? 'bg-red-400 animate-pulse' : live?.ids?.has(k) ? 'bg-emerald-400 animate-pulse' : null
+    return termKeys?.has(k) ? statusDot('terminal') : live?.ids?.has(k) ? statusDot('writing') : null
   }
   const isActive = (prov, r, id) => activeTarget?.provider === prov && activeTarget?.root === r && activeTarget?.id === id
   const isRecent = (s) => s.lastTs && Date.now() - new Date(s.lastTs).getTime() < RECENT_MS

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import RawView from './components/shared/RawView.jsx'
 import { ShortcutChips } from './components/shared/ShortcutHints.jsx'
 import LiveSessionsPanel from './components/shared/LiveSessionsPanel.jsx'
@@ -18,7 +18,7 @@ const LIVE_MS = 8000
 // client and views once; everything below is provider-neutral and the same
 // Conversation / Sub-agents / Memory / Terminal components read the API from
 // ProviderApiContext. See ClaudeApp.jsx for the slug-addressed shape.
-export default function makeIdApp({ providerId, api, Conversation, ResourcesView, SubagentsView, MemoryView, TerminalPanel, RateLimitsBar, rawTypeOf, sessionTabs, subagentAdapter = null, docsUrl, docsTitle, usageInfo }) {
+export default function makeIdApp({ providerId, api, Conversation, ResourcesView, SubagentsView, MemoryView, TerminalPanel, RateLimitsBar, Stats, rawTypeOf, sessionTabs, subagentAdapter = null, docsUrl, docsTitle, usageInfo }) {
   const SESSION_TABS = sessionTabs
   const VIEWS = new Set(SESSION_TABS.map((t) => t.k))
 
@@ -31,6 +31,7 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
     const [active, setActive] = useState(null)
     const [sessionData, setSessionData] = useState(null)
     const [raw, setRaw] = useState(null)
+    const [stats, setStats] = useState(null) // folder stats for the session Stats tab
     const [usage, setUsage] = useState(null)
     const [tab, setTab] = useState('conversation')
     const [conn, setConn] = useState('connecting')
@@ -54,6 +55,18 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
     const projectsRef = useRef([])
     const onNavigateRef = useRef(onNavigate)
     const openSeq = useRef(0)
+    const sessionDataRef = useRef(null)
+    useEffect(() => void (sessionDataRef.current = sessionData), [sessionData])
+    // per-session pane memory: what was loaded and where the reader was, so coming
+    // back to a session (another tab, the sidebar) restores it instead of reloading
+    // and jumping to the end
+    const paneMemo = useRef(new Map())
+    const restoreScroll = useRef(null)
+    const rememberPane = () => {
+      const a = activeRef.current
+      if (!a) return
+      paneMemo.current.set(a.id, { scrollTop: mainRef.current?.scrollTop ?? 0, data: sessionDataRef.current })
+    }
 
     useEffect(() => void (rootRef.current = root), [root])
     useEffect(() => void (activeRef.current = active), [active])
@@ -133,6 +146,7 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
       shownRootRef.current = root
       setOpenSlug(null)
       setSessions([])
+      rememberPane()
       setActive(null)
       setSessionData(null)
       setTermDraft(null)
@@ -156,6 +170,17 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
       api.session(rootRef.current, a.id).then((d) => setSessionData(d)).catch(() => {})
       if (tabRef.current === 'raw') api.raw(rootRef.current, a.id).then(setRaw).catch(() => {})
     }, [])
+
+    // the session Stats tab: this folder's stats, drilled to the open session
+    useEffect(() => {
+      if (!appActive || tab !== 'stats' || !root) return
+      let cancelled = false
+      api.stats(root).then((d) => !cancelled && setStats(d)).catch(() => {})
+      return () => {
+        cancelled = true
+      }
+    }, [appActive, tab, root, active?.id])
+    const statsFocus = useMemo(() => (active && openSlug ? { slug: openSlug, id: active.id } : null), [active?.id, openSlug])
 
     // ---- terminals ----
     const refreshTerminals = useCallback(() => {
@@ -190,6 +215,22 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
     const liveCount = activeSessions.count
     const managerItems = toManagerItems(activeSessions)
     const runningTermKeys = new Set([...terminals.map((t) => t.key), ...activeSessions.tmux.map((t) => t.key).filter(Boolean)])
+    const runningSig = [...runningTermKeys].sort().join('|')
+    // one TerminalPanel per session that has a terminal, kept mounted while it runs:
+    // switching tabs and coming back finds the same iframe instead of a reconnect.
+    // The open session always has a panel (collapsed until started).
+    const [termPanes, setTermPanes] = useState([])
+    const curTermKey = active && root ? `${root}|${active.id}` : null
+    useEffect(() => {
+      setTermPanes((ps) => {
+        const cur = curTermKey ? { key: curTermKey, root, id: active.id, title: active.title } : null
+        let next = ps.filter((p) => runningTermKeys.has(p.key) || (cur && p.key === cur.key))
+        if (cur && !next.some((p) => p.key === cur.key)) next = [...next, cur]
+        return next.length === ps.length && next.every((p, i) => p === ps[i]) ? ps : next
+      })
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [runningSig, curTermKey])
+    const shownPanes = curTermKey && !termPanes.some((p) => p.key === curTermKey) ? [...termPanes, { key: curTermKey, root, id: active.id, title: active.title }] : termPanes
 
     const onManagerEnter = (it) => {
       setShowLive(false)
@@ -209,11 +250,21 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
         if (!r || !id) return
         const my = ++openSeq.current
         const v = view && VIEWS.has(view) ? view : 'conversation'
+        rememberPane()
         setTermDraft(null)
         setTab(v)
         tabRef.current = v
-        setSessionData(null)
-        stickBottom.current = true
+        const memo = paneMemo.current.get(id)
+        if (memo?.data) {
+          // seen before: show it exactly as it was, refresh quietly underneath
+          setSessionData(memo.data)
+          setActive({ id, title: memo.data.summary?.title || id })
+          restoreScroll.current = memo.scrollTop
+          stickBottom.current = false
+        } else {
+          setSessionData(null)
+          stickBottom.current = true
+        }
         api
           .session(r, id)
           .then((d) => {
@@ -229,12 +280,6 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
       [loadSessions, report]
     )
 
-    const viewSessionStats = () => {
-      if (!active) return
-      const slug = openSlug || sessionData?.slug
-      if (!slug) return
-      onOpenHome?.({ view: 'stats', scope: { provider: providerId, root }, focus: { slug, id: active.id } })
-    }
 
     useEffect(() => {
       if (!appActive || pendingOpen || !root) return
@@ -264,6 +309,7 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
       if (!pendingOpen.id && (pendingOpen.draft || pendingOpen.kind === 'tmux' || pendingOpen.newConversation) && (pendingOpen.slug || pendingOpen.cwd)) {
         if (pendingOpen.slug && openSlug !== pendingOpen.slug) openProject(pendingOpen.slug)
         openSeq.current++
+        rememberPane()
         setActive(null)
         setSessionData(null)
         setTermDraft(
@@ -287,6 +333,7 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
         if (pendingOpen.slug && openSlug !== pendingOpen.slug) openProject(pendingOpen.slug)
         if (activeRef.current || termDraftRef.current) {
           openSeq.current++
+          rememberPane()
           setActive(null)
           setSessionData(null)
           setRaw(null)
@@ -386,10 +433,13 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
       if (!el) return
       stickBottom.current = el.scrollTop + el.clientHeight >= el.scrollHeight - 80
     }
-    useEffect(() => {
-      if (tab === 'conversation' && stickBottom.current && mainRef.current) {
-        mainRef.current.scrollTop = mainRef.current.scrollHeight
-      }
+    useLayoutEffect(() => {
+      const el = mainRef.current
+      if (tab !== 'conversation' || !el || !sessionData) return
+      if (restoreScroll.current != null) {
+        el.scrollTop = restoreScroll.current
+        restoreScroll.current = null
+      } else if (stickBottom.current) el.scrollTop = el.scrollHeight
     }, [sessionData, tab])
 
     const sinceEvent = lastEvent ? Math.round((Date.now() - lastEvent) / 1000) : null
@@ -405,11 +455,6 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
                 {t.label}
               </button>
             ))}
-            {active && (
-              <button onClick={viewSessionStats} title="This session's token stats (Home › Stats)" className="ml-1 text-[13px] px-3 py-1.5 rounded-md text-sky-400/90 hover:text-sky-300 hover:bg-ink-700/40">
-                Stats →
-              </button>
-            )}
           </div>
           <div className="flex-1" />
           <div className="flex items-center gap-1.5">
@@ -454,9 +499,16 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
               </div>
               {termDraft ? (
                 <TerminalPanel root={termDraft.root} slug={termDraft.slug} cwd={termDraft.cwd} title={termDraft.title} isNew runningKeys={runningTermKeys} onClose={() => setTermDraft(null)} onChange={refreshTerminals} onOpenTool={(what) => api.open(termDraft.root, null, what, termDraft.cwd, termDraft.slug)} />
-              ) : active ? (
-                <TerminalPanel root={root} id={active.id} title={active.title} contextSummary={sessionData?.summary} runningKeys={runningTermKeys} onChange={refreshTerminals} onOpenTool={(what) => api.open(root, active.id, what)} />
-              ) : null}
+              ) : (
+                shownPanes.map((p) => {
+                  const isCur = p.key === curTermKey
+                  return (
+                    <div key={p.key} className={isCur ? 'contents' : 'hidden'}>
+                      <TerminalPanel root={p.root} id={p.id} title={isCur ? active.title : p.title} contextSummary={isCur ? sessionData?.summary : null} runningKeys={runningTermKeys} onChange={refreshTerminals} onOpenTool={(what) => api.open(p.root, p.id, what)} />
+                    </div>
+                  )
+                })
+              )}
           </div>
         </ErrorBoundary>
         {tab === 'config' && (
@@ -471,6 +523,7 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
             <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
               {tab === 'subagents' && active && <SubagentsView key={active.id} root={root} parent={active} versions={sessionVersions} active={appActive} onOpenSession={openSessionById} />}
               {tab === 'raw' && raw && <RawView records={raw.records} typeOf={rawTypeOf} />}
+              {tab === 'stats' && active && Stats && <Stats root={root} stats={stats} focus={statsFocus} onOpenSession={openSessionById} />}
               {tab === 'memory' && root && openSlug && <MemoryView key={`mem-${root}-${openSlug}`} root={root} cwd={openSlug} />}
             </ErrorBoundary>
           </div>

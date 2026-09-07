@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
-import { useProviderApi } from '../../lib/providerApi.js'
+import { useProviderApi, useProviderLabel } from '../../lib/providerApi.js'
+import ReadOnlyNote from '../shared/ReadOnlyNote.jsx'
 
 // Installed Codex plugins (from plugins/cache/**/.codex-plugin/plugin.json),
 // with enabled-state from config.toml. Read-only.
 export default function PluginsView({ root }) {
   const api = useProviderApi()
+  const label = useProviderLabel()
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
 
@@ -22,8 +24,13 @@ export default function PluginsView({ root }) {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      <h2 className="text-[15px] font-semibold text-zinc-100 mb-1">Plugins</h2>
-      <p className="text-[12px] text-zinc-500 mb-4">Installed Codex plugins and the skills they bundle. Enabled-state from <span className="font-mono">config.toml</span>.</p>
+      <h2 className="text-[15px] font-semibold text-zinc-100 mb-1 flex items-center gap-2">
+        Plugins
+        <ReadOnlyNote why={`${label} installs, enables and removes plugins with its own commands; AgentDeck lists what is on disk.`} />
+      </h2>
+      <p className="text-[12px] text-zinc-500 mb-4">
+        {label === 'Codex' ? <>Installed Codex plugins and the skills they bundle. Enabled-state from <span className="font-mono">config.toml</span>.</> : <>Installed plugins under <span className="font-mono">~/.gemini/config/plugins</span> and what they bundle. <a href="https://antigravity.google/docs/plugins" target="_blank" rel="noreferrer" className="text-sky-400 hover:text-sky-300">docs ↗</a></>}
+      </p>
       {marketplaces.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 mb-4">
           <span className="text-[11px] text-zinc-500">marketplaces:</span>
