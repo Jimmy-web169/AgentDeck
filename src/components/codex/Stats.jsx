@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { codexApi as api } from '../../api.js'
+import { useProviderApi, useProviderLabel } from '../../lib/providerApi.js'
 import { fmtTokens, fmtRelative, fmtTime, totalTokens } from '../../lib/format.js'
 import TokenTiles from '../shared/TokenTiles.jsx'
 import { shortPath } from '../../lib/paths.js'
@@ -47,9 +47,10 @@ function Bars({ counts, color = 'bg-emerald-500/40' }) {
 // which is which comes from GET /api/stats `fields`
 const TileCard = ({ label, value, hint }) => <Card label={label} value={value} sub={hint} />
 function TokenCards({ t, fields }) {
+  const label = useProviderLabel()
   return (
     <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-      <TokenTiles tokens={t} fields={fields} Tile={TileCard} providerLabel="Codex" />
+      <TokenTiles tokens={t} fields={fields} Tile={TileCard} providerLabel={label} />
     </div>
   )
 }
@@ -65,6 +66,7 @@ function Crumb({ children, onClick, last }) {
 const shortCwd = (p) => shortPath(p)
 
 export default function Stats({ root, stats, focus, onOpenSession }) {
+  const api = useProviderApi()
   const [proj, setProj] = useState(null) // selected project rollup { slug, cwd, ... }
   const [sessions, setSessions] = useState(null) // per-session summaries for proj
   const [loadingSessions, setLoadingSessions] = useState(false)

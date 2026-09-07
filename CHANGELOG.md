@@ -159,8 +159,26 @@ its real terminal.
   field and the system colour dialog. A colour is stored as hex; the UI keeps its hue
   and saturation and each theme paints the lightness (bright on Midnight and
   Graphite, deep on Paper), so one choice reads well in all three.
+- **Antigravity provider (experimental).** Google's `agy` CLI as a third
+  provider: its conversations under `~/.gemini/antigravity-cli/brain/**` show
+  up as sessions grouped by workspace (Conversation with thinking, tool calls
+  and their results paired onto the call, inline sub-agent threads under
+  `invoke_subagent`, Sub-agents, Raw, Stats, History, Activity/Insights, usage
+  meters from `agy /usage`, read-only Config / Plugins / Artifacts, continue in
+  a terminal via `agy --conversation <id>`, trash to the OS bin). Workspace,
+  git branch, model and per-step tokens come from the per-conversation SQLite
+  (`node:sqlite`, Node ≥ 22.5; without it the JSONL alone is shown). The
+  descriptor `spec/providers/antigravity.yaml` is `experimental` and its
+  fixture + golden run through `npm run check:spec` like the other two.
 
 ### Changed
+- **One main area for id-addressed providers.** `src/IdApp.jsx` is the app
+  Codex had, made a factory (`makeIdApp(cfg)`); Codex and Antigravity
+  instantiate it with their own views. The Codex Conversation / Sub-agents /
+  Memory / Plugins / Stats / Terminal components read their API client from
+  `ProviderApiContext` (`src/lib/providerApi.js`) instead of importing
+  `codexApi`, so Antigravity reuses them unchanged — with no context they still
+  default to Codex.
 - **One set of folder chips.** The sidebar's chips are the only scope picker;
   Home's header no longer repeats them — Stats, Insights, History, Plugins and
   Resources follow the folder chosen in the sidebar.

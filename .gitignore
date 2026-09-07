@@ -29,6 +29,7 @@ testproj/
 # per-provider tracked roots (machine-specific absolute paths)
 roots.claude.json
 roots.codex.json
+roots.antigravity.json
 .claude/
 
 # local research notes, handoffs, scratch — never committed (see CLAUDE.md)

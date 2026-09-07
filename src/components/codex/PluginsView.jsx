@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { codexApi as api } from '../../api.js'
+import { useProviderApi } from '../../lib/providerApi.js'
 
 // Installed Codex plugins (from plugins/cache/**/.codex-plugin/plugin.json),
 // with enabled-state from config.toml. Read-only.
 export default function PluginsView({ root }) {
+  const api = useProviderApi()
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
 

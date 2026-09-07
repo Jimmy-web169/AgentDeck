@@ -154,7 +154,7 @@ function Dialog({ onClose, providers, index }) {
                   value={path}
                   onChange={(e) => setPath(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && add()}
-                  placeholder={cfg?.id === 'codex' ? '/path/to/.codex  or  ~/.codex' : '/path/to/.claude  or  ~/my-project'}
+                  placeholder={cfg?.id === 'codex' ? '/path/to/.codex  or  ~/.codex' : cfg?.id === 'antigravity' ? '~/.gemini/antigravity-cli' : '/path/to/.claude  or  ~/my-project'}
                   className="w-full bg-ink-700 border border-zinc-700 rounded px-2.5 py-1.5 text-[13px] text-zinc-100 font-mono placeholder-zinc-600"
                 />
                 <div className="flex gap-2">
@@ -165,7 +165,7 @@ function Dialog({ onClose, providers, index }) {
                 </div>
                 {err && <div className="text-[12px] text-red-300">{err}</div>}
                 <div className="text-[11px] text-zinc-600">
-                  A folder is a CLI home (<span className="font-mono">~/.claude</span>, <span className="font-mono">~/.codex</span>) or any directory with a <span className="font-mono">.claude/</span> config. Click a label above to rename it (a second account's home, say). <span className="text-zinc-400">untrack</span> only removes it from this list.
+                  A folder is a CLI home (<span className="font-mono">~/.claude</span>, <span className="font-mono">~/.codex</span>, <span className="font-mono">~/.gemini/antigravity-cli</span>) or any directory with a <span className="font-mono">.claude/</span> config. Click a label above to rename it (a second account's home, say). <span className="text-zinc-400">untrack</span> only removes it from this list.
                 </div>
               </div>
             </section>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { codexApi as api } from '../../api.js'
+import { useProviderApi } from '../../lib/providerApi.js'
 import Stats from './Stats.jsx'
 import HistoryView from '../shared/HistoryView.jsx'
 import PluginsView from './PluginsView.jsx'
@@ -31,12 +31,14 @@ function useFetch(fn, deps) {
 const Err = ({ msg }) => <div className="m-4 text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded p-3">{msg}</div>
 
 export function StatsPage({ root, focus, onOpen }) {
+  const api = useProviderApi()
   const [stats, err] = useFetch(() => api.stats(root), [root])
   if (err) return <Err msg={err} />
   return <Stats root={root} stats={stats} focus={focus} onOpenSession={(id) => onOpen({ root, id })} />
 }
 
 export function HistoryPage({ root }) {
+  const api = useProviderApi()
   const [data, err] = useFetch(() => api.history(root), [root])
   if (err) return <Err msg={err} />
   return <HistoryView data={data} />

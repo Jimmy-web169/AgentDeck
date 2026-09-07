@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { codexApi as api } from '../../api.js'
+import { useProviderApi } from '../../lib/providerApi.js'
 import useEscToClose from '../../lib/useEscToClose.js'
 
 // Normalize whatever the user typed (a bare ref, a skills.sh/GitHub URL, or a
@@ -15,6 +15,7 @@ const normalize = (input) =>
     .trim()
 
 export default function SkillImport({ root, scope, slug, onClose, onImported }) {
+  const api = useProviderApi()
   const [ref, setRef] = useState('')
   const [busy, setBusy] = useState(false)
   // Don't let Escape dismiss the modal while `npx skills add` is running

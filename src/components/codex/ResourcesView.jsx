@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { codexApi as api } from '../../api.js'
+import { useProviderApi } from '../../lib/providerApi.js'
 import Markdown from '../shared/Markdown.jsx'
 import NewResourceForm from './NewResourceForm.jsx'
 import SkillImport from './SkillImport.jsx'
@@ -64,6 +64,7 @@ function PaneHead({ title, docs, children }) {
 }
 
 export default function ResourcesView({ root, scope = 'user', slug }) {
+  const api = useProviderApi()
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [sel, setSel] = useState(null) // { kind, id? }

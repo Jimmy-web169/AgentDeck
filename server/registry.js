@@ -12,6 +12,9 @@ import {
 // claude provider
 import { dispatch as claudeDispatch } from './providers/claude/api.js'
 import { loadRoots as claudeLoadRoots, projectsDir as claudeProjectsDir } from './providers/claude/paths.js'
+// antigravity provider
+import { dispatch as agyDispatch } from './providers/antigravity/api.js'
+import { loadRoots as agyLoadRoots, brainDir as agyBrainDir, invalidateIndex as agyInvalidateIndex, cwdForId as agyCwdForId, isSessionId as agyIsSessionId } from './providers/antigravity/paths.js'
 
 // Provider registry. Each provider supplies:
 //   dispatch(method, '/api/<rest>', query, body) -> { status, body }
@@ -61,6 +64,27 @@ export const PROVIDERS = {
           parentId = entry?.parentId || null
         } catch {}
         return { provider: 'codex', root: rootId, id, slug, parentId }
+      },
+    },
+  },
+  antigravity: {
+    id: 'antigravity',
+    dispatch: agyDispatch,
+    loadRoots: agyLoadRoots,
+    watch: {
+      watchDir: (rootDir) => agyBrainDir(rootDir),
+      toEvent: (rootId, rootDir, absPath) => {
+        // brain/<id>/.system_generated/logs/transcript*.jsonl (and steps/, messages/) → that conversation
+        const rel = path.relative(agyBrainDir(rootDir), absPath)
+        if (!rel || rel.startsWith('..')) return null
+        const id = rel.split(path.sep)[0]
+        if (!agyIsSessionId(id)) return null
+        agyInvalidateIndex(rootDir)
+        let slug = null
+        try {
+          slug = agyCwdForId(rootDir, id)
+        } catch {}
+        return { provider: 'antigravity', root: rootId, id, slug }
       },
     },
   },

@@ -1,4 +1,4 @@
-import { codexApi as api } from '../../api.js'
+import { codexApi } from '../../api.js'
 
 // Codex adapter for the inline sub-agent thread (shared/SubagentThread.jsx).
 //
@@ -88,11 +88,11 @@ export function resolve(part, ctx) {
 }
 
 export function fetchTranscript(item, ctx) {
-  return api.session(ctx.root, item.childId)
+  return (ctx.api || codexApi).session(ctx.root, item.childId)
 }
 
 export function cacheKey(item, ctx) {
-  return `codex|${ctx.root}|${item.childId}`
+  return `${ctx.provider || 'codex'}|${ctx.root}|${item.childId}`
 }
 
 export default { accent, resolve, fetchTranscript, cacheKey }

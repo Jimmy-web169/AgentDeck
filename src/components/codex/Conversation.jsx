@@ -7,7 +7,7 @@ import Thinking from '../shared/Thinking.jsx'
 import SubagentThread, { buildThreadMap, useSubagentIndex } from '../shared/SubagentThread.jsx'
 import subagentAdapter from './subagentAdapter.js'
 import { BotIcon } from '../shared/icons.jsx'
-import { codexApi as api } from '../../api.js'
+import { useProviderApi } from '../../lib/providerApi.js'
 import { usePrefs } from '../../lib/prefs.js'
 import { fmtTime, fmtTokens, totalTokens } from '../../lib/format.js'
 import ContextMeter from './ContextMeter.jsx'
@@ -39,7 +39,7 @@ function AssistantMsg({ ev, threads, ctx }) {
             return (
               <Fragment key={i}>
                 <ToolCall part={p} />
-                <SubagentThread item={thread} adapter={subagentAdapter} ctx={ctx} Conversation={MemoConversation} />
+                <SubagentThread item={thread} adapter={ctx.adapter || subagentAdapter} ctx={ctx} Conversation={MemoConversation} />
               </Fragment>
             )
           }
@@ -81,6 +81,7 @@ function SystemMsg({ ev }) {
 // counts. A child rendered inline gets depth 1 and shows headers only.
 // `compact` is the inline-child styling (tighter padding, smaller title).
 function Conversation({ data, onOpenSession, subagentCtx = null, compact = false }) {
+  const api = useProviderApi()
   const { summary, timeline } = data
   const children = data.children || []
   const rootRef = useRef(null)
@@ -103,7 +104,10 @@ function Conversation({ data, onOpenSession, subagentCtx = null, compact = false
     const list = depth === 0 && index?.children?.length ? index.children : children
     return { ...subagentCtx, children: list, depth }
   }, [inlineOn, subagentCtx, index, children, depth])
-  const threads = useMemo(() => (ctx ? buildThreadMap(timeline, subagentAdapter, ctx) : null), [timeline, ctx])
+  // the adapter rides on the ctx so an id-addressed provider (Antigravity) can
+  // reuse this view with its own linking rules; Codex's is the default
+  const adapter = subagentCtx?.adapter || subagentAdapter
+  const threads = useMemo(() => (ctx ? buildThreadMap(timeline, adapter, ctx) : null), [timeline, ctx, adapter])
 
   return (
     <div ref={rootRef} className={compact ? 'px-3 py-3' : 'mx-auto max-w-3xl px-4 py-6'}>

@@ -20,7 +20,8 @@ export function baseName(p) {
   return parts[parts.length - 1] || String(p || '')
 }
 
-// project display name: prefer the real cwd, fall back to the provider slug
+// project display name: prefer the real cwd, fall back to the provider slug —
+// which is itself a path for Antigravity (cwd-keyed projects), so shorten that too
 export function projectName(cwd, slug) {
-  return baseName(cwd) || String(slug || '') || '(unknown)'
+  return baseName(cwd) || (SEP.test(String(slug || '')) ? baseName(slug) : String(slug || '')) || '(unknown)'
 }

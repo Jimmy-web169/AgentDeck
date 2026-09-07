@@ -11,8 +11,8 @@ should be describable in this folder first and coded second.
 | `provider.schema.json` | JSON Schema 2020-12 for a descriptor — the machine-checked contract | validates both descriptors |
 | `providers/claude.yaml` | Claude Code descriptor | validates; documentation only |
 | `providers/codex.yaml` | Codex descriptor | validates; documentation only |
-| `providers/antigravity.yaml` | Antigravity (`agy`) descriptor, from nine real runs | draft; validates; no parser yet |
-| `fixtures/<id>/` | Fictional raw sessions (from `scripts/demo/make-fixture.mjs`) with the parser's golden output under `expected/` | claude, codex |
+| `providers/antigravity.yaml` | Antigravity (`agy`) descriptor, from nine real runs; parser in `server/providers/antigravity/` | experimental; validates; fixture + golden |
+| `fixtures/<id>/` | Fictional raw sessions (from `scripts/demo/make-fixture.mjs`; hand-written from real record shapes for Antigravity) with the parser's golden output under `expected/` | claude, codex, antigravity |
 
 Check everything (also part of `npm test` and `npm run release:check`):
 
@@ -38,7 +38,10 @@ does not mention fails the gate — that is what keeps the descriptor honest.
    fingerprints the observed schema, compares with the baseline in
    `roots.<id>.json`, and flags the folder chip on `drift`.
 4. **Server reads `capabilities` / `cli` / `probe` from the descriptor** — after 3.
-5. **Generic rule-driven parser** — later; Antigravity is the intended test case.
+5. **Generic rule-driven parser** — later. Antigravity got a hand-written
+   parser first (2026-09-08): its transcript needs adjacency pairing and a
+   SQLite sidecar, which is exactly the kind of case the rule language will
+   have to cover — see `hooks:` in its descriptor for what stayed in code.
 
 The maintainer's discussion notes on how far to take the descriptor language
 (record grammar, examples, versioning) are local, in `tmp/`.

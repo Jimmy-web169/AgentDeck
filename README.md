@@ -6,10 +6,11 @@ and sub-agent, see token/model stats, manage your config resources, and
 continue any session in its real terminal — all from your browser, in
 Chrome-style tabs across agents.
 
-It ships with two providers — **Claude Code** and **OpenAI Codex** — and a clean
-seam for adding more. It runs entirely on your machine, reads the files each CLI
-already writes to disk (`~/.claude/projects/**`, `~/.codex/sessions/**`), and
-never sends your data anywhere.
+It ships with three providers — **Claude Code**, **OpenAI Codex** and, as an
+experimental third, **Google Antigravity** (`agy`) — and a clean seam for adding
+more. It runs entirely on your machine, reads the files each CLI already writes
+to disk (`~/.claude/projects/**`, `~/.codex/sessions/**`,
+`~/.gemini/antigravity-cli/brain/**`), and never sends your data anywhere.
 
 > **Status:** v2. Read-only monitoring is solid; continuing a session runs the
 > real CLI in an embedded terminal, so it needs that CLI installed.
@@ -150,7 +151,7 @@ everything else shared.
 ```
 server/
   index.js            HTTP/SSE host; routes /api/<provider>/…
-  registry.js         the provider registry { claude, codex }
+  registry.js         the provider registry { claude, codex, antigravity }
   shared/             cross-provider code: roots, dispatch, terminal pool, skills, origin, launch
   providers/<id>/     a provider's data layer: paths, parser, resources, + config
 src/
@@ -185,10 +186,14 @@ changes needed).
 
 - **Platform: WSL (Ubuntu on Windows), macOS, or native Windows.** These are the
   tested environments. Plain Linux will likely work but is untested.
-- **[Node.js](https://nodejs.org/) ≥ 20** (uses the built-in `--watch` flag).
-- For read-only monitoring: nothing else — just point it at `~/.claude` / `~/.codex`.
+- **[Node.js](https://nodejs.org/) ≥ 22.5** — the Antigravity provider reads
+  its per-conversation SQLite through the built-in `node:sqlite` (workspace,
+  model, tokens); on an older Node everything else still works and Antigravity
+  degrades to what its JSONL transcripts carry.
+- For read-only monitoring: nothing else — just point it at `~/.claude` /
+  `~/.codex` / `~/.gemini/antigravity-cli`.
 - To **continue a conversation**: the relevant CLI installed and logged in
-  (`claude` and/or `codex`).
+  (`claude`, `codex` and/or `agy`).
 - For the **embedded terminal**: [`ttyd`](https://github.com/tsl0922/ttyd) (`brew install
   ttyd` on macOS; your package manager on WSL/Linux). On **native Windows** ttyd
   is not used (its current release crashes at spawn —
@@ -201,8 +206,17 @@ changes needed).
 
 Read-only monitoring parses the on-disk session formats and tolerates a wide
 range of CLI versions. Continuing a session always runs whatever `claude` /
-`codex` you have installed in the embedded terminal — the dashboard shows the
+`codex` / `agy` you have installed in the embedded terminal — the dashboard shows the
 CLI version observed in your most recent session, so nothing is hardcoded.
+
+**Antigravity is experimental.** Its on-disk format is unpublished: AgentDeck
+reads `brain/<id>/.system_generated/logs/transcript_full.jsonl` for the
+conversation and decodes the protobuf blobs in `conversations/<id>.db` for the
+workspace, git branch, model and token usage (field numbers verified against
+`agy` 1.1.27's own `/usage` output — see `spec/providers/antigravity.yaml`).
+Config, plugins and MCP are shown read-only; `agy plugin …` / `agy mcp …` stay
+the writers. Print-mode runs in an untrusted folder record no workspace, so
+they land in a "(no workspace)" project.
 
 ## Quick start
 

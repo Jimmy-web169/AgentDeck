@@ -1,14 +1,16 @@
 # AgentDeck provider descriptor — Google Antigravity CLI (`agy`)
-# Draft 2026-09-07, written from nine real `agy` 1.1.27 runs on Windows (the
-# findings are consolidated in the maintainer's research notes). No parser
-# exists yet, so `npm run check:spec` validates this file against the schema
-# only. Fields marked `# guess` were not verified on disk.
+# Written 2026-09-07 from nine real `agy` 1.1.27 runs on Windows (findings in the
+# maintainer's research notes); the parser landed 2026-09-08, so `npm run
+# check:spec` now also runs spec/fixtures/antigravity/ through it. The format is
+# unpublished (JSONL + protobuf blobs in SQLite): status stays `experimental`
+# until a second agy release confirms the field numbers. `# guess` marks what
+# was not verified on disk.
 spec: agentdeck/provider/v1
 id: antigravity
 label: Antigravity
 accent: violet                                  # guess — any hue not taken by claude (emerald) / codex (sky)
 docs: https://antigravity.google/docs/cli/reference
-status: draft
+status: experimental
 
 cli:
   bin: agy
@@ -168,12 +170,11 @@ probe:
   # no version_field: transcripts are not stamped with the CLI version; use `agy --version`
 
 hooks:
-  discover: paths.js                            # brain/ scan, id from dirname, three roots, cwd fallbacks
-  parse: parser.js                              # transcript_full.jsonl → timeline, adjacency pairing, noise stripping
-  subagents: subagents.js                       # invoke_subagent result JSON + send_message back-pointer
-  sqlite: trajectory-db.js                      # node:sqlite + raw protobuf reader for tokens / model / call ids / workspace
-  resources: resources.js
-  api: api.js
+  discover: paths.js                            # brain/ scan, id from dirname, cwd from SQLite → last_conversations.json → parent; sub-agent links from the transcripts
+  parse: parser.js                              # transcript_full.jsonl → timeline, adjacency pairing, noise stripping, model label from <USER_SETTINGS_CHANGE>
+  sqlite: sqlite.js                             # node:sqlite (Node ≥ 22.5) + raw protobuf reader for workspace / git / model / tokens
+  resources: resources.js                       # read-only inventory: skills, MCP, plugins, settings, permissions, GEMINI.md / AGENTS.md
+  api: api.js                                   # the 29 shared routes; resource / skill-run writes answer 501 (agy's own commands are the writers)
 
 known_unknowns:
   - whether conversation_summaries.db ever gets CLI rows (print mode never wrote it; interactive exit not observed)

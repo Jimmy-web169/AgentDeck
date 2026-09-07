@@ -12,8 +12,9 @@
 //      kinds, part kinds and token fields — so a parser that starts emitting
 //      something the descriptor does not describe fails here, and vice versa
 //
-// Fixtures are fictional (made by scripts/demo/make-fixture.mjs); a provider
-// without a fixture only gets check 1 (Antigravity, until its parser exists).
+// Fixtures are fictional (made by scripts/demo/make-fixture.mjs, or hand-written
+// from real record shapes for Antigravity); a provider without a fixture only
+// gets check 1.
 //
 //   node scripts/check-spec.mjs [--update] [--only claude,codex]
 

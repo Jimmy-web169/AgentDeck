@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { codexApi as api } from '../../api.js'
+import { useProviderApi } from '../../lib/providerApi.js'
 import Markdown from '../shared/Markdown.jsx'
 
 // Codex auto-generated per-conversation memories (from memories_1.sqlite).
@@ -7,6 +7,7 @@ import Markdown from '../shared/Markdown.jsx'
 // (cwd) can show just its own memories — `cwd` scopes the list; without it the
 // whole home is shown. Read-only.
 export default function MemoryView({ root, cwd }) {
+  const api = useProviderApi()
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
 

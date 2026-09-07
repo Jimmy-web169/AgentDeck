@@ -1,0 +1,16 @@
+{
+  "provider": "antigravity",
+  "origin": "hand-written from the record shapes of real agy 1.1.27 transcripts (transcript_full.jsonl) — fictional project /home/demo/code/orbit-api; no SQLite sidecar, so cwd / model id / tokens stay empty here (they come from conversations/<id>.db at runtime)",
+  "sessions": [
+    {
+      "id": "7d1c4e2a-9b3f-4c5d-8e6f-0a1b2c3d4e5f",
+      "file": "session-7d1c4e2a.jsonl",
+      "covers": "USER_INPUT with <USER_REQUEST>/<ADDITIONAL_METADATA>/<USER_SETTINGS_CHANGE> noise / PLANNER_RESPONSE thinking + content + tool_calls (two calls, two GENERIC results paired by adjacency) / EPHEMERAL_MESSAGE ignored / invoke_subagent result JSON naming the child / SYSTEM_MESSAGE inter-agent mail / a failed run_command (error) / ERROR_MESSAGE"
+    },
+    {
+      "id": "c3a9f0d4-2b1e-4f6a-9c8d-5e7f1a2b3c4d",
+      "file": "child-c3a9f0d4.jsonl",
+      "covers": "a spawned child conversation: plain USER_INPUT, send_message back to the parent (args.Recipient = parent id)"
+    }
+  ]
+}

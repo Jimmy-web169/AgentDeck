@@ -58,7 +58,7 @@ async function req(provider, method, path, { params = {}, body } = {}) {
 }
 
 export function createApi(provider) {
-  if (provider !== 'claude' && provider !== 'codex') throw new Error(`unsupported provider: ${provider}`)
+  if (!['claude', 'codex', 'antigravity'].includes(provider)) throw new Error(`unsupported provider: ${provider}`)
   const request = (method, path, options) => req(provider, method, path, options)
   const get = (path, params) => request('GET', path, { params })
 
@@ -83,7 +83,7 @@ export function createApi(provider) {
   terminals: () => get('terminals'),
   terminalStop: (key) => request('DELETE', 'terminal', { params: { key } }),
 
-  // ---- session-addressed (claude: root,slug,id · codex: root,id) ----
+  // ---- session-addressed (claude: root,slug,id · codex/antigravity: root,id) ----
   session: (root, a, b) => get('session', b !== undefined ? { root, slug: a, id: b } : { root, id: a }),
   raw: (root, a, b) => get('raw', b !== undefined ? { root, slug: a, id: b } : { root, id: a }),
   subagents: (root, a, b) => get('subagents', b !== undefined ? { root, slug: a, id: b } : { root, id: a }),
@@ -101,7 +101,7 @@ export function createApi(provider) {
 
   // ---- resources (signatures differ by provider) ----
   resources: (root, a, b) => {
-    if (provider === 'codex') return get('resources', a === 'project' && b ? { root, scope: a, slug: b } : { root, scope: 'user' })
+    if (provider !== 'claude') return get('resources', a === 'project' && b ? { root, scope: a, slug: b } : { root, scope: 'user' })
     return get('resources', a ? { root, slug: a } : { root }) // claude: (root, slug?)
   },
   // claude-only: read single resource
@@ -109,11 +109,11 @@ export function createApi(provider) {
   // claude-only: write free-text resource
   saveResource: (root, kind, name, content, slug) =>
     request('POST', 'resource', { body: slug ? { root, kind, name, content, slug } : { root, kind, name, content } }),
-  // codex-only: create structured resource
+  // codex: create structured resource (antigravity answers 501 — agy's own commands write)
   createResource: (body) => request('POST', 'resource', { body }),
-  // claude: (root,kind,name,stamp,slug?) · codex: (root,scope,slug,kind,name)
+  // claude: (root,kind,name,stamp,slug?) · codex/antigravity: (root,scope,slug,kind,name)
   deleteResource: (...args) => {
-    if (provider === 'codex') {
+    if (provider !== 'claude') {
       const [root, scope, slug, kind, name] = args
       return request('DELETE', 'resource', { params: scope === 'project' && slug ? { root, scope, slug, kind, name } : { root, scope: 'user', kind, name } })
     }
@@ -121,9 +121,9 @@ export function createApi(provider) {
     return request('DELETE', 'resource', { params: slug ? { root, kind, name, stamp, slug } : { root, kind, name, stamp } })
   },
 
-  // ---- open local app (claude: root,slug,id,what,cwd · codex: root,id,what,cwd,slug) ----
+  // ---- open local app (claude: root,slug,id,what,cwd · codex/antigravity: root,id,what,cwd,slug) ----
   open: (...args) => {
-    if (provider === 'codex') {
+    if (provider !== 'claude') {
       const [root, id, what, cwd, slug] = args
       return request('POST', 'open', { body: { root, id, what, cwd, slug } })
     }
@@ -135,3 +135,4 @@ export function createApi(provider) {
 
 export const claudeApi = createApi('claude')
 export const codexApi = createApi('codex')
+export const antigravityApi = createApi('antigravity')
