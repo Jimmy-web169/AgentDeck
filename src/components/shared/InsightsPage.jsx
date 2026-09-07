@@ -48,6 +48,8 @@ const fmtDur = (min) => {
   const r = m % 60
   return r ? `${h}h ${String(r).padStart(2, '0')}m` : `${h}h`
 }
+const fmtDurCap = (m) => (m >= 12 * 60 ? `${fmtDur(m)}+` : fmtDur(m)) // durations are clamped at 12h server-side
+
 const deltaText = (d) => (d > 0 ? `▲ ${d}` : d < 0 ? `▼ ${-d}` : '± 0')
 const argmax = (arr) => {
   let best = 0
@@ -174,15 +176,17 @@ function narrative({ active30, sessions30, totals, streak, busiest, rhythm, sd, 
   // 3 — session shape
   if (sd?.count) {
     const bits = []
-    if (sd.avgPrompts != null) bits.push(K(`${num1(sd.avgPrompts)} prompts`))
-    if (sd.avgDurationMin != null) bits.push(K(fmtDur(sd.avgDurationMin)))
+    const tp = sd.medianPrompts ?? sd.avgPrompts
+    const td = sd.medianDurationMin ?? sd.avgDurationMin
+    if (tp != null) bits.push(K(`${num1(tp)} prompts`))
+    if (td != null) bits.push(K(fmtDur(td)))
     if (bits.length) {
-      const s3 = [T('Sessions run about ')]
+      const s3 = [T('A typical session runs ')]
       bits.forEach((b, i) => {
         if (i) s3.push(T(' and '))
         s3.push(b)
       })
-      if (sd.longest?.minutes != null) s3.push(T('; the longest was '), K(fmtDur(sd.longest.minutes)), T(' in '), K(shortPath(sd.longest.cwd || sd.longest.slug, 2)), T(sd.longest.date ? ` on ${sd.longest.date}` : ''))
+      if (sd.longest?.minutes != null) s3.push(T('; the longest was '), K(fmtDurCap(sd.longest.minutes)), T(' in '), K(shortPath(sd.longest.cwd || sd.longest.slug, 2)), T(sd.longest.date ? ` on ${sd.longest.date}` : ''))
       s3.push(T('.'))
       out.push(s3)
     }
@@ -226,8 +230,8 @@ function digestMd(v, { providerLabel, rootLabel, range }) {
     `- Active days: ${v.active30} / ${WINDOW} (${v.totals.activeDays ?? '—'} in ${HEAT_WEEKS} weeks)`,
     `- Streak: ${plural(v.streak.current, 'day')} (longest ${v.streak.longest})`,
     `- This week: ${plural(v.cmp.thisWeek.sessions, 'session')} vs ${v.cmp.lastWeek.sessions} last week (${deltaText(v.delta)})`,
-    `- Average session: ${v.sd ? fmtDur(v.sd.avgDurationMin) : '—'} (median ${v.sd ? fmtDur(v.sd.medianDurationMin) : '—'})`,
-    `- Prompts per session: ${v.pps} (median ${v.sd?.medianPrompts ?? '—'})`,
+    `- Typical session: ${v.sd ? fmtDur(v.sd.medianDurationMin) : '—'} (average ${v.sd ? fmtDur(v.sd.avgDurationMin) : '—'})`,
+    `- Prompts per session: ${v.sd?.medianPrompts ?? v.pps} (average ${v.pps})`,
     v.busiest.hour != null ? `- Peaks: ${hh(v.busiest.hour)} · ${WEEKDAYS_LONG[v.busiest.weekday] || '—'}s` : '- Peaks: —',
     '',
     '## Weekly',
@@ -466,25 +470,33 @@ export default function InsightsPage({ provider, root, rootLabel = '', providerL
             </span>
           }
         />
-        <Tile label="average session" value={sd ? fmtDur(sd.avgDurationMin) : '—'} sub={sd ? `median ${fmtDur(sd.medianDurationMin)}` : 'not available'} />
-        <Tile label="prompts per session" value={v.pps} sub={sd?.medianPrompts != null ? `median ${sd.medianPrompts}` : sd ? undefined : 'average over the window'} />
+        <Tile label="typical session" value={sd ? fmtDur(sd.medianDurationMin) : '—'} sub={sd ? `average ${fmtDur(sd.avgDurationMin)}` : 'not available'} />
+        <Tile label="prompts per session" value={sd?.medianPrompts != null ? String(sd.medianPrompts) : v.pps} sub={sd?.medianPrompts != null ? `average ${v.pps}` : sd ? undefined : 'average over the window'} />
       </div>
 
-      {/* 3 — heatmap */}
-      <Card
-        title={`Activity · last ${HEAT_WEEKS} weeks`}
-        right={
-          <span className="flex items-center gap-1 text-[10.5px] text-zinc-600" title="sessions per day">
-            less
-            {['bg-emerald-500/25', 'bg-emerald-500/45', 'bg-emerald-500/70', 'bg-emerald-500/95'].map((c) => (
-              <span key={c} className={`w-2.5 h-2.5 rounded-[2px] ${c}`} />
-            ))}
-            more
-          </span>
-        }
-      >
-        <Heatmap grid={v.grid} />
-      </Card>
+      {/* 3 — heatmap + when you work */}
+      <div className="grid gap-5 lg:grid-cols-[auto_1fr_1fr]">
+        <Card
+          title={`Activity · last ${HEAT_WEEKS} weeks`}
+          right={
+            <span className="flex items-center gap-1 text-[10.5px] text-zinc-600" title="sessions per day">
+              less
+              {['bg-emerald-500/25', 'bg-emerald-500/45', 'bg-emerald-500/70', 'bg-emerald-500/95'].map((c) => (
+                <span key={c} className={`w-2.5 h-2.5 rounded-[2px] ${c}`} />
+              ))}
+              more
+            </span>
+          }
+        >
+          <Heatmap grid={v.grid} />
+        </Card>
+        <Card title="Hour of day" right={<span className="text-[11px] text-zinc-500">{hourPeak != null ? `peaks at ${hh(hourPeak)}` : 'no sessions yet'} · local time</span>}>
+          <Bars values={v.hours} labels={v.hours.map((_, h) => `${h}`)} titles={v.hours.map((n, h) => `${hh(h)} · ${plural(n, 'session')}`)} every={3} height={88} peak={hourPeak} />
+        </Card>
+        <Card title="Day of week" right={<span className="text-[11px] text-zinc-500">{dayPeak != null ? `peaks on ${WEEKDAYS_LONG[dayPeak]}s` : 'no sessions yet'}</span>}>
+          <Bars values={MON_FIRST.map((i) => v.weekdays[i] || 0)} labels={MON_FIRST.map((i) => WEEKDAYS[i])} titles={MON_FIRST.map((i) => `${WEEKDAYS_LONG[i]} · ${plural(v.weekdays[i] || 0, 'session')}`)} height={88} peak={dayPeak != null ? MON_FIRST.indexOf(dayPeak) : null} />
+        </Card>
+      </div>
 
       {/* 4 — weekly rhythm */}
       <Card
@@ -530,16 +542,6 @@ export default function InsightsPage({ provider, root, rootLabel = '', providerL
         )}
       </Card>
 
-      {/* 5 — when you work */}
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Card title="Hour of day" right={<span className="text-[11px] text-zinc-500">{hourPeak != null ? `peaks at ${hh(hourPeak)}` : 'no sessions yet'} · local time</span>}>
-          <Bars values={v.hours} labels={v.hours.map((_, h) => `${h}`)} titles={v.hours.map((n, h) => `${hh(h)} · ${plural(n, 'session')}`)} every={3} height={88} peak={hourPeak} />
-        </Card>
-        <Card title="Day of week" right={<span className="text-[11px] text-zinc-500">{dayPeak != null ? `peaks on ${WEEKDAYS_LONG[dayPeak]}s` : 'no sessions yet'}</span>}>
-          <Bars values={MON_FIRST.map((i) => v.weekdays[i] || 0)} labels={MON_FIRST.map((i) => WEEKDAYS[i])} titles={MON_FIRST.map((i) => `${WEEKDAYS_LONG[i]} · ${plural(v.weekdays[i] || 0, 'session')}`)} height={88} peak={dayPeak != null ? MON_FIRST.indexOf(dayPeak) : null} />
-        </Card>
-      </div>
-
       {/* 6 — session shape */}
       <div className="grid gap-5 lg:grid-cols-2">
         <Card title="Session length" right={sd?.count != null ? <span className="text-[11px] text-zinc-500">{plural(sd.count, 'session')}</span> : null}>
@@ -548,7 +550,7 @@ export default function InsightsPage({ provider, root, rootLabel = '', providerL
               <HBars items={durBuckets} />
               {sd.longest && (
                 <div className="mt-3 pt-3 border-t border-zinc-800/70 text-[12px] text-zinc-500 truncate" title={`${sd.longest.title || ''}${sd.longest.cwd ? ` · ${sd.longest.cwd}` : ''}`}>
-                  Longest <span className="text-zinc-200 font-medium">{fmtDur(sd.longest.minutes)}</span>
+                  Longest <span className="text-zinc-200 font-medium">{fmtDurCap(sd.longest.minutes)}</span>
                   {sd.longest.title ? <span className="text-zinc-400"> · {sd.longest.title}</span> : null}
                   <span className="text-zinc-600">
                     {' '}
