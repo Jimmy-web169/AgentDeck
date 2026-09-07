@@ -1,8 +1,10 @@
 # AgentDeck — working notes for Claude
 
 Read this before touching the repo. It records how the maintainer wants work run
-here; the codebase itself is described in `README.md`, `CONTRIBUTING.md` and
-`DATA-MODEL.md`, and the running change log lives in `CHANGELOG.md`.
+here; the codebase itself is described in `README.md` and `CONTRIBUTING.md`, the
+provider protocol layer (contract, on-disk data model, schema, descriptors) lives
+in `spec/`, and the running change log lives in `CHANGELOG.md`. This file is
+git-ignored on purpose (like `.claude/`): it stays local to the maintainer.
 
 ## How the maintainer likes to work
 
@@ -71,15 +73,24 @@ here; the codebase itself is described in `README.md`, `CONTRIBUTING.md` and
 
 - One persistent left column shared by Home and session tabs. Every row shows
   only **pin + ⋯**; destructive actions go through the centered confirm dialog.
-- No dropdown/checkmark scope pickers — visible colour-coded folder chips.
+- No dropdown/checkmark scope pickers — visible colour-coded folder chips, and
+  only **one** set of them: the sidebar's. Home pages (Stats, Insights, …)
+  follow that scope; do not put a second chip row in Home's header (the
+  maintainer found the duplicate "weird", 2026-09-07).
 - Workspaces render as one flat session list with a source tag; suggestions have
   no dismiss button (the user treats them as system facts).
-- Colours come from theme tokens (`ink-*`, `zinc-*`, accents) — never hex.
+- Colours come from theme tokens (`ink-*`, `zinc-*`, accents) — never hex. The
+  user-pickable accents are the `ACCENTS` list in `src/lib/providerColors.js`
+  (provider accents via Preferences › Colours, a workspace's via its ⋯ menu);
+  add a token in `index.css` for every theme before adding an accent.
 - Insights is *personal* (rhythm, streaks, session shape, neglected projects) and
   must not repeat Stats (tokens, tool bars, model mix).
 - Keyboard hints must be visible without scrolling.
-- Pinning moves a row into the Pinned section (it leaves Projects / its
-  project's inline list); nothing is listed twice except while searching.
+- Pinning and grouping both **move** a row: a pinned row lives in Pinned, a
+  workspace member lives under its workspace, and either leaves Projects / its
+  project's inline list (a muted hint line stays). A row may be pinned *and*
+  grouped. Nothing is listed twice except while searching or when that section
+  is switched off in Preferences.
 
 ## Gotchas
 

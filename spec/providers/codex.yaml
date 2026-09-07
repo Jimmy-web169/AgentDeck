@@ -1,6 +1,6 @@
 # AgentDeck provider descriptor — OpenAI Codex CLI
-# Draft 2026-09-07: written from DATA-MODEL.md and server/providers/codex/*.
-# Not yet loaded by the server (see PROVIDER-SPEC.md §"Descriptor layer").
+# Draft 2026-09-07: written from spec/DATA-MODEL.md and server/providers/codex/*.
+# Not yet loaded by the server (see spec/PROVIDER-SPEC.md §"Descriptor layer").
 spec: agentdeck/provider/v1
 id: codex
 label: Codex

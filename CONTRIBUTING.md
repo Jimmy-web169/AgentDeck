@@ -31,7 +31,7 @@ src/
   components/<id>/       a provider's specific components
 ```
 
-See `README.md` for the architecture and `DATA-MODEL.md` for on-disk shapes.
+See `README.md` for the architecture and `spec/DATA-MODEL.md` for on-disk shapes.
 
 ## Adding a provider
 

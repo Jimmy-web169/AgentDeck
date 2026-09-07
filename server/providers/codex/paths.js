@@ -82,7 +82,7 @@ const EMPTY_HEAD = { cwd: null, startTs: null, branch: null, isSubagent: false, 
 // — for Codex subagents — its parent thread + role, without parsing the whole
 // file. The session_meta record is the first line; for a subagent it carries
 // `thread_source: 'subagent'` and `source.subagent.thread_spawn` linking it to
-// the parent thread (see DATA-MODEL.md).
+// the parent thread (see spec/DATA-MODEL.md).
 function readHead(file) {
   try {
     const fd = fs.openSync(file, 'r')

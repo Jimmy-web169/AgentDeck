@@ -10,13 +10,15 @@
 //   node scripts/demo/shoot.mjs --base http://localhost:47861
 //
 // Every shot is taken in each theme (dark = Midnight, light = Paper; add
-// graphite with --themes) and written to demo/<shot>-<theme>.png. The browser
-// profile is a throw-away temp dir; localStorage is seeded per shot (theme,
-// prefs, pins, a workspace, recent sessions, tabs) from the fixture manifest,
-// so the sidebar looks lived-in and only ever names fictional projects.
+// graphite with --themes) and written to demo/<release>/<shot>-<theme>.png
+// (release = vMAJOR.MINOR from package.json, e.g. demo/v2.0/; --release
+// overrides) plus demo/<release>/tour.gif. The browser profile is a throw-away
+// temp dir; localStorage is seeded per shot (theme, prefs, pins, a workspace,
+// recent sessions, tabs) from the fixture manifest, so the sidebar looks
+// lived-in and only ever names fictional projects.
 //
 // Usage:
-//   node scripts/demo/shoot.mjs [--base http://localhost:47861] [--out demo] [--fixture tmp/demo-root]
+//   node scripts/demo/shoot.mjs [--base http://localhost:47861] [--release v2.0] [--out <dir>] [--fixture tmp/demo-root]
 //        [--themes dark,light] [--shots home-activity,insights,…] [--w 1440] [--h 900] [--scale 1]
 //        [--seed base|full] [--browser <path-to-chrome-or-edge>] [--no-gif] [--keep-profile] [--list]
 //   --seed overrides every shot's storage seeding: base = theme/prefs only, full = + pins,
@@ -45,11 +47,24 @@ function parseArgs(argv) {
 }
 const A = parseArgs(process.argv.slice(2))
 if (A.help) {
-  console.log('usage: node scripts/demo/shoot.mjs [--base http://localhost:47861] [--out demo] [--fixture tmp/demo-root] [--themes dark,light] [--shots a,b] [--w 1440] [--h 900] [--scale 1] [--browser exe] [--no-gif] [--keep-profile] [--list]')
+  console.log('usage: node scripts/demo/shoot.mjs [--base http://localhost:47861] [--release v2.0] [--out <dir>] [--fixture tmp/demo-root] [--themes dark,light] [--shots a,b] [--w 1440] [--h 900] [--scale 1] [--browser exe] [--no-gif] [--keep-profile] [--list]')
   process.exit(0)
 }
 const BASE = (A.base || 'http://localhost:47861').replace(/\/+$/, '')
-const OUT = path.resolve(A.out || path.join(REPO, 'demo'))
+// Each release keeps its own folder — demo/v1.0/, demo/v2.0/ … — so README can
+// show what a version looked like and old shots are never overwritten. The
+// default release comes from package.json ("2.1.0" → v2.1); --release overrides.
+function currentRelease() {
+  try {
+    const v = JSON.parse(fs.readFileSync(path.join(REPO, 'package.json'), 'utf8')).version || '0.0.0'
+    const [major, minor] = v.split('.')
+    return `v${major}.${minor}`
+  } catch {
+    return 'v0.0'
+  }
+}
+const RELEASE = A.release || currentRelease()
+const OUT = path.resolve(A.out || path.join(REPO, 'demo', RELEASE))
 const FIXTURE = path.resolve(A.fixture || path.join(REPO, 'tmp', 'demo-root'))
 const W = Number(A.w || 1440)
 const H = Number(A.h || 900)
@@ -198,8 +213,8 @@ function seedsFor(fx, themeKey, level) {
     pins.push({ provider: pt.provider, root: pt.root, rootLabel: pt.rootLabel, slug: pt.slug, id: null, title: null, project: pt.project, cwd: pt.cwd, at: now - 7200e3 })
   }
   seeds.agentdeck_pins = pins
-  // one workspace: the project that lives in both providers, grouped
-  if (shared) seeds.agentdeck_workspaces = [{ id: 'demo-ws-1', name: shared.name, at: now - 86400e3, items: shared.providers.map((prov) => projectTarget(shared, prov)) }]
+  // one workspace: the project that lives in both providers, grouped and coloured
+  if (shared) seeds.agentdeck_workspaces = [{ id: 'demo-ws-1', name: shared.name, at: now - 86400e3, color: 'violet', items: shared.providers.map((prov) => projectTarget(shared, prov)) }]
   // MRU for the quick switcher
   seeds.agentdeck_recent = recent.map((s, i) => ({ ...target(s), at: now - (i + 1) * 900e3 }))
   // a lived-in tab strip: Home + the two showcase sessions (the hash decides which is active)
@@ -326,6 +341,19 @@ const SHOTS = [
     h: Math.max(H, 1500),
     ready: (fx) => all(booted, hasText(fx.shared?.name || 'orbit'), hasText('tokens')),
     about: 'Stats (tokens, tools, models)',
+  },
+  {
+    name: 'preferences-open',
+    hash: '#/',
+    seed: 'full',
+    h: H,
+    ready: () => all(booted, hasText('LATEST SESSIONS')),
+    act: async (cdp) => {
+      await cdp.eval(`(() => { const b = document.querySelector('button[title="Preferences"]'); if (b) b.click(); return !!b })()`)
+      await cdp.waitFor(hasText('Colours'), { timeout: 3000 })
+      await sleep(400)
+    },
+    about: 'Preferences popover (theme, density, provider colours, sidebar sections)',
   },
 ]
 
@@ -468,7 +496,7 @@ async function main() {
   }
 
   const flagged = written.filter((w) => !w.ok)
-  if (!A['no-gif']) makeGif(written.filter((w) => w.theme === THEMES[0] && w.ok).map((w) => w.file), path.join(OUT, 'v2-tour.gif'))
+  if (!A['no-gif']) makeGif(written.filter((w) => w.theme === THEMES[0] && w.ok).map((w) => w.file), path.join(OUT, 'tour.gif'))
   if (flagged.length) {
     console.warn(`\n${flagged.length} shot(s) flagged (!) — review them, then re-run just those:  --shots ${[...new Set(flagged.map((w) => w.shot))].join(',')}`)
     process.exitCode = 2

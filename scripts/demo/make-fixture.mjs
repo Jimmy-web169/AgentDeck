@@ -2,7 +2,7 @@
 // make-fixture.mjs — a synthetic, self-contained AgentDeck data root for demos.
 //
 // Writes BOTH providers' on-disk formats (the shapes AgentDeck's real parsers
-// read — see DATA-MODEL.md, server/providers/*/parser.js, paths.js) into one
+// read — see spec/DATA-MODEL.md, server/providers/*/parser.js, paths.js) into one
 // directory, plus the two roots.<id>.json files that point at them:
 //
 //   <out>/
@@ -791,7 +791,7 @@ export function generateFixture({ out = path.join(REPO, 'tmp', 'demo-root'), sce
       codexHistory.push(...s.history)
       const children = []
       if (entry.rate) {
-        // one independent sub-agent rollout linked back through session_meta.source (see DATA-MODEL.md)
+        // one independent sub-agent rollout linked back through session_meta.source (see spec/DATA-MODEL.md)
         const childId = rng.uuid(7)
         const childEntry = { dur: 6, turns: 1, thread: false }
         const childCtx = { ...ctx, tasks: [{ prompt: 'Scan test/ for tests that use real timers (setTimeout without a fake clock) and list them.', title: 'Timer audit', reasoning: 'A grep over the test directory is enough here.', steps: [{ tool: 'shell', cmd: 'rg -n "setTimeout" test', out: 'test/webhooks.test.js:8:  await deliver({ url: \'https://example.com/hook\' }, { fetch: fetchStub, backoffMs: 50 })\ntest/jobs.test.js:22:  await new Promise((r) => setTimeout(r, 20))' }], reply: 'Two tests touch real timers: `test/webhooks.test.js` (indirectly, through `deliver()` back-off) and `test/jobs.test.js:22` (an explicit 20 ms sleep). The first is the flaky one; the second is harmless but could use a fake clock too.' }] }

@@ -109,7 +109,7 @@ function summarizeAgentFile(file, id) {
 }
 
 // Best-effort phase inference from an agent's first-line label. phase↔agent is
-// NOT persisted on disk (see DATA-MODEL.md) — this is a heuristic, surfaced as
+// NOT persisted on disk (see spec/DATA-MODEL.md) — this is a heuristic, surfaced as
 // "inferred" in the UI, that degrades to ungrouped when labels don't echo phases.
 const PHASE_SYN = {
   scope: ['scope', 'decompos', 'angle', 'plan'],

@@ -1,7 +1,7 @@
 # AgentDeck provider descriptor — Claude Code
-# Draft 2026-09-07: written from DATA-MODEL.md and server/providers/claude/*.
+# Draft 2026-09-07: written from spec/DATA-MODEL.md and server/providers/claude/*.
 # Not yet loaded by the server; a follow-up wires a test that the real parsers
-# agree with every path below (see PROVIDER-SPEC.md §"Descriptor layer").
+# agree with every path below (see spec/PROVIDER-SPEC.md §"Descriptor layer").
 spec: agentdeck/provider/v1
 id: claude
 label: Claude Code

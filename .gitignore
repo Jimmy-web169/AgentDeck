@@ -33,3 +33,6 @@ roots.codex.json
 
 # local research notes, handoffs, scratch — never committed (see CLAUDE.md)
 tmp/
+
+# maintainer working notes for Claude — local only, like .claude/ (see README for public docs)
+CLAUDE.md
