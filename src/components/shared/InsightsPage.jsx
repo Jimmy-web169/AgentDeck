@@ -490,11 +490,11 @@ export default function InsightsPage({ provider, root, rootLabel = '', providerL
         >
           <Heatmap grid={v.grid} />
         </Card>
-        <Card title="Hour of day" right={<span className="text-[11px] text-zinc-500">{hourPeak != null ? `peaks at ${hh(hourPeak)}` : 'no sessions yet'} · local time</span>}>
-          <Bars values={v.hours} labels={v.hours.map((_, h) => `${h}`)} titles={v.hours.map((n, h) => `${hh(h)} · ${plural(n, 'session')}`)} every={3} height={88} peak={hourPeak} />
+        <Card title="Hour of day" right={<span className="text-[11px] text-zinc-500">{hourPeak != null ? `peaks at ${hh(hourPeak)} · ${plural(v.hours[hourPeak], 'session')}` : 'no sessions yet'} · local time</span>}>
+          <Bars values={v.hours} labels={v.hours.map((_, h) => `${h}`)} titles={v.hours.map((n, h) => `${hh(h)} · ${plural(n, 'session')}`)} every={3} height={88} peak={hourPeak} showValues />
         </Card>
-        <Card title="Day of week" right={<span className="text-[11px] text-zinc-500">{dayPeak != null ? `peaks on ${WEEKDAYS_LONG[dayPeak]}s` : 'no sessions yet'}</span>}>
-          <Bars values={MON_FIRST.map((i) => v.weekdays[i] || 0)} labels={MON_FIRST.map((i) => WEEKDAYS[i])} titles={MON_FIRST.map((i) => `${WEEKDAYS_LONG[i]} · ${plural(v.weekdays[i] || 0, 'session')}`)} height={88} peak={dayPeak != null ? MON_FIRST.indexOf(dayPeak) : null} />
+        <Card title="Day of week" right={<span className="text-[11px] text-zinc-500">{dayPeak != null ? `peaks on ${WEEKDAYS_LONG[dayPeak]}s · ${plural(v.weekdays[dayPeak], 'session')}` : 'no sessions yet'}</span>}>
+          <Bars values={MON_FIRST.map((i) => v.weekdays[i] || 0)} labels={MON_FIRST.map((i) => WEEKDAYS[i])} titles={MON_FIRST.map((i) => `${WEEKDAYS_LONG[i]} · ${plural(v.weekdays[i] || 0, 'session')}`)} height={88} peak={dayPeak != null ? MON_FIRST.indexOf(dayPeak) : null} showValues />
         </Card>
       </div>
 
