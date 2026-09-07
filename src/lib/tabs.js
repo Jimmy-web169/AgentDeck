@@ -1,29 +1,49 @@
 // Tab model for the shell's Chrome-style tab strip.
 //
 // A tab = { key, target }. `target` says where the tab is:
-//   { provider, root, rootLabel, slug, id, title, project, cwd, draft }
-// Everything is optional. No provider → the "new tab page" (Dashboard). A
-// provider without a session shows that provider's app as it is. `draft` marks
-// a not-yet-saved "new conversation". Tabs persist in localStorage so a reload
-// (or a deep link) restores the working set.
+//   { provider, root, rootLabel, slug, id, title, project, cwd, draft, view }
+// Everything is optional. No provider → Home (the logo page: overview, stats,
+// history, memory, plugins, resources, folders — `view` picks the page and
+// `scope` = { provider, root } picks the folder for the per-folder pages).
+// A provider without a session shows that provider's app as it is. `draft`
+// marks a not-yet-saved "new conversation". `view` remembers which in-app tab
+// (conversation / sub-agents / raw / config) the tab was on, so switching back
+// lands where you left. Tabs persist in localStorage.
 
 export const TABS_KEY = 'agentdeck_tabs'
 export const RECENT_KEY = 'agentdeck_recent'
 const RECENT_MAX = 40
 
+export const HOME_VIEWS = [
+  { k: 'overview', label: 'Overview' },
+  { k: 'stats', label: 'Stats' },
+  { k: 'history', label: 'History' },
+  { k: 'memory', label: 'Memory' },
+  { k: 'plugins', label: 'Plugins' },
+  { k: 'resources', label: 'Resources' },
+  { k: 'folders', label: 'Folders' },
+]
+export const homeViewLabel = (k) => HOME_VIEWS.find((v) => v.k === k)?.label || ''
+
 export const newKey = () => Math.random().toString(36).slice(2, 10)
 
+// identity of a target — what "the same place" means for switch-to-tab and
+// dedupe. The in-app view is deliberately NOT part of it.
 export const targetKey = (t) =>
   t?.provider ? `${t.provider}|${t.root || ''}|${t.slug || ''}|${t.id || ''}${t.draft ? '|draft' : ''}` : ''
 
 export const sameTarget = (a, b) => targetKey(a) === targetKey(b)
-export const isEmpty = (t) => !t?.provider
+export const isHome = (t) => !t?.provider
+export const isEmpty = isHome
 
 export const emptyTab = (target = null) => ({ key: newKey(), target })
 
 // What the strip prints for a tab: a primary (project) and secondary (session) part.
 export function tabLabel(target, providers = []) {
-  if (!target?.provider) return { primary: 'New tab', secondary: '' }
+  if (!target?.provider) {
+    const v = target?.view && target.view !== 'overview' ? homeViewLabel(target.view) : ''
+    return { primary: 'Home', secondary: v }
+  }
   const providerLabel = providers.find((p) => p.id === target.provider)?.label || target.provider
   const project = target.project || ''
   if (target.draft) return { primary: project || target.title || providerLabel, secondary: target.title || 'New conversation' }
@@ -67,7 +87,8 @@ export function loadRecent() {
 export function pushRecent(target) {
   if (!target?.provider || target.draft || !target.id) return
   const k = targetKey(target)
-  const next = [{ ...target, at: Date.now() }, ...loadRecent().filter((t) => targetKey(t) !== k)].slice(0, RECENT_MAX)
+  const { view, ...rest } = target
+  const next = [{ ...rest, at: Date.now() }, ...loadRecent().filter((t) => targetKey(t) !== k)].slice(0, RECENT_MAX)
   try {
     localStorage.setItem(RECENT_KEY, JSON.stringify(next))
   } catch {}

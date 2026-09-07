@@ -2,17 +2,17 @@
 
 A local, provider-pluggable dashboard for **CLI coding agents**. Browse your
 historical sessions, watch live ones as they happen, drill into every tool call
-and sub-agent, see token/model stats, manage your config resources, and even
-continue a conversation — all from your browser, with a live switch between
-agents.
+and sub-agent, see token/model stats, manage your config resources, and
+continue any session in its real terminal — all from your browser, in
+Chrome-style tabs across agents.
 
 It ships with two providers — **Claude Code** and **OpenAI Codex** — and a clean
 seam for adding more. It runs entirely on your machine, reads the files each CLI
 already writes to disk (`~/.claude/projects/**`, `~/.codex/sessions/**`), and
 never sends your data anywhere.
 
-> **Status:** early. Read-only monitoring is solid; the "continue a conversation"
-> features need the relevant CLI installed.
+> **Status:** v2. Read-only monitoring is solid; continuing a session runs the
+> real CLI in an embedded terminal, so it needs that CLI installed.
 
 ## Features
 
@@ -29,8 +29,14 @@ Per provider, in one UI:
   servers, rules, and instructions, at both user and project scope; import skills
   via the official `skills` CLI.
 - **Usage** — 5-hour / weekly rate-limit meters and context-window usage.
-- **Continue a conversation** — pick up any session, via SDK chat (streaming,
-  per-provider permission/sandbox model) or an embedded terminal.
+- **Continue a conversation** — pick up any session in an embedded terminal
+  running the real CLI (tmux-backed, so it survives navigation and can be
+  attached from any shell). Closing the tab ends it.
+- **Home** — the logo page: running terminals, pinned items and recent projects
+  across providers, per-folder Stats / History / Memory / Plugins / Resources,
+  and tracked-folder management.
+- **Pins** — pin projects or sessions you're working on; they lead the sidebar,
+  the quick switcher and Home.
 - **Live updates** — the UI lights up the moment an agent writes to disk
   (file-watching + Server-Sent Events).
 - **Tabs** — a Chrome-style tab strip across providers and tracked folders:
@@ -41,8 +47,8 @@ Per provider, in one UI:
   provider or folder. → browses a project's sessions (title + first prompt, for
   the ones you don't remember by name), Enter opens its live or newest session,
   Ctrl+Enter opens it in a new tab.
-- **Provider switch** — flip between agents from a dropdown in the sidebar;
-  in-flight live conversations keep running while you switch.
+- **Provider switch** — the scope menu in the sidebar (provider · folder), the
+  tabs, or Ctrl+K; running terminals keep going while you switch.
 
 Provider-specific extras: Claude Code adds a memory view, plugins, and workflow
 runs; Codex adds sqlite-backed memory, plugins, and independent-rollout sub-agents.
@@ -66,13 +72,6 @@ switched live from the sidebar:
   <tr>
     <td colspan="2"><sub><b>Monitor</b> — every session, tool call and token count, updating live.</sub></td>
   </tr>
-  <tr>
-    <td><img src="demo/claude-continue-chat.png" alt="Continue a Claude Code conversation"></td>
-    <td><img src="demo/codex-continue-chat.png" alt="Continue an OpenAI Codex conversation"></td>
-  </tr>
-  <tr>
-    <td colspan="2"><sub><b>Continue a conversation</b> — SDK chat or an embedded terminal.</sub></td>
-  </tr>
 </table>
 
 **And more:**
@@ -95,10 +94,10 @@ everything else shared.
 
 ```
 server/
-  index.js            HTTP/WS/SSE host; routes /api/<provider>/… and /chat/<provider>
+  index.js            HTTP/SSE host; routes /api/<provider>/…
   registry.js         the provider registry { claude, codex }
   shared/             cross-provider code: roots, dispatch, terminal pool, skills, origin, launch
-  providers/<id>/     a provider's data layer: paths, parser, resources, chat, + config
+  providers/<id>/     a provider's data layer: paths, parser, resources, + config
 src/
   App.jsx             shell: tab strip + quick switcher; the active tab picks the provider app (apps stay mounted)
   api.js              provider-aware client
@@ -107,14 +106,14 @@ src/
   components/<id>/    a provider's specific components
 ```
 
-- **Backend** — one server routes `/api/<provider>/…` and `/chat/<provider>` to the
-  provider selected from `registry.js`. Cross-cutting code (tracked-roots
+- **Backend** — one server routes `/api/<provider>/…` to the provider selected
+  from `registry.js`. Cross-cutting code (tracked-roots
   management, dispatch, the terminal pool (ttyd; a built-in node-pty web
   terminal on native Windows), the skills runner, the origin
   guard, app launching) lives in `server/shared/`; only data-layout-specific code
   (paths, parsing, resources) lives per provider.
 - **Frontend** — a thin shell renders both provider apps and switches by toggling
-  visibility, so each app's live-chat store and WebSockets survive a switch.
+  visibility, so each app's terminals and live streams survive a tab switch.
   Tabs (`src/lib/tabs.js`) hold a `{ provider, root, slug, id }` target; the
   shell steers an app to a target via `pendingOpen`, and apps report user
   navigation back via `onNavigate` so the active tab follows.
@@ -135,7 +134,7 @@ changes needed).
 - For read-only monitoring: nothing else — just point it at `~/.claude` / `~/.codex`.
 - To **continue a conversation**: the relevant CLI installed and logged in
   (`claude` and/or `codex`).
-- For **Terminal mode**: [`ttyd`](https://github.com/tsl0922/ttyd) (`brew install
+- For the **embedded terminal**: [`ttyd`](https://github.com/tsl0922/ttyd) (`brew install
   ttyd` on macOS; your package manager on WSL/Linux). On **native Windows** ttyd
   is not used (its current release crashes at spawn —
   [tsl0922/ttyd#1292](https://github.com/tsl0922/ttyd/issues/1292)); the browser
@@ -145,15 +144,10 @@ changes needed).
 
 ### Supported versions
 
-AgentDeck drives each agent through its **official SDK** (pinned in
-`package.json`), while read-only monitoring parses the on-disk session formats
-and tolerates a wide range of CLI versions. The **Terminal** mode always runs
-whatever `claude` / `codex` you have installed — the dashboard shows the CLI
-version observed in your most recent session, so nothing is hardcoded.
-
-Newer CLI releases usually keep working. If a "continue" feature breaks after a
-CLI update, bump the matching SDK in `package.json` (`npm install
-@anthropic-ai/claude-agent-sdk@latest` / `@openai/codex-sdk@latest`).
+Read-only monitoring parses the on-disk session formats and tolerates a wide
+range of CLI versions. Continuing a session always runs whatever `claude` /
+`codex` you have installed in the embedded terminal — the dashboard shows the
+CLI version observed in your most recent session, so nothing is hardcoded.
 
 ## Quick start
 

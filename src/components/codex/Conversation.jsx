@@ -52,54 +52,11 @@ function SystemMsg({ ev }) {
   )
 }
 
-// ---- live (in-flight) items, streamed in via the /chat WebSocket ----
-function LiveItem({ it }) {
-  if (it.kind === 'user') return <UserMsg ev={{ text: it.text }} />
-  if (it.kind === 'thinking') {
-    return (
-      <div className="flex gap-3">
-        <div className="mt-1 shrink-0 w-7 h-7 rounded-full bg-ink-600 border border-emerald-600/50 flex items-center justify-center text-emerald-300">
-          <BotIcon className="w-4 h-4" />
-        </div>
-        <div className="min-w-0 flex-1">{it.text ? <Thinking text={it.text} label="reasoning" /> : <span className="text-zinc-600 text-sm">▍</span>}</div>
-      </div>
-    )
-  }
-  if (it.kind === 'message') {
-    return (
-      <div className="flex gap-3">
-        <div className="mt-1 shrink-0 w-7 h-7 rounded-full bg-ink-600 border border-emerald-600/50 flex items-center justify-center text-emerald-300">
-          <BotIcon className="w-4 h-4" />
-        </div>
-        <div className="min-w-0 flex-1">{it.text ? <Markdown>{it.text}</Markdown> : <span className="text-zinc-600 text-sm">▍</span>}</div>
-      </div>
-    )
-  }
-  if (it.kind === 'tool') {
-    const running = it.status && it.status !== 'completed' && it.status !== 'failed'
-    return (
-      <div className={`ml-10 min-w-0 max-w-full overflow-hidden rounded-lg border ${it.isError ? 'border-red-500/40' : 'border-zinc-700/70'} bg-ink-700/50 px-3 py-1.5 text-[12px]`}>
-        <div className="flex gap-2 min-w-0 items-center">
-          <span className="text-emerald-300 font-mono shrink-0">{it.name}</span>
-          <span className="text-zinc-500 font-mono min-w-0 break-all line-clamp-2">{(typeof it.input === 'object' ? JSON.stringify(it.input) : String(it.input || '')).slice(0, 200)}</span>
-          {running && <span className="ml-auto shrink-0 text-amber-300/80">running…</span>}
-          {it.exitCode != null && <span className={`ml-auto shrink-0 ${it.isError ? 'text-red-300' : 'text-zinc-500'}`}>exit {it.exitCode}</span>}
-        </div>
-        {it.result != null && it.result !== '' && <pre className="mt-1 text-[11px] text-zinc-400 whitespace-pre-wrap break-all max-h-40 overflow-auto">{String(it.result).slice(0, 2000)}</pre>}
-      </div>
-    )
-  }
-  if (it.kind === 'error') {
-    return <div className="ml-10 text-[12px] text-red-300 bg-red-500/10 border border-red-500/30 rounded px-3 py-2">⚠ {it.text}</div>
-  }
-  return null
-}
-
 // Mounting a long transcript parses + highlights every message synchronously;
 // render only the tail by default so returning to a conversation stays instant.
 const INITIAL_TAIL = 40
 
-function Conversation({ data, live, onOpenSession }) {
+function Conversation({ data, onOpenSession }) {
   const { summary, timeline } = data
   const children = data.children || []
   const [startIdx, setStartIdx] = useState(() => Math.max(0, timeline.length - INITIAL_TAIL))
@@ -155,10 +112,7 @@ function Conversation({ data, live, onOpenSession }) {
           if (ev.kind === 'system') return <SystemMsg key={k} ev={ev} />
           return null
         })}
-        {timeline.length === 0 && !(live && live.items.length) && (
-          <div className="text-center text-zinc-600 py-10">No renderable events in this session.</div>
-        )}
-        {live && live.items.map((it, i) => <LiveItem key={it.id || `live-${i}`} it={it} />)}
+        {timeline.length === 0 && <div className="text-center text-zinc-600 py-10">No renderable events in this session.</div>}
       </div>
     </div>
   )

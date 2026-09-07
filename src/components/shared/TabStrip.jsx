@@ -5,6 +5,7 @@ import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { ActivityIcon } from './icons.jsx'
 import { CloseIcon, PlusIcon, SearchIcon } from './shellIcons.jsx'
 import { ShortcutList } from './ShortcutHints.jsx'
+import ThemeToggle from './ThemeToggle.jsx'
 
 // Chrome-style tab strip. Purely presentational: the shell owns the tab list.
 //  - click = activate, middle-click / × / Alt+W = close, drag = reorder,
@@ -188,6 +189,7 @@ export default function TabStrip({
         <span className="hidden md:inline">Search…</span>
         <kbd className="hidden md:inline text-[10px] px-1 py-px rounded bg-ink-700 text-zinc-500 border border-zinc-800">Ctrl K</kbd>
       </button>
+      <ThemeToggle compact className="shrink-0 self-center mr-1" />
       <button
         onClick={() => setHelp((h) => !h)}
         onMouseDown={(e) => e.stopPropagation()}

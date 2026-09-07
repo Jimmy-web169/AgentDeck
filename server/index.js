@@ -236,17 +236,6 @@ server.listen(PORT, '127.0.0.1', () => {
   void startWatchers()
 })
 
-// Route /chat/<provider> WebSocket upgrades to each provider's noServer wss, so
-// multiple chat engines coexist on one server. Origin is checked here.
-server.on('upgrade', (req, socket, head) => {
-  if (!isAllowedOrigin(req.headers.origin, req.headers.host)) return socket.destroy()
-  const u = new URL(req.url, 'http://localhost')
-  const m = u.pathname.match(/^\/chat\/([a-z0-9-]+)$/)
-  const p = m && PROVIDERS[m[1]]
-  if (!p?.chatWss) return socket.destroy()
-  p.chatWss.handleUpgrade(req, socket, head, (ws) => p.chatWss.emit('connection', ws, req))
-})
-
 process.on('exit', () => stopAllTerminals())
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {

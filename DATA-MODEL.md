@@ -48,5 +48,5 @@ handling (and any traversal guard) inside the provider.
 ## Writes
 
 The only writes are user-initiated config edits (create/edit/delete a resource,
-send a chat message) at a chosen scope. Resource deletes go to the OS trash
+open a terminal) at a chosen scope. Resource deletes go to the OS trash
 (recoverable). The server is localhost-only and never touches credentials.

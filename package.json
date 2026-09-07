@@ -1,6 +1,6 @@
 {
   "name": "agentdeck",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "A local, provider-pluggable dashboard for CLI coding agents (Claude Code, OpenAI Codex, and more) — one UI, switch providers live.",
   "type": "module",
   "scripts": {
@@ -16,9 +16,7 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.161",
     "@lydell/node-pty": "^1.2.0-beta.12",
-    "@openai/codex-sdk": "^0.137.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "chokidar": "^5.0.0",

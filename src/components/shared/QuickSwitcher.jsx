@@ -2,9 +2,10 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { highlightChunks, matchFields } from '../../lib/fuzzy.js'
 import { fmtRelative } from '../../lib/format.js'
 import { targetKey } from '../../lib/tabs.js'
+import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import { providerColor } from '../../lib/providerColors.js'
 import { liveProjectKey, liveSessionKey } from '../../lib/useLiveKeys.js'
-import { ChevronRightIcon, PlusIcon, SearchIcon } from './shellIcons.jsx'
+import { ChevronRightIcon, PinIcon, PlusIcon, SearchIcon } from './shellIcons.jsx'
 
 // Quick switcher (Ctrl+K): jump to any project or session across every
 // provider and tracked folder without touching the sidebar.
@@ -17,6 +18,7 @@ import { ChevronRightIcon, PlusIcon, SearchIcon } from './shellIcons.jsx'
 //               came from with your query restored.
 //   Enter       opens (a project → its live or newest session)
 //   Ctrl+Enter  opens in a new tab
+//   pin         every row has a pin toggle; pinned items lead the empty query
 //
 // Motion: the panel pops in/out, levels slide sideways, the highlight glides
 // between rows (one absolutely positioned cursor, not per-row backgrounds).
@@ -60,7 +62,16 @@ const projectTarget = (p) => ({
   lastActivity: p.lastActivity,
 })
 
-function buildGroups({ q, level, index, recent, live, openTabs, providers }) {
+// the pin identity of a row (a project pins the project, a session the session)
+export function pinTargetOf(row) {
+  const t = row?.target
+  if (!t) return null
+  if (row.kind === 'project') return { provider: t.provider, root: t.root, rootLabel: t.rootLabel, slug: t.slug, cwd: t.cwd, project: t.name }
+  if (row.kind === 'session') return { provider: t.provider, root: t.root, rootLabel: t.rootLabel, slug: t.slug, id: t.id, title: t.title, project: t.project, cwd: t.cwd }
+  return null
+}
+
+function buildGroups({ q, level, index, recent, pins, live, openTabs, providers }) {
   const isLiveS = (t) => live.ids.has(liveSessionKey(t.provider, t.root, t.id))
   const isLiveP = (p) => live.slugs.has(liveProjectKey(p.provider, p.root, p.slug))
   const plabel = (id) => providers.find((p) => p.id === id)?.label || id
@@ -88,6 +99,12 @@ function buildGroups({ q, level, index, recent, live, openTabs, providers }) {
     oversized: !!s.oversized,
     hits,
   })
+  const findProject = (t) => index.projects.find((p) => p.provider === t.provider && p.root === t.root && p.slug === t.slug)
+  const pinProjRow = (p) => {
+    const hit = findProject(p)
+    if (hit) return projRow(hit)
+    return { kind: 'project', key: `p|${p.provider}|${p.root}|${p.slug}`, target: { provider: p.provider, root: p.root, rootLabel: p.rootLabel, slug: p.slug, cwd: p.cwd, name: p.project || p.slug, providerLabel: plabel(p.provider) }, primary: p.project || p.slug, secondary: `${plabel(p.provider)} · ${p.rootLabel || ''}`, meta: '' }
+  }
   const groups = []
 
   if (level) {
@@ -112,8 +129,15 @@ function buildGroups({ q, level, index, recent, live, openTabs, providers }) {
   }
 
   if (!q) {
+    const pinned = pins.map((p) => (p.id ? sessRow(p, null, p.project, null) : pinProjRow(p)))
+    if (pinned.length) groups.push({ title: 'Pinned', rows: pinned })
+    const pinnedKeys = new Set(pinned.map((r) => r.key))
     // recent = sessions only (projects have their own list right below)
-    const rec = recent.filter((t) => t.id).slice(0, RECENT_ROWS).map((t) => sessRow(t, null, t.project, t.at))
+    const rec = recent
+      .filter((t) => t.id)
+      .map((t) => sessRow(t, null, t.project, t.at))
+      .filter((r) => !pinnedKeys.has(r.key))
+      .slice(0, RECENT_ROWS)
     if (rec.length) groups.push({ title: 'Recent sessions', rows: rec })
     const projs = index.projects.slice(0, RECENT_PROJECT_ROWS)
     if (projs.length) groups.push({ title: 'Projects', rows: projs.map((p) => projRow(p)) })
@@ -154,6 +178,7 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, onP
   const [sel, setSel] = useState(0)
   const [busy, setBusy] = useState(false)
   const [cursor, setCursor] = useState({ top: 0, height: 0, visible: false })
+  const pins = usePins()
   const inputRef = useRef(null)
   const listRef = useRef(null)
   const rowEls = useRef([])
@@ -169,9 +194,9 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, onP
 
   const q = query.trim()
   const groups = useMemo(
-    () => buildGroups({ q, level, index, recent, live, openTabs, providers }),
+    () => buildGroups({ q, level, index, recent, pins, live, openTabs, providers }),
     // index is a fresh object whenever the shell re-renders (a session list landed)
-    [q, level, index, recent, live, openTabs, providers]
+    [q, level, index, recent, pins, live, openTabs, providers]
   )
   const flat = useMemo(() => groups.flatMap((g) => g.rows).filter((r) => r.kind !== 'loading' && r.kind !== 'empty'), [groups])
   const flatKeys = flat.map((r) => r.key).join('|')
@@ -330,6 +355,8 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, onP
                   const selected = i === sel
                   const color = providerColor(providers, row.target?.provider)
                   const dot = row.live ? 'bg-emerald-400 animate-pulse' : color.dot
+                  const pinT = pinTargetOf(row)
+                  const pinned = pinT ? isPinned(pinT) : false
                   return (
                     <div
                       key={row.key}
@@ -352,6 +379,7 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, onP
                       <div className="min-w-0 flex-1">
                         <div className={`flex items-center gap-2 text-[13px] truncate ${row.kind === 'new' ? 'text-emerald-300' : 'text-zinc-100'}`}>
                           <Hl text={row.primary} hits={row.hits?.title || row.hits?.name} className="truncate" />
+                          {pinned && <PinIcon className="w-3 h-3 text-amber-300 shrink-0" filled />}
                           {row.oversized && <span className="text-amber-400 text-[11px] shrink-0" title="Transcript exceeds the parse limit">⚠</span>}
                           {row.open && <span className="shrink-0 text-[9.5px] uppercase tracking-wide px-1 py-px rounded border border-sky-500/40 text-sky-300">open</span>}
                           {row.live && <span className="shrink-0 text-[9.5px] uppercase tracking-wide text-emerald-300">live</span>}
@@ -369,6 +397,18 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, onP
                         </span>
                       )}
                       {row.meta && <span className="shrink-0 w-[62px] text-right text-[11px] text-zinc-600">{row.meta}</span>}
+                      {pinT && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            togglePin(pinT)
+                          }}
+                          title={pinned ? 'Unpin' : 'Pin'}
+                          className={`shrink-0 w-6 h-6 rounded flex items-center justify-center hover:bg-ink-600 ${pinned ? 'text-amber-300' : 'text-zinc-500 hover:text-zinc-100'} ${selected || pinned ? '' : 'opacity-40'}`}
+                        >
+                          <PinIcon className="w-3.5 h-3.5" filled={pinned} />
+                        </button>
+                      )}
                       {row.kind === 'project' && !level && (
                         <button
                           onClick={(e) => {

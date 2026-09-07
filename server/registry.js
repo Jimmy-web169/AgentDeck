@@ -1,7 +1,6 @@
 import path from 'node:path'
 // codex provider
 import { dispatch as codexDispatch } from './providers/codex/api.js'
-import { makeChatWss as codexMakeChatWss } from './providers/codex/chat.js'
 import {
   loadRoots as codexLoadRoots,
   sessionsDir as codexSessionsDir,
@@ -12,12 +11,10 @@ import {
 } from './providers/codex/paths.js'
 // claude provider
 import { dispatch as claudeDispatch } from './providers/claude/api.js'
-import { makeChatWss as claudeMakeChatWss } from './providers/claude/chat.js'
 import { loadRoots as claudeLoadRoots, projectsDir as claudeProjectsDir } from './providers/claude/paths.js'
 
 // Provider registry. Each provider supplies:
 //   dispatch(method, '/api/<rest>', query, body) -> { status, body }
-//   chatWss        — a noServer WebSocketServer; index.js routes /chat/<id> upgrades to it
 //   loadRoots()    — its tracked roots (per-provider roots.<id>.json)
 //   watch: { watchDir(rootDir), toEvent(rootId, rootDir, absPath) -> change|null }
 //
@@ -29,7 +26,6 @@ export const PROVIDERS = {
   claude: {
     id: 'claude',
     dispatch: claudeDispatch,
-    chatWss: claudeMakeChatWss(),
     loadRoots: claudeLoadRoots,
     watch: {
       watchDir: (rootDir) => claudeProjectsDir(rootDir),
@@ -50,7 +46,6 @@ export const PROVIDERS = {
   codex: {
     id: 'codex',
     dispatch: codexDispatch,
-    chatWss: codexMakeChatWss(),
     loadRoots: codexLoadRoots,
     watch: {
       watchDir: (rootDir) => codexSessionsDir(rootDir),

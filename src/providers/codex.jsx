@@ -9,6 +9,7 @@ import PluginsView from '../components/codex/PluginsView.jsx'
 import SkillImport from '../components/codex/SkillImport.jsx'
 import RateLimitsBar from '../components/codex/RateLimitsBar.jsx'
 import App from '../CodexApp.jsx'
+import { HOME_PAGES } from '../components/codex/HomePages.jsx'
 
 export default {
   id: 'codex',
@@ -40,15 +41,8 @@ export default {
     { k: 'raw', need: 'session', label: 'Raw' },
     { k: 'config', need: 'project', label: 'Config' },
   ],
-  // folder(user)-scoped views (from App.jsx GLOBAL_VIEWS)
-  globalViews: ['stats', 'history', 'memory', 'plugins', 'resources'],
-  // sandbox / approval policies (from ChatComposer MODES)
-  chatModes: [
-    { v: 'read-only', label: 'Read-only (safe)' },
-    { v: 'auto', label: 'Auto (workspace-write)' },
-    { v: 'full-access', label: 'Full access (danger)' },
-  ],
-  defaultChatMode: 'auto',
+  // home-scoped pages rendered by Home (stats, history, memory, plugins, resources)
+  homePages: HOME_PAGES,
   rateLimit: {
     windows: [
       { key: 'primary', pct: 'used_percent', reset: 'resets_at', window: 'window_minutes' },
@@ -57,10 +51,7 @@ export default {
   },
   contextMeter: { strategy: 'transcript' },
   capabilities: {
-    permissions: false,
-    askQuestion: false,
     subagentModel: 'independent-sessions',
-    liveStream: 'item',
     skillAgentFlag: 'codex',
     inlineContextMeter: true,
   },

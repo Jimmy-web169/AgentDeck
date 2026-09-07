@@ -1,6 +1,5 @@
 import Conversation from '../components/claude/Conversation.jsx'
 import ToolCall from '../components/claude/ToolCall.jsx'
-import AskQuestionForm from '../components/claude/AskQuestionForm.jsx'
 import Resources from '../components/claude/Resources.jsx'
 import NewResourceForm from '../components/claude/NewResourceForm.jsx'
 import SubagentsView from '../components/claude/SubagentsView.jsx'
@@ -9,6 +8,7 @@ import PluginsView from '../components/claude/PluginsView.jsx'
 import SkillImport from '../components/claude/SkillImport.jsx'
 import RateLimitsBar from '../components/claude/RateLimitsBar.jsx'
 import App from '../ClaudeApp.jsx'
+import { HOME_PAGES } from '../components/claude/HomePages.jsx'
 
 export default {
   id: 'claude',
@@ -41,23 +41,10 @@ export default {
     { k: 'conversation', need: 'session', label: 'Conversation' },
     { k: 'subagents', need: 'subagents', label: 'Sub-agents' },
     { k: 'raw', need: 'session', label: 'Raw' },
-    { k: 'memory', need: 'project', label: 'Memory' },
     { k: 'config', need: 'project', label: 'Config' },
   ],
-  // Folder(root)-scoped views — reached from the sidebar.
-  globalViews: [
-    { k: 'stats', label: 'Stats' },
-    { k: 'resources', label: 'Resources' },
-    { k: 'history', label: 'History' },
-    { k: 'plugins', label: 'Plugins' },
-  ],
-  chatModes: [
-    { v: 'acceptEdits', label: 'Auto-accept edits' },
-    { v: 'default', label: 'Ask me per tool' },
-    { v: 'plan', label: 'Plan (no actions)' },
-    { v: 'bypass', label: 'Bypass (danger)' },
-  ],
-  defaultChatMode: 'acceptEdits',
+  // Folder-scoped pages rendered by Home (stats, history, memory, plugins, resources)
+  homePages: HOME_PAGES,
   rateLimit: {
     windows: [
       { key: 'five_hour', label: '5h', pct: 'used_percentage', reset: 'resets_at' },
@@ -66,10 +53,7 @@ export default {
   },
   contextMeter: { strategy: 'usage-bridge' },
   capabilities: {
-    permissions: true,
-    askQuestion: true,
     subagentModel: 'nested',
-    liveStream: 'delta',
     skillAgentFlag: 'claude-code',
     inlineContextMeter: false,
   },
@@ -77,7 +61,6 @@ export default {
   components: {
     Conversation,
     ToolCall,
-    AskQuestionForm,
     Resources,
     NewResourceForm,
     SubagentsView,

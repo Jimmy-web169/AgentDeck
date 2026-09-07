@@ -1,48 +1,54 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import Dashboard from './components/shared/Dashboard.jsx'
+import HomeView from './components/shared/HomeView.jsx'
 import TabStrip from './components/shared/TabStrip.jsx'
 import QuickSwitcher from './components/shared/QuickSwitcher.jsx'
 import { PROVIDER_LIST } from './providers/index.js'
-import { emptyTab, forgetRecent, isEmpty, loadRecent, loadTabs, pushRecent, sameTarget, saveTabs, targetKey } from './lib/tabs.js'
+import { emptyTab, forgetRecent, isHome, loadRecent, loadTabs, pushRecent, sameTarget, saveTabs, targetKey } from './lib/tabs.js'
+import { forgetPins } from './lib/pins.js'
 import { currentHash, fromHash, replaceHash, toHash } from './lib/route.js'
 import useLiveKeys from './lib/useLiveKeys.js'
 import useNavIndex from './lib/useNavIndex.js'
 
-// Shell: a Chrome-style tab strip over every provider's app.
+// Shell: a Chrome-style tab strip over Home and every provider's app.
 //
-// Each tab holds a target { provider, root, slug, id, … } (see lib/tabs.js).
-// The active tab decides which provider app is visible; the apps stay mounted
-// at all times (their live-chat stores + sockets survive a switch), so a tab
-// switch is instant. An empty tab shows the Dashboard, Chrome's new-tab page.
+// Each tab holds a target (see lib/tabs.js). A target with a provider shows
+// that provider's app; without one it shows Home (overview / stats / history /
+// memory / plugins / resources / folders — `view` + `scope` say which). The
+// apps stay mounted at all times (their terminals + sockets survive a switch),
+// so a tab switch is instant.
 //
 // Two directions of sync with the apps:
 //   shell → app   `pendingOpen`: "show this target" (tab switch, quick switcher,
-//                 dashboard, deep link). The app walks root → project → session
-//                 and calls onConsumedPending when it's there.
-//   app → shell   `onNavigate`: "I'm now showing this" (sidebar click, live-log
-//                 jump). The active tab follows, like a link click navigating
-//                 the current Chrome tab. Ctrl/middle-click asks for a new tab.
+//                 Home, deep link). The app walks root → project → session →
+//                 view and calls onConsumedPending when it's there.
+//   app → shell   `onNavigate`: "I'm now showing this" (sidebar click, view
+//                 change, new conversation). The active tab follows, like a
+//                 link click navigating the current Chrome tab. Ctrl/middle-
+//                 click asks for a new tab.
+//
+// Closing a tab ends the terminal(s) running for its session, so a tmux
+// session never outlives the tab you were driving it from.
 //
 // Adding a provider = add `src/providers/<id>.jsx` and one line in
 // `src/providers/index.js`. This shell needs no change.
 
 const PROVIDER_IDS = PROVIDER_LIST.map((p) => p.id)
 const identity = (t) => `${t?.root || ''}|${t?.slug || ''}|${t?.id || ''}|${t?.draft ? 'd' : ''}`
+const HOME = { provider: null, view: 'overview' }
 
 function initialState() {
   const saved = loadTabs()
   let tabs = saved?.tabs || []
   let activeKey = saved?.activeKey || null
   if (!tabs.length) {
-    const prov = localStorage.getItem('agentdeck_provider')
-    tabs = [emptyTab({ provider: PROVIDER_IDS.includes(prov) ? prov : PROVIDER_IDS[0] })]
+    tabs = [emptyTab(HOME)]
     activeKey = tabs[0].key
   }
   // a deep link opens (or focuses) its own tab
   const linked = fromHash(currentHash(), PROVIDER_IDS)
   if (linked) {
-    const target = linked.provider ? linked : null
-    const existing = tabs.find((t) => sameTarget(t.target, target))
+    const target = linked.provider ? linked : { ...HOME, view: linked.view || 'overview' }
+    const existing = target.provider ? tabs.find((t) => sameTarget(t.target, target)) : tabs.find((t) => isHome(t.target) && (t.target?.view || 'overview') === target.view)
     if (existing) activeKey = existing.key
     else {
       const t = emptyTab(target)
@@ -51,6 +57,30 @@ function initialState() {
     }
   }
   return { tabs, activeKey }
+}
+
+// End every terminal that belongs to a session / draft target (called when its
+// tab closes). Both the ttyd pool and the detached tmux list are consulted so
+// a terminal that outlived a server restart is ended too.
+async function endTerminalsFor(t) {
+  if (!t?.provider || !t.root || !(t.id || t.draft)) return
+  try {
+    const [live, pool] = await Promise.all([
+      fetch(`/api/${t.provider}/active-sessions`).then((r) => r.json()).catch(() => ({})),
+      fetch(`/api/${t.provider}/terminals`).then((r) => r.json()).catch(() => ({})),
+    ])
+    const entries = [...(live?.tmux || []).filter((x) => !x.provider || x.provider === t.provider), ...(pool?.terminals || [])]
+    const hit = (x) => {
+      if (x.root !== t.root) return false
+      if (t.id) return x.id === t.id
+      if (x.id) return false
+      return (t.slug && x.slug === t.slug) || (t.cwd && x.cwd === t.cwd)
+    }
+    const keys = [...new Set(entries.filter(hit).map((x) => x.key).filter(Boolean))]
+    await Promise.all(keys.map((k) => fetch(`/api/${t.provider}/terminal?key=${encodeURIComponent(k)}`, { method: 'DELETE' }).catch(() => {})))
+  } catch {
+    // best effort
+  }
 }
 
 export default function App() {
@@ -80,15 +110,12 @@ export default function App() {
   const activeTab = tabs.find((t) => t.key === activeKey) || tabs[0]
   const activeTarget = activeTab?.target || null
 
-  // ---- cross-provider index (quick switcher) + live dots ----
+  // ---- cross-provider index (quick switcher, scope menus, Home) + live dots ----
   const index = useNavIndex(PROVIDER_LIST)
   const live = useLiveKeys({ onChange: index.invalidate })
 
   // ---- persistence + deep link ----
   useEffect(() => saveTabs(tabs, activeKey), [tabs, activeKey])
-  useEffect(() => {
-    if (activeTarget?.provider) localStorage.setItem('agentdeck_provider', activeTarget.provider)
-  }, [activeTarget?.provider])
   useEffect(() => replaceHash(toHash(activeTarget)), [activeTarget])
   // the shell issues the very first "show this" for a restored / linked tab
   useEffect(() => {
@@ -102,11 +129,11 @@ export default function App() {
   // the app and is never stored in the tab.
   const openTarget = useCallback((target, { newTab = false } = {}) => {
     const cur = stateRef.current
-    const stored = target ? { ...target, newConversation: undefined } : null
+    const stored = target ? { ...target, newConversation: undefined, kind: undefined } : { ...HOME }
     const existing = target?.provider && target.id ? cur.tabs.find((t) => sameTarget(t.target, target)) : null
     if (existing) {
       commit({ ...cur, activeKey: existing.key })
-      issuePending(existing.target)
+      issuePending({ ...existing.target, view: target.view || existing.target.view })
       return
     }
     if (newTab || !cur.tabs.length) {
@@ -119,7 +146,17 @@ export default function App() {
       commit({ ...cur, tabs: cur.tabs.map((t) => (t.key === cur.activeKey ? { ...t, target: stored } : t)) })
     }
     issuePending(target)
-    if (target) pushRecent(target)
+    if (target?.provider) pushRecent(target)
+  }, [])
+
+  // Home: navigate the current tab to a Home page (view / scope / focus)
+  const openHome = useCallback((patch = {}) => openTarget({ ...HOME, ...patch }), [openTarget])
+  // a Home tab changes page / scope in place
+  const updateHome = useCallback((patch) => {
+    const cur = stateRef.current
+    const tab = cur.tabs.find((t) => t.key === cur.activeKey)
+    if (!tab || !isHome(tab.target)) return
+    commit({ ...cur, tabs: cur.tabs.map((t) => (t.key === tab.key ? { ...t, target: { ...HOME, ...(t.target || {}), ...patch } } : t)) })
   }, [])
 
   const activateTab = useCallback((key) => {
@@ -134,23 +171,29 @@ export default function App() {
     const cur = stateRef.current
     const idx = cur.tabs.findIndex((t) => t.key === key)
     if (idx === -1) return
+    const closing = cur.tabs[idx]
     let tabs = cur.tabs.filter((t) => t.key !== key)
     let activeKey = cur.activeKey
-    if (!tabs.length) tabs = [emptyTab(null)]
+    if (!tabs.length) tabs = [emptyTab({ ...HOME })]
     if (key === cur.activeKey) {
       const nxt = tabs[Math.min(idx, tabs.length - 1)]
       activeKey = nxt.key
       issuePending(nxt.target)
     }
     commit({ tabs, activeKey })
+    // the terminal(s) driven from this tab end with it — unless another tab
+    // still shows the same session
+    if (closing.target?.provider && !tabs.some((t) => sameTarget(t.target, closing.target))) endTerminalsFor(closing.target)
   }, [])
 
   const closeOthers = useCallback((key) => {
     const cur = stateRef.current
     const keep = cur.tabs.find((t) => t.key === key)
     if (!keep) return
+    const gone = cur.tabs.filter((t) => t.key !== key)
     commit({ tabs: [keep], activeKey: key })
     if (cur.activeKey !== key) issuePending(keep.target)
+    for (const t of gone) if (t.target?.provider && !sameTarget(t.target, keep.target)) endTerminalsFor(t.target)
   }, [])
 
   const closeRight = useCallback((key) => {
@@ -158,12 +201,14 @@ export default function App() {
     const idx = cur.tabs.findIndex((t) => t.key === key)
     if (idx === -1) return
     const tabs = cur.tabs.slice(0, idx + 1)
+    const gone = cur.tabs.slice(idx + 1)
     let activeKey = cur.activeKey
     if (!tabs.some((t) => t.key === activeKey)) {
       activeKey = key
       issuePending(tabs[idx].target)
     }
     commit({ tabs, activeKey })
+    for (const t of gone) if (t.target?.provider && !tabs.some((k) => sameTarget(k.target, t.target))) endTerminalsFor(t.target)
   }, [])
 
   const moveTab = useCallback((key, toIdx) => {
@@ -181,16 +226,14 @@ export default function App() {
     setSearchOpen(true)
   }, [openTarget])
 
-  const goHome = useCallback(() => openTarget(null), [openTarget])
-
   const copyLink = useCallback((key) => {
     const tab = stateRef.current.tabs.find((t) => t.key === key)
-    if (!tab?.target?.provider) return
+    if (!tab?.target) return
     const url = `${location.origin}${location.pathname}${toHash(tab.target)}`
     navigator.clipboard?.writeText(url).catch(() => {})
   }, [])
 
-  // an app reports where it is now (user navigation inside it)
+  // an app reports where it is now (user navigation inside it, incl. its view)
   const onNavigate = useCallback((providerId, target, { newTab = false } = {}) => {
     const full = { provider: providerId, ...target }
     if (newTab) return openTarget(full, { newTab: true })
@@ -198,8 +241,7 @@ export default function App() {
     const tab = cur.tabs.find((t) => t.key === cur.activeKey)
     if (!tab) return
     // only the visible app may drive the active tab
-    if (tab.target?.provider && tab.target.provider !== providerId) return
-    if (!tab.target?.provider && !tab.target) return
+    if (!tab.target?.provider || tab.target.provider !== providerId) return
     // while the shell is still steering this app somewhere else, ignore
     // intermediate reports (they'd overwrite the tab with a stale location)
     const pend = pendingRef.current
@@ -210,19 +252,13 @@ export default function App() {
     // points at a session in that same place (an app re-initialising, e.g. a
     // dev hot-reload, reports its empty state before it re-selects)
     if (!next.id && !next.draft && prev.id && prev.root === next.root && (!next.slug || next.slug === prev.slug)) return
-    if (sameTarget(prev, next) && prev.title === next.title && prev.project === next.project && prev.rootLabel === next.rootLabel) return
+    if (sameTarget(prev, next) && prev.title === next.title && prev.project === next.project && prev.rootLabel === next.rootLabel && prev.view === next.view) return
     commit({ ...cur, tabs: cur.tabs.map((t) => (t.key === tab.key ? { ...t, target: next } : t)) })
     pushRecent(next)
   }, [openTarget])
 
-  // the sidebar's provider dropdown: show that provider's app as it is
-  const switchProvider = useCallback((providerId) => {
-    const cur = stateRef.current
-    const tab = cur.tabs.find((t) => t.key === cur.activeKey)
-    if (!tab || tab.target?.provider === providerId) return
-    commit({ ...cur, tabs: cur.tabs.map((t) => (t.key === tab.key ? { ...t, target: { provider: providerId } } : t)) })
-    issuePending(null)
-  }, [])
+  // the sidebar's scope menu: show another provider / folder in this tab
+  const onScope = useCallback((scope) => openTarget({ provider: scope.provider, root: scope.root }), [openTarget])
 
   // a session was trashed: tabs showing it fall back to its project
   const onSessionRemoved = useCallback((providerId, { root, slug, id }) => {
@@ -232,6 +268,7 @@ export default function App() {
       commit({ ...cur, tabs: cur.tabs.map((t) => (hit(t.target) ? { ...t, target: { ...t.target, id: null, title: null, slug: t.target.slug || slug || null } } : t)) })
     }
     forgetRecent(hit)
+    forgetPins(hit)
     setRecent(loadRecent())
   }, [])
 
@@ -240,15 +277,15 @@ export default function App() {
     const onHash = () => {
       const t = fromHash(location.hash, PROVIDER_IDS)
       if (!t) return
-      const target = t.provider ? t : null
       const cur = stateRef.current
       const act = cur.tabs.find((x) => x.key === cur.activeKey)?.target || null
-      if (sameTarget(act, target)) return
-      openTarget(target)
+      if (t.provider) {
+        if (!sameTarget(act, t)) openTarget(t)
+      } else if (!isHome(act) || (act?.view || 'overview') !== (t.view || 'overview')) openHome({ view: t.view || 'overview' })
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
-  }, [openTarget])
+  }, [openTarget, openHome])
 
   // ---- keyboard: Ctrl+K search · Alt+T new · Alt+W close · Alt+[ ] cycle · Alt+1-9 jump ----
   // (Ctrl+T/W/Tab/1-9 belong to the browser and can't be intercepted.)
@@ -283,7 +320,8 @@ export default function App() {
   }, [searchOpen])
 
   const openTabKeys = useMemo(() => new Set(tabs.map((t) => targetKey(t.target)).filter(Boolean)), [tabs])
-  const showDashboard = isEmpty(activeTarget)
+  const showHome = isHome(activeTarget)
+  const openSession = useCallback((providerId, target, opts) => openTarget({ provider: providerId, ...target }, opts), [openTarget])
 
   return (
     <div className="h-full flex flex-col">
@@ -299,7 +337,7 @@ export default function App() {
         onNew={newTab}
         onReorder={moveTab}
         onSearch={() => setSearchOpen(true)}
-        onHome={goHome}
+        onHome={() => openHome()}
         onCopyLink={copyLink}
       />
       <div className="flex-1 min-h-0 relative">
@@ -311,10 +349,11 @@ export default function App() {
               <ProviderApp
                 active={shown}
                 provider={p.id}
-                onProvider={switchProvider}
                 providers={PROVIDER_LIST}
-                onLogo={goHome}
-                onOpenSession={(providerId, target) => openTarget({ provider: providerId, ...target })}
+                scopes={index.scopes}
+                onScope={onScope}
+                onOpenHome={openHome}
+                onOpenSession={openSession}
                 onNavigate={onNavigate}
                 onOpenSearch={() => setSearchOpen(true)}
                 onSessionRemoved={onSessionRemoved}
@@ -324,11 +363,15 @@ export default function App() {
             </div>
           )
         })}
-        <div className="absolute inset-0" style={{ display: showDashboard ? 'block' : 'none' }}>
-          <Dashboard
+        <div className="absolute inset-0" style={{ display: showHome ? 'block' : 'none' }}>
+          <HomeView
             providers={PROVIDER_LIST}
-            visible={showDashboard}
-            onOpen={(providerId, target) => openTarget({ provider: providerId, ...target })}
+            visible={showHome}
+            target={showHome ? activeTarget : null}
+            index={index}
+            live={live}
+            onOpen={openSession}
+            onNavigate={updateHome}
             onSearch={() => setSearchOpen(true)}
           />
         </div>

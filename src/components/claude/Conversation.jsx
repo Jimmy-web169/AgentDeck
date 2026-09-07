@@ -1,9 +1,7 @@
 import { memo, useState } from 'react'
 import Markdown from '../shared/Markdown.jsx'
-import StreamingMarkdown from '../shared/StreamingMarkdown.jsx'
 import ToolCall from './ToolCall.jsx'
 import Thinking from '../shared/Thinking.jsx'
-import AskQuestionForm from './AskQuestionForm.jsx'
 import { BotIcon } from '../shared/icons.jsx'
 import { fmtTime, fmtTokens, totalTokens } from '../../lib/format.js'
 
@@ -82,70 +80,11 @@ function AttachmentMsg({ ev }) {
   )
 }
 
-// ---- live (in-flight) turn, streamed in via the /chat WebSocket ----
-function LiveItem({ it, onPerm }) {
-  if (it.role === 'user') return <UserMsg ev={{ text: it.text }} />
-  if (it.role === 'assistant') {
-    return (
-      <div className="flex gap-3">
-        <div className="mt-1 shrink-0 w-7 h-7 rounded-full bg-ink-600 border border-emerald-600/50 flex items-center justify-center text-emerald-300">
-          <BotIcon className="w-4 h-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          {it.thinking && <Thinking text={it.thinking} />}
-          {it.text ? <StreamingMarkdown>{it.text}</StreamingMarkdown> : <span className="text-zinc-600 text-sm">▍</span>}
-        </div>
-      </div>
-    )
-  }
-  if (it.role === 'tool') {
-    return (
-      <div className="ml-10 min-w-0 max-w-full overflow-hidden rounded-lg border border-zinc-700/70 bg-ink-700/50 px-3 py-1.5 text-[12px]">
-        <div className="flex gap-2 min-w-0">
-          <span className="text-emerald-300 font-mono shrink-0">{it.name}</span>
-          <span className="text-zinc-500 font-mono min-w-0 break-all line-clamp-2">{JSON.stringify(it.input).slice(0, 200)}</span>
-        </div>
-        {it.result != null && <pre className="mt-1 text-[11px] text-zinc-400 whitespace-pre-wrap break-all max-h-40 overflow-auto">{String(it.result).slice(0, 1000)}</pre>}
-      </div>
-    )
-  }
-  if (it.role === 'perm' && it.toolName === 'AskUserQuestion' && it.input?.questions) {
-    // Claude is asking the user — render the options to pick, not an allow/deny gate
-    return (
-      <AskQuestionForm
-        questions={it.input.questions}
-        decided={it.decided}
-        onSubmit={(answers) => onPerm(it.reqId, 'allow', undefined, answers)}
-        onSkip={() => onPerm(it.reqId, 'deny')}
-      />
-    )
-  }
-  if (it.role === 'perm') {
-    const summary = it.input?.command || it.input?.file_path || it.input?.path || JSON.stringify(it.input || {}).slice(0, 400)
-    return (
-      <div className="ml-10 min-w-0 max-w-full overflow-hidden rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-[13px]">
-        <div className="text-amber-200">Claude wants to use <span className="font-mono">{it.toolName}</span></div>
-        <pre className="text-[12px] text-zinc-300 whitespace-pre-wrap break-all max-h-32 overflow-auto mt-1 font-mono">{summary}</pre>
-        {it.decided ? (
-          <div className={`mt-1.5 text-[12px] ${it.decided === 'allow' ? 'text-emerald-300' : 'text-red-300'}`}>{it.decided === 'allow' ? '✓ allowed' : '✕ denied'}</div>
-        ) : (
-          <div className="mt-2 flex flex-col gap-1.5 max-w-md">
-            <button onClick={() => onPerm(it.reqId, 'allow', 'once')} className="text-left text-[12px] px-2.5 py-1.5 rounded bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30">1 · Yes (allow once)</button>
-            <button onClick={() => onPerm(it.reqId, 'allow', 'always')} className="text-left text-[12px] px-2.5 py-1.5 rounded bg-emerald-500/10 text-emerald-200/90 hover:bg-emerald-500/20">2 · Yes, allow all <span className="font-mono">{it.toolName}</span> this session</button>
-            <button onClick={() => onPerm(it.reqId, 'deny')} className="text-left text-[12px] px-2.5 py-1.5 rounded bg-red-500/15 text-red-200 hover:bg-red-500/25">3 · No (deny)</button>
-          </div>
-        )}
-      </div>
-    )
-  }
-  return null
-}
-
 // Mounting a long transcript parses + highlights every message synchronously;
 // render only the tail by default so returning to a conversation stays instant.
 const INITIAL_TAIL = 40
 
-function Conversation({ data, live }) {
+function Conversation({ data }) {
   const { summary, timeline } = data
   const [startIdx, setStartIdx] = useState(() => Math.max(0, timeline.length - INITIAL_TAIL))
   const visible = startIdx > 0 ? timeline.slice(startIdx) : timeline
@@ -181,10 +120,7 @@ function Conversation({ data, live }) {
           if (ev.kind === 'attachment') return <AttachmentMsg key={k} ev={ev} />
           return null
         })}
-        {timeline.length === 0 && !(live && live.items.length) && (
-          <div className="text-center text-zinc-600 py-10">No renderable events in this session.</div>
-        )}
-        {live && live.items.map((it, i) => <LiveItem key={`live-${i}`} it={it} onPerm={live.onPerm} />)}
+        {timeline.length === 0 && <div className="text-center text-zinc-600 py-10">No renderable events in this session.</div>}
       </div>
     </div>
   )

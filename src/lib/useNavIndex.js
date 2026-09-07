@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { projectName, shortPath } from './paths.js'
 
-// Cross-provider, cross-root navigation index for the quick switcher.
+// Cross-provider, cross-root navigation index for the quick switcher, the
+// scope menus and Home.
 //
-// `projects` is loaded up front (every provider × every tracked folder) and
-// refreshed in the background, so opening the switcher never waits on the
-// network. Session lists are fetched lazily per project and cached; while a
-// list is in flight `sessionsFor` returns null and the hook re-renders its
-// consumer once the data lands.
+// `roots` (per provider) and `projects` (every provider × every tracked folder)
+// are loaded up front and refreshed in the background, so opening the switcher
+// never waits on the network. Session lists are fetched lazily per project and
+// cached; while a list is in flight `sessionsFor` returns null and the hook
+// re-renders its consumer once the data lands.
 const INDEX_TTL = 45000
 const SESSIONS_TTL = 15000
 
@@ -21,6 +22,7 @@ async function getJson(url) {
 
 export default function useNavIndex(providers, { enabled = true } = {}) {
   const [projects, setProjects] = useState([])
+  const [roots, setRoots] = useState({}) // providerId -> [{ id, label, dir, exists, … }]
   const [loading, setLoading] = useState(false)
   const loadedAt = useRef(0)
   const inflight = useRef(null)
@@ -34,33 +36,37 @@ export default function useNavIndex(providers, { enabled = true } = {}) {
       setLoading(true)
       const run = (async () => {
         const out = []
+        const rootsOut = {}
         await Promise.all(
           providers.map(async (p) => {
             try {
               const rr = await getJson(`/api/${p.id}/roots`)
-              const roots = (rr?.roots || []).filter((r) => r.exists !== false)
+              const list = rr?.roots || []
+              rootsOut[p.id] = list
               await Promise.all(
-                roots.map(async (r) => {
-                  try {
-                    const pr = await getJson(`/api/${p.id}/projects?root=${encodeURIComponent(r.id)}`)
-                    for (const proj of pr?.projects || []) {
-                      out.push({
-                        provider: p.id,
-                        providerLabel: p.label,
-                        root: r.id,
-                        rootLabel: r.label,
-                        slug: proj.slug,
-                        cwd: proj.cwd || null,
-                        name: projectName(proj.cwd, proj.slug),
-                        path: shortPath(proj.cwd || proj.slug, 3),
-                        sessionCount: proj.sessionCount ?? proj.sessions ?? 0,
-                        lastActivity: Number(proj.lastActivity) || 0,
-                      })
+                list
+                  .filter((r) => r.exists !== false)
+                  .map(async (r) => {
+                    try {
+                      const pr = await getJson(`/api/${p.id}/projects?root=${encodeURIComponent(r.id)}`)
+                      for (const proj of pr?.projects || []) {
+                        out.push({
+                          provider: p.id,
+                          providerLabel: p.label,
+                          root: r.id,
+                          rootLabel: r.label,
+                          slug: proj.slug,
+                          cwd: proj.cwd || null,
+                          name: projectName(proj.cwd, proj.slug),
+                          path: shortPath(proj.cwd || proj.slug, 3),
+                          sessionCount: proj.sessionCount ?? proj.sessions ?? 0,
+                          lastActivity: Number(proj.lastActivity) || 0,
+                        })
+                      }
+                    } catch {
+                      // skip this root
                     }
-                  } catch {
-                    // skip this root
-                  }
-                })
+                  })
               )
             } catch {
               // skip this provider
@@ -70,6 +76,7 @@ export default function useNavIndex(providers, { enabled = true } = {}) {
         out.sort((a, b) => b.lastActivity - a.lastActivity)
         loadedAt.current = Date.now()
         setProjects(out)
+        setRoots(rootsOut)
         setLoading(false)
       })()
       inflight.current = run.finally(() => {
@@ -86,6 +93,21 @@ export default function useNavIndex(providers, { enabled = true } = {}) {
     const t = setInterval(() => refresh(false), INDEX_TTL)
     return () => clearInterval(t)
   }, [enabled, refresh])
+
+  // every provider × folder, in provider order — what the scope menus list
+  const scopes = useMemo(
+    () =>
+      providers.flatMap((p) =>
+        (roots[p.id] || []).map((r) => ({
+          provider: p.id,
+          providerLabel: p.label,
+          root: r.id,
+          rootLabel: r.label,
+          exists: r.exists !== false,
+        }))
+      ),
+    [providers, roots]
+  )
 
   // Promise of a project's session list (cached).
   const loadSessions = useCallback((provider, root, slug, { force = false } = {}) => {
@@ -140,5 +162,5 @@ export default function useNavIndex(providers, { enabled = true } = {}) {
     loadedAt.current = Math.min(loadedAt.current, Date.now() - INDEX_TTL + 4000)
   }, [])
 
-  return { projects, loading, refresh, loadSessions, sessionsFor, invalidate }
+  return { projects, roots, scopes, loading, refresh, loadSessions, sessionsFor, invalidate }
 }

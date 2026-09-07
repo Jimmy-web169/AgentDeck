@@ -75,24 +75,3 @@ export function subscribeToPageResume(fn, { doc = document, win = window } = {})
     win.removeEventListener('focus', onFocus)
   }
 }
-
-export const isLiveAuthoritative = (slice) => !!slice?.ready
-
-export const reconnectDelayMs = (attempt) => Math.min(1000 * 2 ** Math.max(0, attempt), 10000)
-
-export function scheduleReconnect(meta, reconnect, { setTimer = setTimeout } = {}) {
-  if (!meta || meta.closed || meta.timer) return false
-  const delay = reconnectDelayMs(meta.attempt++)
-  meta.timer = setTimer(() => {
-    meta.timer = null
-    if (!meta.closed) reconnect()
-  }, delay)
-  return true
-}
-
-export function cancelReconnect(meta, { clearTimer = clearTimeout } = {}) {
-  if (!meta) return
-  meta.closed = true
-  if (meta.timer) clearTimer(meta.timer)
-  meta.timer = null
-}

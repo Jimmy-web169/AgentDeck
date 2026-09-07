@@ -1,4 +1,4 @@
-// Small stroke icons for the shell chrome (tab strip, rail, quick switcher).
+// Small stroke icons for the shell chrome (tab strip, rail, quick switcher, Home).
 const base = { fill: 'none', stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round' }
 
 export function SearchIcon({ className = 'w-4 h-4' }) {
@@ -57,6 +57,35 @@ export function HomeIcon({ className = 'w-4 h-4' }) {
     <svg viewBox="0 0 24 24" className={className} {...base}>
       <path d="m3 11 9-8 9 8" />
       <path d="M5 10v10h14V10" />
+    </svg>
+  )
+}
+
+// push-pin; `filled` = pinned
+export function PinIcon({ className = 'w-4 h-4', filled = false }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base} fill={filled ? 'currentColor' : 'none'}>
+      <path d="M9 4h6l-1 6 3 3v2H7v-2l3-3z" />
+      <path d="M12 15v5" />
+    </svg>
+  )
+}
+
+// checklist glyph for batch-select mode
+export function CheckSquareIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="m8.5 12.5 2.5 2.5 4.5-5" />
+    </svg>
+  )
+}
+
+export function TerminalIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} {...base}>
+      <path d="m5 8 5 4-5 4" />
+      <path d="M12 17h7" />
     </svg>
   )
 }
