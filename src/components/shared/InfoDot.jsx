@@ -7,6 +7,8 @@ import { useRef, useState } from 'react'
 // absolute: both headers that host an InfoDot are h-12 overflow-x-auto bars,
 // where an absolute bubble overflows the container — the scrollbar it summons
 // shifts the content, closes the tooltip, and the bar oscillates forever.
+// Those bars are also `whitespace-nowrap`, which the bubble would inherit and
+// render its text as one endless line off-screen — hence `whitespace-normal`.
 export default function InfoDot({ text, align = 'right', className = '' }) {
   const [pos, setPos] = useState(null) // null = closed; {top,left,right} = open
   const btnRef = useRef(null)
@@ -42,7 +44,7 @@ export default function InfoDot({ text, align = 'right', className = '' }) {
       {pos && (
         <span
           style={pos}
-          className="fixed z-50 w-64 rounded-md border border-zinc-700 bg-ink-800 px-3 py-2 text-[11px] font-normal leading-relaxed text-zinc-300 shadow-xl normal-case tracking-normal"
+          className="fixed z-50 w-64 max-w-[calc(100vw-16px)] rounded-md border border-zinc-700 bg-ink-800 px-3 py-2 text-[11px] font-normal leading-relaxed text-zinc-300 shadow-xl normal-case tracking-normal whitespace-normal break-words text-left"
         >
           {text}
         </span>

@@ -98,6 +98,11 @@ its real terminal.
 - Windows: paths are shortened correctly (backslashes) and tracked-folder
   labels are home-relative (`~\.claude`).
 
+### Fixed
+- The usage-limits ⓘ tooltip in the session header rendered as one endless line
+  off-screen: the header is `whitespace-nowrap` and the bubble inherited it. It
+  now wraps and never exceeds the viewport.
+
 ### Removed
 - Multi-session split view (tabs replace it).
 - SDK chat mode (see Changed).
