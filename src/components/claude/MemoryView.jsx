@@ -1,13 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { claudeApi as api } from '../../api.js'
 import Markdown from '../shared/Markdown.jsx'
-
-// last two path segments of a cwd/slug, for the project picker labels
-function shortPath(cwd, slug) {
-  const p = cwd || slug || ''
-  const parts = p.split('/').filter(Boolean)
-  return parts.slice(-2).join('/') || p || '(unknown)'
-}
+import { shortPath } from '../../lib/paths.js'
 
 // Claude stores memory PER PROJECT (projects/<slug>/memory/*.md). This view is
 // surfaced at folder(user) scope to match Codex's Memory view, so it lets you
@@ -157,7 +151,7 @@ export default function MemoryView({ root, projects = [] }) {
           {projects.length === 0 && <option value="">no projects</option>}
           {projects.map((p) => (
             <option key={p.slug} value={p.slug} title={p.cwd || p.slug}>
-              {shortPath(p.cwd, p.slug)}
+              {shortPath(p.cwd || p.slug)}
             </option>
           ))}
         </select>

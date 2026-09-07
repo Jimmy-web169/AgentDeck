@@ -33,6 +33,14 @@ Per provider, in one UI:
   per-provider permission/sandbox model) or an embedded terminal.
 - **Live updates** — the UI lights up the moment an agent writes to disk
   (file-watching + Server-Sent Events).
+- **Tabs** — a Chrome-style tab strip across providers and tracked folders:
+  open sessions as tabs (Ctrl/middle-click in the sidebar), drag to reorder,
+  Alt+W closes, Alt+1…9 jumps, right-click for more; tabs are restored on
+  reload and every session has a shareable `#/…` deep link.
+- **Quick switcher** — Ctrl+K fuzzy-jumps to any project or session in any
+  provider or folder. → browses a project's sessions (title + first prompt, for
+  the ones you don't remember by name), Enter opens its live or newest session,
+  Ctrl+Enter opens it in a new tab.
 - **Provider switch** — flip between agents from a dropdown in the sidebar;
   in-flight live conversations keep running while you switch.
 
@@ -72,7 +80,7 @@ switched live from the sidebar:
 <table>
   <tr>
     <td width="50%"><img src="demo/monitor-sub-agents.png" alt="Sub-agents"><br><sub><b>Sub-agents</b> — drill into any child agent's full transcript.</sub></td>
-    <td width="50%"><img src="demo/multi-session.png" alt="Multi-session compare"><br><sub><b>Multi-session</b> — compare several sessions side by side.</sub></td>
+    <td width="50%"><img src="demo/quick-switcher.jpg" alt="Tabs and the Ctrl+K quick switcher"><br><sub><b>Tabs + Ctrl+K</b> — sessions from every provider and folder as tabs; jump anywhere by name.</sub></td>
   </tr>
   <tr>
     <td><img src="demo/skill.png" alt="Install a skill from the UI"><br><sub><b>Install skills from the UI</b> — Resources → Skills → ↓ install.</sub></td>
@@ -92,7 +100,7 @@ server/
   shared/             cross-provider code: roots, dispatch, terminal pool, skills, origin, launch
   providers/<id>/     a provider's data layer: paths, parser, resources, chat, + config
 src/
-  App.jsx             shell; the sidebar's provider dropdown toggles visibility (apps stay mounted)
+  App.jsx             shell: tab strip + quick switcher; the active tab picks the provider app (apps stay mounted)
   api.js              provider-aware client
   providers/<id>.jsx  a provider's frontend config: docs, tabs, components, capabilities
   components/shared/  shared, parameterized components
@@ -107,6 +115,9 @@ src/
   (paths, parsing, resources) lives per provider.
 - **Frontend** — a thin shell renders both provider apps and switches by toggling
   visibility, so each app's live-chat store and WebSockets survive a switch.
+  Tabs (`src/lib/tabs.js`) hold a `{ provider, root, slug, id }` target; the
+  shell steers an app to a target via `pendingOpen`, and apps report user
+  navigation back via `onNavigate` so the active tab follows.
   Shared components are parameterized; provider differences come from a config
   object plus a handful of provider-specific components.
 - Tracked roots are stored per provider (`roots.<id>.json`); the server binds

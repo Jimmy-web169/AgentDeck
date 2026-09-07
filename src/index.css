@@ -269,3 +269,120 @@ body {
 .md hr {
   @apply my-4 border-zinc-700;
 }
+
+/* ---- shell chrome: tab strip + quick switcher motion ----
+   Durations are short (110–180ms) and eased out so the UI feels quick, not
+   showy. prefers-reduced-motion turns all of it off. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+@keyframes tab-enter {
+  from {
+    max-width: 0;
+    min-width: 0;
+    opacity: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  to {
+    max-width: 220px;
+    opacity: 1;
+  }
+}
+.tab-enter {
+  animation: tab-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes qs-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes qs-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+.qs-backdrop {
+  animation: qs-fade 140ms ease-out both;
+}
+.qs-panel {
+  animation: qs-pop 170ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: 50% 0;
+}
+.qs-closing .qs-backdrop {
+  animation: qs-fade 110ms ease-in reverse both;
+}
+.qs-closing .qs-panel {
+  animation: qs-pop 110ms ease-in reverse both;
+}
+@keyframes qs-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes qs-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.qs-in-right {
+  animation: qs-in-right 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.qs-in-left {
+  animation: qs-in-left 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.qs-cursor {
+  transition:
+    top 130ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 130ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 100ms ease-out;
+}
+@keyframes qs-chip {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.qs-chip {
+  animation: qs-chip 160ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab-enter,
+  .qs-backdrop,
+  .qs-panel,
+  .qs-closing .qs-backdrop,
+  .qs-closing .qs-panel,
+  .qs-in-right,
+  .qs-in-left,
+  .qs-chip {
+    animation: none !important;
+  }
+  .qs-cursor {
+    transition: none;
+  }
+}

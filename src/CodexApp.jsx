@@ -7,7 +7,8 @@ import Stats from './components/codex/Stats.jsx'
 import HistoryView from './components/shared/HistoryView.jsx'
 import ResourcesView from './components/codex/ResourcesView.jsx'
 import SubagentsView from './components/codex/SubagentsView.jsx'
-import MultiSession from './components/codex/MultiSession.jsx'
+import SidebarRail from './components/shared/SidebarRail.jsx'
+import { ShortcutChips } from './components/shared/ShortcutHints.jsx'
 import MemoryView from './components/codex/MemoryView.jsx'
 import PluginsView from './components/codex/PluginsView.jsx'
 import ChatComposer from './components/shared/ChatComposer.jsx'
@@ -22,6 +23,8 @@ import ContextMeter from './components/codex/ContextMeter.jsx'
 import useLiveChatStore, { keyOf as liveKeyOf } from './lib/store.codex.js'
 import useActiveSessions, { toManagerItems } from './lib/useActiveSessions.js'
 import { ActivityIcon } from './components/shared/icons.jsx'
+import { ChevronLeftIcon, PanelLeftIcon } from './components/shared/shellIcons.jsx'
+import { projectName } from './lib/paths.js'
 import { bumpSessionVersions, isLiveAuthoritative, subscribeToPageResume } from './lib/liveSync.js'
 
 const LIVE_MS = 8000
@@ -57,7 +60,7 @@ const GLOBAL_VIEWS = [
   { k: 'resources', label: 'Resources' },
 ]
 
-export default function App({ active: appActive = true, provider, onProvider, providers, onLogo, onOpenSession, pendingOpen, onConsumedPending }) {
+export default function App({ active: appActive = true, provider, onProvider, providers, onLogo, onOpenSession, pendingOpen, onConsumedPending, onNavigate, onOpenSearch, onSessionRemoved }) {
   const [roots, setRoots] = useState([])
   const [root, setRoot] = useState(null)
   const [projects, setProjects] = useState([])
@@ -88,11 +91,6 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const [draftKey, setDraftKey] = useState(null)
   const [termDraft, setTermDraft] = useState(null)
   const [terminals, setTerminals] = useState([])
-  // multi-session (split-pane compare) workspace
-  const [multiMode, setMultiMode] = useState(false)
-  const [openSessions, setOpenSessions] = useState([]) // [{ root, id, title, cwd }]
-  const [panes, setPanes] = useState(1)
-  const [paneKeys, setPaneKeys] = useState([]) // key (`root|id`) shown in each pane
   const [sessionVersions, setSessionVersions] = useState({}) // provider|root|id -> live refetch counter
 
   const rootRef = useRef(null)
@@ -107,12 +105,40 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const liveSessionsRef = useRef({})
   const activeKeyRef = useRef(null)
   const engineRef = useRef('sdk')
+  const rootsRef = useRef([])
+  const projectsRef = useRef([])
+  const onNavigateRef = useRef(onNavigate)
+  const openSeq = useRef(0) // stale by-id fetches (see openSessionById) must not override a newer selection
 
   useEffect(() => void (rootRef.current = root), [root])
   useEffect(() => void (activeRef.current = active), [active])
   useEffect(() => void (openSlugRef.current = openSlug), [openSlug])
   useEffect(() => void (tabRef.current = tab), [tab])
   useEffect(() => void (engineRef.current = engine), [engine])
+  useEffect(() => void (rootsRef.current = roots), [roots])
+  useEffect(() => void (projectsRef.current = projects), [projects])
+  useEffect(() => void (onNavigateRef.current = onNavigate), [onNavigate])
+
+  // ---- shell sync: describe "where this app is" for the tab strip ----
+  // Called on user navigation inside this app (sidebar click, live-log jump,
+  // new conversation); the shell updates the active tab. `opts.newTab` asks
+  // for a new tab instead (Ctrl/middle-click).
+  const targetOf = useCallback(({ slug, id, title, draft, cwd } = {}) => {
+    const r = rootRef.current
+    const proj = slug ? projectsRef.current.find((p) => p.slug === slug) : null
+    const c = cwd || proj?.cwd || null
+    return {
+      root: r,
+      rootLabel: rootsRef.current.find((x) => x.id === r)?.label || '',
+      slug: slug || null,
+      id: id || null,
+      title: title || null,
+      project: slug || c ? projectName(c, slug) : null,
+      cwd: c,
+      draft: !!draft,
+    }
+  }, [])
+  const report = useCallback((t, opts) => onNavigateRef.current?.('codex', targetOf(t), opts), [targetOf])
 
   // ---- roots + projects ----
   const reloadRoots = useCallback(async () => {
@@ -132,10 +158,15 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     api.projects(r).then((d) => setProjects(d.projects)).catch((e) => setError(e.message))
   }, [])
 
+  const shownRootRef = useRef(null) // the folder whose selection is on screen
   useEffect(() => {
     if (!appActive) return
     if (!root) return
     loadProjects(root)
+    // re-shown by the shell (a tab switch) with the same folder: keep what's on
+    // screen — only an actual folder change resets the selection below
+    if (shownRootRef.current === root) return
+    shownRootRef.current = root
     setOpenSlug(null)
     setSessions([])
     loadedSessionsFor.current = null
@@ -181,7 +212,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   }
 
   const selectSession = (s) => {
-    setMultiMode(false)
+    openSeq.current++
     setDraftKey(null)
     setTermDraft(null)
     setActive(s)
@@ -189,6 +220,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     setRaw(null)
     setTab('conversation')
     stickBottom.current = true
+    report({ slug: openSlug, id: s.id, title: s.title })
     if (isLiveAuthoritative(liveSessionsRef.current[liveKeyOf({ root, id: s.id })])) return
     if (s.oversized) return // fetch would only 413 — Empty explains via active.oversized
     api.session(root, s.id).then((d) => setSessionData(d)).catch((e) => setError(e.message))
@@ -248,7 +280,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   }, [appActive, loadProjects, loadSessions, refetchActive])
 
   // move a session to the OS trash (recoverable), then clear it everywhere it
-  // might be open — the active pane, and the multi-session workspace
+  // might be open — the active pane, and any tab showing it (via the shell)
   const removeSession = async (s) => {
     try {
       await api.deleteSession(root, s.id)
@@ -261,7 +293,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
       setSessionData(null)
       setRaw(null)
     }
-    setOpenSessions((prev) => prev.filter((x) => !(x.root === root && x.id === s.id)))
+    onSessionRemoved?.('codex', { root, slug: openSlug, id: s.id })
     if (openSlug) loadSessions(root, openSlug)
     loadProjects(root)
   }
@@ -288,7 +320,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
         setSessionData(null)
         setRaw(null)
       }
-      setOpenSessions((prev) => prev.filter((x) => !(x.root === r && x.id === s.id)))
+      onSessionRemoved?.('codex', { root: r, slug, id: s.id })
     }
     // a long batch can outlive the user's navigation — only refresh what's on screen
     if (rootRef.current === r) {
@@ -298,37 +330,9 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     if (failed.length) setError(`Failed to trash ${failed.length} session(s): ${failed.join(', ')}`)
   }
 
-  // ---- multi-session workspace ----
-  const mkKey = (s) => `${s.root}|${s.id}`
-  const addToWorkspace = (s) => {
-    const entry = { root, id: s.id, title: s.title || (s.id ? s.id.slice(0, 8) : 'session'), cwd: s.cwd || openSlug || null }
-    setOpenSessions((prev) => (prev.some((x) => mkKey(x) === mkKey(entry)) ? prev : [...prev, entry]))
-    setMultiMode(true)
-  }
-  const setPaneKeyAt = (i, k) => setPaneKeys((prev) => { const next = [...prev]; next[i] = k; return next })
-  const closeOpenSession = (k) => setOpenSessions((prev) => prev.filter((s) => mkKey(s) !== k))
-  // keep paneKeys valid as the open set / split count change
-  useEffect(() => {
-    setPaneKeys((prev) => {
-      const keys = openSessions.map(mkKey)
-      const next = []
-      for (let i = 0; i < panes; i++) {
-        const cur = prev[i]
-        next[i] = cur && keys.includes(cur) ? cur : keys.find((k) => !next.includes(k)) || ''
-      }
-      return next
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openSessions, panes])
-  // exit the workspace once it's empty
-  useEffect(() => {
-    if (multiMode && openSessions.length === 0) setMultiMode(false)
-  }, [multiMode, openSessions.length])
-
   const activeKey = active ? liveKeyOf({ root, id: active.id }) : null
   useEffect(() => void (activeKeyRef.current = activeKey), [activeKey])
   const activeSlice = activeKey ? live.sessions[activeKey] : null
-  const rootLabels = Object.fromEntries(roots.map((r) => [r.id, r.label]))
 
   // Unified Live source (server-side, cross-provider, persistent) — same list as
   // the right-hand Live button, the composer's Live button and the Dashboard.
@@ -377,30 +381,30 @@ export default function App({ active: appActive = true, provider, onProvider, pr
   const startNewConversation = useCallback((slug) => {
     const r = rootRef.current
     if (!r || !slug) return
-    setMultiMode(false)
     setTab('conversation')
     stickBottom.current = true
     if (engineRef.current === 'terminal') setTermDraft({ root: r, slug, title: 'New conversation' })
     else setDraftKey(live.openNew({ root: r, slug, title: 'New conversation' }))
-  }, [live])
+    report({ slug, draft: true, title: 'New conversation' })
+  }, [live, report])
 
   const startNewProject = useCallback((cwd) => {
     const r = rootRef.current
     if (!r || !cwd) return
-    setMultiMode(false)
     setTab('conversation')
     stickBottom.current = true
     const title = cwd.replace(/[/\\]+$/, '').split(/[/\\]/).filter(Boolean).slice(-1)[0] || 'New project'
     if (engineRef.current === 'terminal') setTermDraft({ root: r, cwd, title })
     else setDraftKey(live.openNew({ root: r, cwd, title }))
-  }, [live])
+    report({ cwd, draft: true, title: 'New conversation' })
+  }, [live, report])
 
   // open a session by its id (from Stats/History/manager): fetch it, then sync the
   // sidebar to its project (cwd) so the session list shows it selected.
   const openSessionById = useCallback((id) => {
     const r = rootRef.current
     if (!r || !id) return
-    setMultiMode(false)
+    const my = ++openSeq.current
     setDraftKey(null)
     setTermDraft(null)
     setTab('conversation')
@@ -409,13 +413,15 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     api
       .session(r, id)
       .then((d) => {
+        if (openSeq.current !== my) return // something newer was opened meanwhile
         setSessionData(d)
         setActive({ id, title: d.summary.title })
         setOpenSlug(d.slug)
         loadSessions(r, d.slug)
+        report({ slug: d.slug, id, title: d.summary.title })
       })
       .catch((e) => setError(e.message))
-  }, [loadSessions])
+  }, [loadSessions, report])
 
   // Session → Stats: jump to this session's token stats (mirror of Stats' "Open
   // conversation →"). A fresh focus object each call re-drills even to the same
@@ -424,10 +430,20 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     if (!active) return
     const slug = openSlug || sessionData?.slug
     if (!slug) return
-    setMultiMode(false)
     setStatsFocus({ slug, id: active.id })
     setTab('stats')
   }
+
+  // ---- tell the shell where this app is whenever it's on screen without being
+  // steered by it (first paint, provider dropdown, folder switch) so the tab
+  // label matches what's shown ----
+  useEffect(() => {
+    if (!appActive || pendingOpen || !root) return
+    const a = activeRef.current
+    const slug = openSlugRef.current
+    report(a && slug ? { slug, id: a.id, title: a.title } : slug ? { slug } : {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [appActive, root])
 
   // ---- consume a cross-provider Dashboard "open this" request ----
   // Drives root → project → session in steps as the async loads settle; guards
@@ -475,6 +491,19 @@ export default function App({ active: appActive = true, provider, onProvider, pr
     } else if (pendingOpen.slug && openSlug !== pendingOpen.slug) {
       openProject(pendingOpen.slug)
     }
+    if (!pendingOpen.id && !pendingOpen.draft && !pendingOpen.newConversation && (activeRef.current || draftKey || termDraft)) {
+      // a folder- or project-level tab shows no session: clear whatever another
+      // tab left on screen so each tab's content matches its label
+      openSeq.current++
+      setActive(null)
+      setSessionData(null)
+      setRaw(null)
+      setDraftKey(null)
+      setTermDraft(null)
+      setTab('conversation')
+    }
+    // "+ New conversation" from the quick switcher
+    if (pendingOpen.newConversation && pendingOpen.slug) startNewConversation(pendingOpen.slug)
     consumedPendingRef.current = sig
     onConsumedPending?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -655,8 +684,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
             onOpenProject={openProject}
             sessions={sessions}
             activeSession={active}
-            onSelectSession={selectSession}
-            onAddSession={addToWorkspace}
+            onSelectSession={(s, opts) => (opts?.newTab ? report({ slug: openSlug, id: s.id, title: s.title }, { newTab: true }) : selectSession(s))}
             onDeleteSession={removeSession}
             onDeleteSessions={removeSessions}
             loadingSessions={loadingSessions}
@@ -664,32 +692,24 @@ export default function App({ active: appActive = true, provider, onProvider, pr
             onManageRoots={() => setShowRoots(true)}
             globalViews={GLOBAL_VIEWS}
             activeGlobal={isGlobal ? tab : null}
-            onGlobalView={(k) => { setMultiMode(false); setStatsFocus(null); setTab(k) }}
+            onGlobalView={(k) => { setStatsFocus(null); setTab(k) }}
             onNewConversation={startNewConversation}
             onNewProject={startNewProject}
           />
           </ErrorBoundary>
         </div>
       )}
-      {!collapsed && <div onMouseDown={startDrag} className="w-1 shrink-0 cursor-col-resize bg-zinc-800 hover:bg-sky-500/60" title="Drag to resize sidebar" />}
+      {collapsed && <SidebarRail onHome={onLogo} onSearch={onOpenSearch} onExpand={() => setCollapsed(false)} />}
+      {!collapsed && (
+        <div onMouseDown={startDrag} className="relative w-1 shrink-0 cursor-col-resize bg-zinc-800 hover:bg-sky-500/60 after:absolute after:inset-y-0 after:-left-1.5 after:-right-1.5 after:content-['']" title="Drag to resize sidebar" />
+      )}
 
       <main className="flex-1 flex flex-col min-w-0">
         <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-zinc-800 bg-ink-900/70 overflow-x-auto whitespace-nowrap [&>*]:shrink-0">
-          <button onClick={() => setCollapsed((c) => !c)} title={`${collapsed ? 'Show' : 'Hide'} sidebar  (⌘/Ctrl+B)`} className="text-zinc-500 hover:text-zinc-200 text-[15px] leading-none px-1 shrink-0">
-            {collapsed ? '»' : '«'}
+          <button onClick={() => setCollapsed((c) => !c)} title={`${collapsed ? 'Show' : 'Hide'} sidebar  (⌘/Ctrl+B)`} className="w-7 h-7 -ml-1 rounded-md flex items-center justify-center text-zinc-500 hover:text-zinc-100 hover:bg-ink-700 shrink-0">
+            {collapsed ? <PanelLeftIcon /> : <ChevronLeftIcon />}
           </button>
-          {multiMode ? (
-            <div className="flex items-center gap-2 text-[13px]">
-              <span className="text-zinc-100 font-medium">Multi-session</span>
-              <span className="text-zinc-600">· {openSessions.length} open</span>
-              <div className="flex items-center rounded border border-zinc-700 overflow-hidden ml-1" title="Split into N panes">
-                {[1, 2, 3].map((n) => (
-                  <button key={n} onClick={() => setPanes(n)} className={`px-2 py-0.5 text-[11px] ${panes === n ? 'bg-ink-500 text-zinc-100' : 'bg-ink-800 text-zinc-500 hover:text-zinc-300'}`}>{n}</button>
-                ))}
-              </div>
-              <button onClick={() => setMultiMode(false)} className="ml-1 text-[12px] text-sky-400 hover:text-sky-300">exit ←</button>
-            </div>
-          ) : isGlobal ? (
+          {isGlobal ? (
             <div className="flex items-center gap-2 text-[13px]">
               <span className="text-zinc-100 font-medium">{GLOBAL_VIEWS.find((g) => g.k === tab)?.label}</span>
               <span className="text-zinc-600">· {rootLabel}</span>
@@ -741,29 +761,7 @@ export default function App({ active: appActive = true, provider, onProvider, pr
           </div>
         )}
 
-        {multiMode ? (
-          <div className="flex-1 min-h-0">
-            <MultiSession
-              active={appActive}
-              openSessions={openSessions}
-              panes={panes}
-              paneKeys={paneKeys}
-              setPaneKey={setPaneKeyAt}
-              onCloseSession={closeOpenSession}
-              sessionVersions={sessionVersions}
-              rootLabels={rootLabels}
-              live={live}
-              chatMode={chatMode}
-              onChatMode={setChatMode}
-              liveCount={liveCount}
-              onOpenManager={() => setShowLive(true)}
-              engine={engine}
-              runningKeys={runningTermKeys}
-              onTermChange={refreshTerminals}
-              onOpenSession={openSessionById}
-            />
-          </div>
-        ) : tab === 'conversation' ? (
+        {tab === 'conversation' ? (
           // boundary sits above the scroller AND the composer/terminal, so a tab
           // crash leaves the sidebar/top bar usable; keyed by the viewed session
           // so opening another session clears a previous crash.
@@ -886,8 +884,9 @@ function Empty({ active }) {
     <div className="h-full flex items-center justify-center text-center text-zinc-600">
       <div>
         <div className="flex justify-center mb-3 text-zinc-700"><ActivityIcon className="w-10 h-10" /></div>
-        <div className="text-sm">{active ? 'Loading session…' : 'Pick a project on the left, then a session.'}</div>
+        <div className="text-sm">{active ? 'Loading session…' : 'Pick a project on the left, or press Ctrl+K to jump anywhere.'}</div>
         <div className="text-[12px] mt-1 text-zinc-700">Live updates stream in as Codex writes rollouts to disk.</div>
+        {!active && <ShortcutChips className="justify-center mt-5 max-w-lg mx-auto" />}
       </div>
     </div>
   )

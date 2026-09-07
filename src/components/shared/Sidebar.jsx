@@ -1,14 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import { fmtRelative } from '../../lib/format.js'
+import { shortPath } from '../../lib/paths.js'
 import { ActivityIcon, TrashIcon } from './icons.jsx'
 import PathPicker from './PathPicker.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
-
-function shortPath(cwd, slug) {
-  const p = cwd || slug || ''
-  const parts = p.split('/').filter(Boolean)
-  return parts.slice(-2).join('/') || p || '(unknown)'
-}
 
 // Provider differences are props with claude defaults:
 // - `rootStatusField` (default 'hasProjects') + `noHistorySuffix` decorate the
@@ -33,7 +28,6 @@ export default function Sidebar({
   globalViews,
   activeGlobal,
   onGlobalView,
-  onAddSession,
   onDeleteSession,
   onDeleteSessions,
   onNewConversation,
@@ -225,7 +219,7 @@ export default function Sidebar({
                 <div className="flex items-center gap-1.5">
                   <span className="text-zinc-600 text-xs">{isOpen ? '▾' : '▸'}</span>
                   <span className="text-[13px] text-zinc-200 truncate flex-1" title={p.cwd || p.slug}>
-                    {shortPath(p.cwd, p.slug)}
+                    {shortPath(p.cwd || p.slug)}
                   </span>
                   <span className="text-[11px] text-zinc-600">{p.sessionCount}</span>
                 </div>
@@ -312,7 +306,10 @@ export default function Sidebar({
                           }`}
                         >
                           <button
-                            onClick={() => (selectMode ? toggleSelected(s.id) : onSelectSession(s))}
+                            onClick={(e) => (selectMode ? toggleSelected(s.id) : onSelectSession(s, { newTab: e.ctrlKey || e.metaKey }))}
+                            onMouseDown={(e) => e.button === 1 && e.preventDefault()}
+                            onAuxClick={(e) => e.button === 1 && !selectMode && onSelectSession(s, { newTab: true })}
+                            title={selectMode ? undefined : 'Open here · Ctrl+click or middle-click opens in a new tab'}
                             className="flex-1 min-w-0 text-left pl-7 pr-2 py-1.5"
                           >
                             <div className="text-[12.5px] text-zinc-300 truncate flex items-center gap-1.5">
@@ -344,13 +341,6 @@ export default function Sidebar({
                             </span>
                           ) : (
                             <>
-                              <button
-                                onClick={() => onAddSession?.(s)}
-                                title="Open in multi-session (compare)"
-                                className="px-2 text-zinc-600 hover:text-sky-300 opacity-0 group-hover:opacity-100 shrink-0"
-                              >
-                                ⊞
-                              </button>
                               {onDeleteSession && (
                                 <button
                                   onClick={() => setConfirmDelId(s.id)}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { codexApi as api } from '../../api.js'
 import { fmtTokens, fmtRelative, fmtTime, totalTokens } from '../../lib/format.js'
+import { shortPath } from '../../lib/paths.js'
 
 function Card({ label, value, sub }) {
   return (
@@ -50,7 +51,7 @@ function Crumb({ children, onClick, last }) {
   )
 }
 
-const shortCwd = (p) => (p || '').split('/').filter(Boolean).slice(-2).join('/') || p || '(unknown)'
+const shortCwd = (p) => shortPath(p)
 
 export default function Stats({ root, stats, focus, onOpenSession }) {
   const [proj, setProj] = useState(null) // selected project rollup { slug, cwd, ... }

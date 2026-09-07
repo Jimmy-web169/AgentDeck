@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { fmtTokens } from '../../lib/format.js'
+import { shortPath } from '../../lib/paths.js'
 
 const sumTokens = (t = {}) => (t.input || 0) + (t.output || 0) + (t.cacheCreate || 0) + (t.cacheRead || 0)
-const shortName = (cwd, slug) => (cwd ? cwd.split('/').filter(Boolean).slice(-2).join('/') : slug)
+const shortName = (cwd, slug) => (cwd ? shortPath(cwd) : slug)
 
 function Tile({ label, value }) {
   return (

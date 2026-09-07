@@ -17,6 +17,8 @@ export default {
   App,
   // badge classes for this provider (Dashboard + Live panel)
   accent: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+  // shell accent (tab dot / active-tab bar / quick-switcher rows) — see lib/providerColors.js
+  color: 'sky',
   docsBase: 'https://developers.openai.com/codex',
   // resource-kind → Codex docs page (from ResourcesView's DOCS map)
   docsMap: {
@@ -40,7 +42,6 @@ export default {
   ],
   // folder(user)-scoped views (from App.jsx GLOBAL_VIEWS)
   globalViews: ['stats', 'history', 'memory', 'plugins', 'resources'],
-  paneTabs: ['conversation', 'subagents', 'raw', 'config'],
   // sandbox / approval policies (from ChatComposer MODES)
   chatModes: [
     { v: 'read-only', label: 'Read-only (safe)' },

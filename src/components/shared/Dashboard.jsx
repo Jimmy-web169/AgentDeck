@@ -1,17 +1,14 @@
 import { useEffect, useState } from 'react'
 import { fmtRelative } from '../../lib/format.js'
+import { shortPath } from '../../lib/paths.js'
 import { ActivityIcon } from './icons.jsx'
+import { SearchIcon } from './shellIcons.jsx'
+import { ShortcutChips } from './ShortcutHints.jsx'
 import useActiveSessions, { toManagerItems } from '../../lib/useActiveSessions.js'
 
 // provider badge colors come from each provider's config (`accent`); unknown → zinc
 const ZINC = 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30'
 const accentOf = (providers, id) => providers?.find((p) => p.id === id)?.accent || ZINC
-
-// last two path segments of a cwd/slug
-function shortPath(p) {
-  const parts = String(p || '').split('/').filter(Boolean)
-  return parts.slice(-2).join('/') || p || '(unknown)'
-}
 
 function ProviderBadge({ providers, id }) {
   const label = providers?.find((p) => p.id === id)?.label || id
@@ -28,7 +25,7 @@ function ProviderBadge({ providers, id }) {
 //  - "Recent projects" = every tracked project across providers, newest first.
 const PAGE_SIZE = 20
 
-export default function Dashboard({ providers = [], visible = true, onClose, onOpen }) {
+export default function Dashboard({ providers = [], visible = true, onOpen, onSearch }) {
   // ---- live now: running tmux terminals (cross-provider, persistent) ----
   const active = useActiveSessions(providers, { enabled: visible })
   const liveItems = toManagerItems(active)
@@ -131,13 +128,17 @@ export default function Dashboard({ providers = [], visible = true, onClose, onO
             <span className="text-[15px] text-zinc-500">Dashboard</span>
           </div>
           <div className="flex-1" />
-          <button
-            onClick={onClose}
-            title="Back"
-            className="text-[13px] px-3 py-1.5 rounded-md bg-ink-800 border border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-ink-700"
-          >
-            ← back
-          </button>
+          {onSearch && (
+            <button
+              onClick={onSearch}
+              title="Search projects & sessions  (Ctrl+K)"
+              className="flex items-center gap-2 text-[13px] px-3 py-1.5 rounded-md bg-ink-800 border border-zinc-700 text-zinc-300 hover:text-zinc-100 hover:bg-ink-700"
+            >
+              <SearchIcon className="w-3.5 h-3.5" />
+              Jump to…
+              <kbd className="text-[10px] px-1 py-px rounded bg-ink-700 text-zinc-500 border border-zinc-800">Ctrl K</kbd>
+            </button>
+          )}
         </div>
 
         {/* tracked CLI versions — observed in the most recent session per provider */}
@@ -153,6 +154,8 @@ export default function Dashboard({ providers = [], visible = true, onClose, onO
             </span>
           ))}
         </div>
+
+        <ShortcutChips className="mb-8 -mt-4 pl-9" />
 
         {/* live now — running tmux terminals */}
         <div className="mb-9">

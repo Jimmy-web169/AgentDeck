@@ -17,6 +17,8 @@ export default {
   App,
   // badge classes for this provider (Dashboard + Live panel)
   accent: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  // shell accent (tab dot / active-tab bar / quick-switcher rows) — see lib/providerColors.js
+  color: 'emerald',
   docsBase: 'https://code.claude.com/docs',
   docsMap: {
     agents: '/en/sub-agents',
@@ -49,7 +51,6 @@ export default {
     { k: 'history', label: 'History' },
     { k: 'plugins', label: 'Plugins' },
   ],
-  paneTabs: ['conversation', 'subagents', 'raw', 'memory', 'config'],
   chatModes: [
     { v: 'acceptEdits', label: 'Auto-accept edits' },
     { v: 'default', label: 'Ask me per tool' },

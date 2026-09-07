@@ -83,8 +83,16 @@ export function makeRoots({ configPath, autodetectSeed, defaultRoots, dataProbe,
     }
     return cfg
   }
+  // Display label: a custom label is kept verbatim; a label that is just the
+  // directory (the default roots) is shown home-relative ("~/.claude",
+  // "~\.claude" on Windows) so the UI never has to fit a full absolute path.
+  const displayLabel = (r) => {
+    const label = (r.label || '').trim()
+    if (label && label !== r.dir) return label
+    return r.dir.startsWith(HOME) ? `~${r.dir.slice(HOME.length)}` : r.dir
+  }
   function rootsWithMeta() {
-    return loadRoots().map((r) => ({ id: r.id, label: r.label, dir: r.dir, exists: dirExists(r.dir), ...dataProbe(r.dir) }))
+    return loadRoots().map((r) => ({ id: r.id, label: displayLabel(r), dir: r.dir, exists: dirExists(r.dir), ...dataProbe(r.dir) }))
   }
   function addRoot(inputPath, label) {
     const dir = path.resolve(expandHome((inputPath || '').trim()))
