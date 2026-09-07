@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import { baseName } from './paths.js'
+import { baseName, shortPath } from './paths.js'
 
 // Workspaces — named groups of projects AND sessions from any provider /
 // folder, kept in localStorage. The classic case: the same repo driven by
@@ -76,7 +76,6 @@ export function useWorkspaces() {
 }
 
 export function createWorkspace(name, items = []) {
-  const id = Math.random().toString(36).slice(2, 10)
   const seen = new Set()
   const list = []
   for (const raw of items) {
@@ -87,6 +86,13 @@ export function createWorkspace(name, items = []) {
     seen.add(k)
     list.push(it)
   }
+  // the same member set already grouped (e.g. "Group" pressed twice) → reuse it
+  if (list.length) {
+    const sig = list.map(itemKey).sort().join('\n')
+    const dup = workspaces.find((w) => w.items.length === list.length && w.items.map(itemKey).sort().join('\n') === sig)
+    if (dup) return dup.id
+  }
+  const id = Math.random().toString(36).slice(2, 10)
   save([...workspaces, { id, name: String(name || '').trim() || 'Workspace', items: list, at: Date.now() }])
   return id
 }
@@ -157,5 +163,10 @@ export function suggestWorkspaces(indexProjects = [], current = workspaces) {
     if (list.some((p) => grouped.has(projectKey(p)))) continue
     out.push({ name: baseName(list[0].cwd), cwd: list[0].cwd, items: list.map((p) => normItem({ ...p, kind: 'project' })), sources: list.map((p) => ({ provider: p.provider, root: p.root, rootLabel: p.rootLabel })) })
   }
+  // two different folders called "AgentDeck" (…/project/AgentDeck and …/maintain/AgentDeck)
+  // get their parent folder in the name so they can be told apart
+  const byName = new Map()
+  for (const s of out) byName.set(s.name, (byName.get(s.name) || 0) + 1)
+  for (const s of out) if (byName.get(s.name) > 1) s.name = shortPath(s.cwd, 2)
   return out.sort((a, b) => a.name.localeCompare(b.name))
 }

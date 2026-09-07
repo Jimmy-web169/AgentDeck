@@ -38,7 +38,11 @@ its real terminal.
   say). A workspace shows ONE flat session list; a coloured source tag
   (provider dot + folder label) tells members apart and the source chips
   filter the list. The sidebar suggests groups for folders it sees in several
-  places. Pinned projects expand in place too.
+  places; two different folders with the same name (…/project/AgentDeck and
+  …/maintain/AgentDeck) are suggested with their parent folder in the name,
+  pressing Group twice reuses the existing workspace instead of duplicating
+  it, and same-named workspaces show their parent folder in the list. Pinned
+  projects expand in place too.
 - Tracked folders can be relabelled from Folders (click the label), so a
   second account's home reads as "work" rather than `~\.claude-info`; pins
   and workspaces pick the new label up immediately.
@@ -57,11 +61,17 @@ its real terminal.
 - Batch-select and pin are proper icon buttons; Stats uses the full width
   with the tool list folded to its top 10.
 
-- **Insights** (Home): a 12-week activity heatmap, the last 30 days as bars
-  (sessions / prompts / tool calls / tokens, with a table view), hour-of-day
-  and weekday profiles, busiest projects, model mix, streaks — per tracked
-  folder, from a new `GET /api/<provider>/activity` endpoint. "Copy digest as
-  Markdown" hands the numbers to any Claude / Codex session for an AI read.
+- **Insights** (Home): a personal read of the last 30 days per tracked folder —
+  plain-English sentences (active days, when you work, busiest weekday, typical
+  session length and prompt count, the longest session) with a persona chip,
+  active-days / streak / this-week-vs-last tiles, a 12-week heatmap, weekly
+  rhythm (table view too), hour-of-day and weekday profiles, session shape
+  (duration and prompts-per-session buckets) and a "needs attention" list of
+  projects idle for two weeks or more. Deliberately no tokens, tool bars or
+  model mix — Stats has those. Data comes from the new
+  `GET /api/<provider>/activity` endpoint (`server/shared/activity.js`, pure and
+  unit-tested). "Copy digest as Markdown" hands the numbers to any Claude /
+  Codex session for an AI read.
 - **Themes and Preferences**: Midnight (new default, cool slate), Graphite (the
   1.x dark) and Paper; a density switch (compact hides the per-row meta line);
   toggles for the Workspaces / Pinned sections and for first prompts under

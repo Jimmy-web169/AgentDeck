@@ -441,7 +441,7 @@ export default function HomeView({ providers = [], visible = true, target, scope
       {scoped && !scope && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">No tracked folders yet — add one with the + next to the folder chips.</div>}
       {scoped && scope && view === 'insights' && (
         <div key={`insights|${scope.provider}|${scope.root}`} className="flex-1 min-h-0 overflow-y-auto">
-          <InsightsPage provider={scope.provider} root={scope.root} rootLabel={scopeInfo?.rootLabel || ''} providerLabel={providerLabel(providers, scope.provider)} />
+          <InsightsPage provider={scope.provider} root={scope.root} rootLabel={scopeInfo?.rootLabel || ''} providerLabel={providerLabel(providers, scope.provider)} onOpen={(t) => onOpen(scope.provider, { rootLabel: scopeInfo?.rootLabel, ...t })} />
         </div>
       )}
       {scoped && scope && view !== 'insights' && Page && (

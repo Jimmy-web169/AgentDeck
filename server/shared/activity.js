@@ -13,6 +13,13 @@
 //     topProjects: [{ slug, cwd, sessions, toolCalls, tokens }]  by sessions, then tokens
 //     models:   { name: sessions }
 //     busiest:  { hour, weekday }  or nulls when there is nothing in range
+//     sessionsDetail: { count, avgPrompts, medianPrompts, avgDurationMin, medianDurationMin,
+//                       longest: { title, slug, cwd, minutes, date } | null,
+//                       durationBuckets: [{ label, n }], promptBuckets: [{ label, n }] }
+//     weekly:   [{ weekStart, sessions, prompts, activeDays, projects }]  Monday-start weeks, oldest → newest
+//     compare:  { thisWeek: { sessions, prompts, activeDays }, lastWeek: { … } }  last 7 days vs the 7 before
+//     rhythm:   { part: 'morning'|'afternoon'|'evening'|'night'|null, share, weekendShare }
+//     neglected: [{ slug, cwd, lastTs, daysAgo, sessions }]  active in the window, idle ≥ 14 days, max 5
 //   }
 //
 // A session counts on the day of its LAST activity (fallback: first), in the
@@ -45,6 +52,7 @@ export function bucketActivity(sessions = [], { days = 84, now = Date.now() } = 
   const weekdays = Array(7).fill(0)
   const projects = new Map()
   const models = {}
+  const inRange = [] // { s, t, minutes }
 
   for (const s of sessions) {
     const ts = s?.lastTs || s?.firstTs
@@ -61,12 +69,16 @@ export function bucketActivity(sessions = [], { days = 84, now = Date.now() } = 
     hours[t.getHours()]++
     weekdays[t.getDay()]++
     const pk = s.slug || s.cwd || '?'
-    const p = projects.get(pk) || { slug: s.slug || null, cwd: s.cwd || null, sessions: 0, toolCalls: 0, tokens: 0 }
+    const p = projects.get(pk) || { slug: s.slug || null, cwd: s.cwd || null, sessions: 0, toolCalls: 0, tokens: 0, lastTs: null }
     p.sessions++
     p.toolCalls += s.toolCalls || 0
     p.tokens += tok
+    if (!p.lastTs || t.getTime() > new Date(p.lastTs).getTime()) p.lastTs = t.toISOString()
     projects.set(pk, p)
     for (const m of s.models || []) models[m] = (models[m] || 0) + 1
+    const f = s.firstTs ? new Date(s.firstTs) : null
+    const minutes = f && !Number.isNaN(f.getTime()) ? Math.min(12 * 60, Math.max(0, Math.round((t - f) / 60000))) : 0
+    inRange.push({ s, t, minutes })
   }
 
   const list = [...daily.values()]
@@ -92,7 +104,81 @@ export function bucketActivity(sessions = [], { days = 84, now = Date.now() } = 
   const topProjects = [...projects.values()].sort((a, b) => b.sessions - a.sessions || b.tokens - a.tokens).slice(0, 8)
   const argmax = (arr) => (arr.some((v) => v > 0) ? arr.indexOf(Math.max(...arr)) : null)
 
+  // ---- personal shape ----
+  const median = (xs) => {
+    if (!xs.length) return 0
+    const a = [...xs].sort((x, y) => x - y)
+    const m = a.length >> 1
+    return a.length % 2 ? a[m] : Math.round((a[m - 1] + a[m]) / 2)
+  }
+  const avg = (xs) => (xs.length ? Math.round(xs.reduce((a, b) => a + b, 0) / xs.length) : 0)
+  const bucketize = (xs, edges, labels) => labels.map((label, i) => ({ label, n: xs.filter((v) => v >= (edges[i - 1] ?? -Infinity) && v < (edges[i] ?? Infinity)).length }))
+  const prompts = inRange.map((x) => x.s.userTurns || 0)
+  const durations = inRange.map((x) => x.minutes)
+  const longestX = inRange.reduce((best, x) => (x.minutes > (best?.minutes ?? -1) ? x : best), null)
+  const sessionsDetail = {
+    count: inRange.length,
+    avgPrompts: avg(prompts),
+    medianPrompts: median(prompts),
+    avgDurationMin: avg(durations),
+    medianDurationMin: median(durations),
+    longest: longestX ? { title: longestX.s.title || null, slug: longestX.s.slug || null, cwd: longestX.s.cwd || null, minutes: longestX.minutes, date: dayKey(longestX.t) } : null,
+    durationBuckets: bucketize(durations, [5, 15, 45, 120], ['<5m', '5–15m', '15–45m', '45m–2h', '>2h']),
+    promptBuckets: bucketize(prompts, [3, 6, 11, 21], ['1–2', '3–5', '6–10', '11–20', '>20']),
+  }
+
+  // Monday-start weeks covering the window
+  const weekStartOf = (d) => {
+    const x = new Date(d)
+    x.setHours(0, 0, 0, 0)
+    x.setDate(x.getDate() - ((x.getDay() + 6) % 7))
+    return x
+  }
+  const weeks = new Map()
+  for (const d of list) {
+    const ws = dayKey(weekStartOf(d.date + 'T00:00:00'))
+    const w = weeks.get(ws) || { weekStart: ws, sessions: 0, prompts: 0, activeDays: 0, projects: new Set() }
+    w.sessions += d.sessions
+    w.prompts += d.prompts
+    if (d.sessions) w.activeDays++
+    weeks.set(ws, w)
+  }
+  for (const x of inRange) {
+    const w = weeks.get(dayKey(weekStartOf(x.t)))
+    if (w) w.projects.add(x.s.slug || x.s.cwd || '?')
+  }
+  const weekly = [...weeks.values()].map((w) => ({ ...w, projects: w.projects.size }))
+
+  const sum = (ds) => ({ sessions: ds.reduce((a, d) => a + d.sessions, 0), prompts: ds.reduce((a, d) => a + d.prompts, 0), activeDays: ds.filter((d) => d.sessions > 0).length })
+  const compare = { thisWeek: sum(list.slice(-7)), lastWeek: sum(list.slice(-14, -7)) }
+
+  const parts = { morning: [5, 12], afternoon: [12, 18], evening: [18, 23], night: [23, 29] } // night wraps past midnight → 23:00–04:59
+  const partOf = (h) => (h >= 23 || h < 5 ? 'night' : h < 12 ? 'morning' : h < 18 ? 'afternoon' : 'evening')
+  const partCounts = { morning: 0, afternoon: 0, evening: 0, night: 0 }
+  let weekend = 0
+  for (const x of inRange) {
+    partCounts[partOf(x.t.getHours())]++
+    if (x.t.getDay() === 0 || x.t.getDay() === 6) weekend++
+  }
+  const topPart = inRange.length ? Object.entries(partCounts).sort((a, b) => b[1] - a[1])[0] : null
+  const rhythm = { part: topPart ? topPart[0] : null, share: topPart ? +(topPart[1] / inRange.length).toFixed(2) : 0, weekendShare: inRange.length ? +(weekend / inRange.length).toFixed(2) : 0 }
+  void parts
+
+  const IDLE_DAYS = 14
+  const midnight = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  const calendarDaysBetween = (a, b) => Math.round((midnight(b) - midnight(a)) / DAY_MS) // whole calendar days, not 24h blocks
+  const neglected = [...projects.values()]
+    .map((p) => ({ slug: p.slug, cwd: p.cwd, lastTs: p.lastTs, daysAgo: calendarDaysBetween(new Date(p.lastTs), end), sessions: p.sessions }))
+    .filter((p) => p.daysAgo >= IDLE_DAYS)
+    .sort((a, b) => b.sessions - a.sessions || b.daysAgo - a.daysAgo)
+    .slice(0, 5)
+
   return {
+    sessionsDetail,
+    weekly,
+    compare,
+    rhythm,
+    neglected,
     days: span,
     range: { from: list[0].date, to: list[list.length - 1].date },
     daily: list,

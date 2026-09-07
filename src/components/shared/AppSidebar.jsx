@@ -230,6 +230,18 @@ export default function AppSidebar({
   const projects = useMemo(() => index.projects.filter((p) => p.provider === provider && p.root === root), [index.projects, provider, root])
   const sessions = openSlug && provider ? index.sessionsFor(provider, root, openSlug) : null
   const suggestions = useMemo(() => suggestWorkspaces(index.projects, workspaces), [index.projects, workspaces])
+  // two workspaces called "AgentDeck" (…/project/AgentDeck vs …/maintain/AgentDeck) → show the parent folder too
+  const wsName = useMemo(() => {
+    const count = new Map()
+    for (const w of workspaces) count.set(w.name, (count.get(w.name) || 0) + 1)
+    const out = new Map()
+    for (const w of workspaces) {
+      const cwds = new Set(w.items.map((it) => String(it.cwd || '').replace(/[\\/]+$/, '').toLowerCase()).filter(Boolean))
+      const only = cwds.size === 1 ? w.items.find((it) => it.cwd)?.cwd : null
+      out.set(w.id, count.get(w.name) > 1 && only ? shortPath(only, 2) : w.name)
+    }
+    return out
+  }, [workspaces])
 
   useEffect(() => {
     try {
@@ -481,7 +493,7 @@ export default function AppSidebar({
                               className="flex-1 min-w-0 bg-ink-700 border border-zinc-700 rounded px-1.5 py-0.5 text-[12.5px] text-zinc-100"
                             />
                           ) : (
-                            <span className="text-[12.5px] text-zinc-200 truncate">{w.name}</span>
+                            <span className="text-[12.5px] text-zinc-200 truncate" title={w.name}>{wsName.get(w.id) || w.name}</span>
                           )}
                           {!open && sources.length > 0 && (
                             <span className="flex -space-x-0.5 shrink-0 ml-1">

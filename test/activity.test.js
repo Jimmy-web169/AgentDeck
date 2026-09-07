@@ -57,6 +57,43 @@ test('bucketActivity: projects rank by sessions then tokens; models count sessio
   assert.deepEqual(a.models, { m1: 3, m2: 2 })
 })
 
+test('bucketActivity: personal shape — durations, prompt buckets, weekly, compare, rhythm, neglected', () => {
+  const withDur = (daysAgo, hour, minutes, extra = {}) => {
+    const last = new Date(2026, 8, 7 - daysAgo, hour, 0, 0)
+    const first = new Date(last.getTime() - minutes * 60000)
+    return { id: `d${daysAgo}-${hour}`, slug: 'proj-a', cwd: '/w/a', firstTs: first.toISOString(), lastTs: last.toISOString(), userTurns: 4, toolCalls: 1, tokens: {}, models: [], ...extra }
+  }
+  const a = bucketActivity(
+    [
+      withDur(0, 14, 30), // today, afternoon, 30 min
+      withDur(1, 15, 240, { userTurns: 30 }), // yesterday, afternoon, 4 h — the longest
+      withDur(2, 22, 3, { userTurns: 1 }), // late, 3 min
+      withDur(9, 9, 60), // last week
+      withDur(20, 16, 10, { slug: 'proj-old', cwd: '/w/old' }), // idle for 20 days → neglected (afternoon)
+    ],
+    { days: 30, now: NOW }
+  )
+  assert.equal(a.sessionsDetail.count, 5)
+  assert.equal(a.sessionsDetail.longest.minutes, 240)
+  assert.equal(a.sessionsDetail.longest.slug, 'proj-a')
+  assert.equal(a.sessionsDetail.medianDurationMin, 30)
+  assert.deepEqual(a.sessionsDetail.durationBuckets.map((b) => b.n), [1, 1, 1, 1, 1])
+  assert.deepEqual(a.sessionsDetail.promptBuckets.map((b) => b.n), [1, 3, 0, 0, 1])
+  assert.equal(a.weekly.at(-1).weekStart, '2026-09-07') // this Monday
+  assert.equal(a.weekly.reduce((n, w) => n + w.sessions, 0), 5)
+  assert.equal(a.compare.thisWeek.sessions, 3)
+  assert.equal(a.compare.lastWeek.sessions, 1)
+  assert.equal(a.rhythm.part, 'afternoon')
+  assert.equal(a.rhythm.share, 0.6)
+  assert.equal(a.rhythm.weekendShare, 0.6) // Sun 9/6, Sat 9/5, Sat 8/29
+  assert.deepEqual(a.neglected.map((p) => p.slug), ['proj-old'])
+  assert.equal(a.neglected[0].daysAgo, 20)
+  const empty = bucketActivity([], { days: 7, now: NOW })
+  assert.equal(empty.sessionsDetail.longest, null)
+  assert.equal(empty.rhythm.part, null)
+  assert.deepEqual(empty.neglected, [])
+})
+
 test('bucketActivity: tolerates junk and empty input', () => {
   const a = bucketActivity([{ id: 'x' }, { id: 'y', lastTs: 'not a date' }, null], { days: 3, now: NOW })
   assert.equal(a.totals.sessions, 0)
