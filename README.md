@@ -20,7 +20,7 @@ Per provider, in one UI:
 
 - **Conversations** — full transcript per session: prompts, replies, collapsible
   thinking, and every tool call with its input **and** output, plus token/model/time.
-- **Sub-agents** — open any sub-agent's complete transcript.
+- **Sub-agents** — open any sub-agent's complete transcript, or expand it inline under the tool call that spawned it.
 - **Raw** — line-by-line JSONL viewer with type filtering.
 - **Stats** — tool usage, models, and token totals aggregated across a tracked
   folder, drillable to project and session.

@@ -83,6 +83,9 @@ export default function Preferences({ className = '' }) {
           <Group title="Lists">
             <Toggle label="First prompt under session titles" hint="Activity and Ctrl+K" value={prefs.showFirstPrompt} onChange={(v) => setPref('showFirstPrompt', v)} />
           </Group>
+          <Group title="Conversation">
+            <Toggle label="Sub-agent threads inline in the conversation" hint="Expand a sub-agent under the tool call that spawned it" value={prefs.inlineSubagents} onChange={(v) => setPref('inlineSubagents', v)} />
+          </Group>
         </div>
       )}
     </div>

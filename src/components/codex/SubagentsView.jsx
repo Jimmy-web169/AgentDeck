@@ -60,7 +60,10 @@ function TranscriptModal({ tx, onClose, onOpenSession }) {
 // while a rollout streams — the trailing timeout still picks up the final state
 const VERSION_REFETCH_THROTTLE_MS = 750
 
-export default function SubagentsView({ root, parent, versions = {}, active = true, onOpenSession }) {
+// `focus` ({ childId, parentId }) comes from an inline thread's "Open in
+// Sub-agents" (Conversation): once the children list is loaded, that child's
+// transcript modal opens by itself. Absent, the view behaves as it always has.
+export default function SubagentsView({ root, parent, versions = {}, active = true, onOpenSession, focus = null }) {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [tx, setTx] = useState(null)
@@ -130,6 +133,16 @@ export default function SubagentsView({ root, parent, versions = {}, active = tr
       .then((d) => setTx((prev) => (prev && prev.c.id === c.id ? { c, data: d } : prev)))
       .catch((e) => setTx((prev) => (prev && prev.c.id === c.id ? { c, error: e.message } : prev)))
   }
+
+  const lastFocus = useRef(null)
+  useEffect(() => {
+    if (!focus || !data || lastFocus.current === focus) return
+    if (focus.parentId && parent?.id && focus.parentId !== parent.id) return // a request for another parent
+    lastFocus.current = focus
+    const c = (data.children || []).find((x) => x.id === focus.childId)
+    if (c) open(c)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focus, data])
 
   // keep an open transcript modal fresh — SSE-driven off the child rollout's
   // own version, plus the same slow fallback poll

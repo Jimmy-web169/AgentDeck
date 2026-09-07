@@ -83,6 +83,7 @@ function summarizeAgentFile(file, id) {
   let firstTs = null
   let lastTs = null
   let endTurn = false
+  let toolCalls = 0
   for (const r of recs) {
     if (r.timestamp) {
       if (!firstTs) firstTs = r.timestamp
@@ -98,9 +99,13 @@ function summarizeAgentFile(file, id) {
         tokens.cacheCreate += u.cache_creation_input_tokens || 0
         tokens.cacheRead += u.cache_read_input_tokens || 0
       }
+      const c = r.message?.content
+      if (Array.isArray(c)) {
+        for (const b of c) if (b?.type === 'tool_use' || b?.type === 'server_tool_use') toolCalls++
+      }
     }
   }
-  return { id, label: oversized ? '(transcript too large)' : firstLabel(recs), model, tokens, firstTs, lastTs, mtime, activity: lastActivity(recs), endTurn, oversized }
+  return { id, label: oversized ? '(transcript too large)' : firstLabel(recs), model, tokens, toolCalls, firstTs, lastTs, mtime, activity: lastActivity(recs), endTurn, oversized }
 }
 
 // Best-effort phase inference from an agent's first-line label. phase↔agent is
@@ -167,6 +172,12 @@ export function discoverPlainAgents(rootDir, slug, sessionId) {
       } catch {}
       a.agentType = meta?.agentType || null
       a.description = meta?.description || null
+      // Claude Code writes the sidecar when the Agent/Task tool spawns the
+      // agent; `toolUseId` is the parent transcript's tool_use block id, which
+      // is what lets the Conversation view link a tool call to its agent
+      // exactly (see src/components/claude/subagentAdapter.js).
+      a.toolUseId = typeof meta?.toolUseId === 'string' ? meta.toolUseId : null
+      a.spawnDepth = Number.isFinite(meta?.spawnDepth) ? meta.spawnDepth : null
       a.status = a.endTurn ? 'done' : a.mtime && now - a.mtime < RECENT_MS ? 'running' : 'stalled'
       return a
     })

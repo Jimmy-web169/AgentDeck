@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { claudeApi as api } from './api.js'
 import Conversation from './components/claude/Conversation.jsx'
 import RawView from './components/shared/RawView.jsx'
@@ -41,6 +41,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
   const [active, setActive] = useState(null)
   const [sessionData, setSessionData] = useState(null)
   const [subagents, setSubagents] = useState(null)
+  const [subagentFocus, setSubagentFocus] = useState(null) // { agentId, runId, sessionId } — open this agent's modal on the Sub-agents tab
   const [raw, setRaw] = useState(null)
   const [usage, setUsage] = useState(null)
   const [tab, setTab] = useState('conversation')
@@ -103,6 +104,25 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     tabRef.current = k
     report(currentTarget(k))
   }
+
+  // ---- inline sub-agent threads (Conversation) ----
+  // "Open in Sub-agents" on an inline thread: switch to the tab with that agent
+  // focused (SubagentsView opens its transcript modal once the list is in).
+  const openSubagentInModal = useCallback(
+    (target) => {
+      setSubagentFocus({ ...target, sessionId: activeRef.current?.id || null, n: Date.now() })
+      setTab('subagents')
+      tabRef.current = 'subagents'
+      report(currentTarget('subagents'))
+    },
+    [report, currentTarget]
+  )
+  // memoised on ids only — a new object here would re-render the (memo) Conversation
+  const activeId = active?.id || null
+  const subagentCtx = useMemo(
+    () => (root && openSlug && activeId ? { root, slug: openSlug, id: activeId, onOpenSubagent: openSubagentInModal } : null),
+    [root, openSlug, activeId, openSubagentInModal]
+  )
 
   // ---- roots + projects ----
   const reloadRoots = useCallback(async () => {
@@ -492,7 +512,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
               {termDraft ? (
                 <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
               ) : sessionData ? (
-                <Conversation key={active?.id} data={sessionData} />
+                <Conversation key={active?.id} data={sessionData} subagentCtx={subagentCtx} />
               ) : (
                 <Empty active={active} />
               )}
@@ -507,7 +527,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
       ) : (
         <div className="flex-1 overflow-y-auto">
           <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
-            {tab === 'subagents' && <SubagentsView key={(active && active.id) || 'none'} data={subagents} version={active ? getSessionVersion(sessionVersions, 'claude', root, active.id) : 0} active={appActive} />}
+            {tab === 'subagents' && <SubagentsView key={(active && active.id) || 'none'} data={subagents} version={active ? getSessionVersion(sessionVersions, 'claude', root, active.id) : 0} active={appActive} focus={subagentFocus} />}
             {tab === 'raw' && raw && <RawView records={raw.records} />}
             {tab === 'memory' && root && openSlug && <MemoryView key={`mem-${root}-${openSlug}`} root={root} slug={openSlug} />}
             {tab === 'config' && root && openSlug && <Resources key={`cfg-${root}-${openSlug}`} root={root} slug={openSlug} />}

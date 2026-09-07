@@ -1,8 +1,12 @@
-import { memo, useState } from 'react'
+import { Fragment, memo, useMemo, useState } from 'react'
 import Markdown from '../shared/Markdown.jsx'
 import ToolCall from './ToolCall.jsx'
 import Thinking from '../shared/Thinking.jsx'
+import SubagentThread, { buildThreadMap, useSubagentIndex } from '../shared/SubagentThread.jsx'
+import subagentAdapter from './subagentAdapter.js'
 import { BotIcon } from '../shared/icons.jsx'
+import { claudeApi as api } from '../../api.js'
+import { usePrefs } from '../../lib/prefs.js'
 import { fmtTime, fmtTokens, totalTokens } from '../../lib/format.js'
 
 function UserMsg({ ev }) {
@@ -15,7 +19,9 @@ function UserMsg({ ev }) {
   )
 }
 
-function AssistantMsg({ ev }) {
+// `threads` (Map tool_use id → resolved sub-agent, see buildThreadMap) is null
+// unless inline sub-agent threads are on and the agent index has loaded.
+function AssistantMsg({ ev, threads, ctx }) {
   return (
     <div className="flex gap-3">
       <div className="mt-1 shrink-0 w-7 h-7 rounded-full bg-ink-600 border border-zinc-600 flex items-center justify-center text-zinc-300">
@@ -29,7 +35,16 @@ function AssistantMsg({ ev }) {
         )}
         {ev.parts.map((p, i) => {
           if (p.kind === 'thinking') return <Thinking key={i} text={p.text} />
-          if (p.kind === 'tool_use') return <ToolCall key={i} part={p} />
+          if (p.kind === 'tool_use') {
+            const thread = threads ? threads.get(p.id) : null
+            if (!thread) return <ToolCall key={i} part={p} />
+            return (
+              <Fragment key={i}>
+                <ToolCall part={p} />
+                <SubagentThread item={thread} adapter={subagentAdapter} ctx={ctx} Conversation={MemoConversation} />
+              </Fragment>
+            )
+          }
           if (p.kind === 'advisor')
             return (
               <div key={i} className="my-2 border-l-2 border-sky-500/40 pl-3 text-[13px] text-sky-200/80">
@@ -84,14 +99,38 @@ function AttachmentMsg({ ev }) {
 // render only the tail by default so returning to a conversation stays instant.
 const INITIAL_TAIL = 40
 
-function Conversation({ data }) {
+// `subagentCtx` (optional, from ClaudeApp) enables inline sub-agent threads:
+// { root, slug, id, onOpenSubagent, depth?, index? }. Without it — or with the
+// inlineSubagents preference off — the view renders exactly as before. The
+// parent (depth 0) fetches the agent index once; a child transcript rendered
+// inline receives the same index one level deeper and shows headers only.
+// `compact` is the inline-child styling (tighter padding, smaller title).
+function Conversation({ data, subagentCtx = null, compact = false }) {
   const { summary, timeline } = data
   const [startIdx, setStartIdx] = useState(() => Math.max(0, timeline.length - INITIAL_TAIL))
   const visible = startIdx > 0 ? timeline.slice(startIdx) : timeline
+
+  const { inlineSubagents } = usePrefs()
+  const depth = subagentCtx?.depth || 0
+  const inlineOn = !!subagentCtx && inlineSubagents
+  const wantIndex = inlineOn && depth === 0 && !!summary.hasSubagents
+  const index = useSubagentIndex({
+    enabled: wantIndex,
+    key: wantIndex ? `${subagentCtx.root}|${subagentCtx.slug}|${subagentCtx.id}` : null,
+    version: data, // a refetched parent transcript is the cue to re-list its agents
+    fetcher: () => api.subagents(subagentCtx.root, subagentCtx.slug, subagentCtx.id),
+  })
+  const ctx = useMemo(() => {
+    if (!inlineOn) return null
+    const idx = depth === 0 ? index : subagentCtx.index || null
+    return idx ? { ...subagentCtx, index: idx, depth } : null
+  }, [inlineOn, subagentCtx, index, depth])
+  const threads = useMemo(() => (ctx ? buildThreadMap(timeline, subagentAdapter, ctx) : null), [timeline, ctx])
+
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
-      <div className="mb-5 pb-4 border-b border-zinc-700/60">
-        <h1 className="text-lg font-semibold text-zinc-100">{summary.title}</h1>
+    <div className={compact ? 'px-3 py-3' : 'mx-auto max-w-3xl px-4 py-6'}>
+      <div className={`${compact ? 'mb-3 pb-3' : 'mb-5 pb-4'} border-b border-zinc-700/60`}>
+        <h1 className={`${compact ? 'text-[14px]' : 'text-lg'} font-semibold text-zinc-100`}>{summary.title}</h1>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-zinc-500">
           <span>{summary.userTurns} prompts</span>
           <span>{summary.assistantTurns} replies</span>
@@ -104,7 +143,7 @@ function Conversation({ data }) {
         </div>
       </div>
 
-      <div className="space-y-6">
+      <div className={compact ? 'space-y-4' : 'space-y-6'}>
         {startIdx > 0 && (
           <button
             onClick={() => setStartIdx(0)}
@@ -119,7 +158,7 @@ function Conversation({ data }) {
         {visible.map((ev, i) => {
           const k = startIdx + i
           if (ev.kind === 'user') return <UserMsg key={k} ev={ev} />
-          if (ev.kind === 'assistant') return <AssistantMsg key={k} ev={ev} />
+          if (ev.kind === 'assistant') return <AssistantMsg key={k} ev={ev} threads={threads} ctx={ctx} />
           if (ev.kind === 'system') return <SystemMsg key={k} ev={ev} />
           if (ev.kind === 'attachment') return <AttachmentMsg key={k} ev={ev} />
           return null
@@ -130,4 +169,5 @@ function Conversation({ data }) {
   )
 }
 
-export default memo(Conversation)
+const MemoConversation = memo(Conversation)
+export default MemoConversation

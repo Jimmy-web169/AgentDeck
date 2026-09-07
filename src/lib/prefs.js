@@ -17,7 +17,9 @@ export const DENSITIES = [
   { k: 'compact', label: 'Compact' },
 ]
 
-const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showFirstPrompt: true }
+// inlineSubagents: sub-agent threads expand under the tool call that spawned
+// them in the Conversation view (off = the pre-2.0 view, Sub-agents tab only).
+const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showFirstPrompt: true, inlineSubagents: true }
 
 function load() {
   let prefs = { ...DEFAULTS }
