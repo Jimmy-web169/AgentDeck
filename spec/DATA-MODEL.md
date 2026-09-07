@@ -15,7 +15,7 @@ the full interface), so the frontend is layout-agnostic:
   assistantTurns, toolCalls, models, toolCounts, tokens, … }` (providers may add
   optional fields such as `cwd`, `contextWindow`, `lastTokenUsage`, `rateLimits`).
 - **Timeline event** — `{ kind: 'user' | 'assistant' | 'system', ts, parts: [{ kind:
-  'text' | 'thinking' | 'tool_use', … }] }`.
+  'text' | 'thinking' | 'tool_call', … }] }`.
 - **Sub-agent / child** — a session spawned by another, summarized the same way.
 - **Usage** — `{ rateLimits, sessionId, ts, contextWindow? }` when available.
 
@@ -31,7 +31,7 @@ handling (and any traversal guard) inside the provider.
 | Session | `projects/<slug>/<id>.jsonl` (slug = a real project directory) |
 | Sub-agents | nested under the parent: `projects/<slug>/<id>/subagents/agent-*.jsonl`, plus workflow runs under `subagents/workflows/wf_*/` |
 | Transcript record | `{ type: 'assistant'|'user'|'system'|'attachment', message: { role, content, model, usage }, timestamp, isSidechain }` |
-| Tool pairing | `tool_use` ↔ `tool_result` by `tool_use_id` |
+| Tool pairing | `tool_call` ↔ `tool_result` (raw: Claude `tool_use`) by `tool_use_id` |
 | Usage limits | exposed only to a status line; an optional bridge writes `<root>/rate-limits.json` (see README) |
 
 ## Codex provider

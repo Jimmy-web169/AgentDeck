@@ -131,13 +131,13 @@ test('generated fixture: v2-highlights parses through both providers (projects, 
 
           const full = ok(await P[id].dispatch('GET', '/api/session', q(`root=${root}&slug=${encodeURIComponent(p.slug)}&id=${s.id}`)), `${id} session`)
           assert.ok(full.timeline.length > 2, `${id} ${s.id}: timeline`)
-          assert.ok(full.timeline.some((e) => e.kind === 'assistant' && e.parts.some((x) => x.kind === 'tool_use' && x.result)), `${id} ${s.id}: tool_use paired with its result`)
+          assert.ok(full.timeline.some((e) => e.kind === 'assistant' && e.parts.some((x) => x.kind === 'tool_call' && x.result)), `${id} ${s.id}: tool_use paired with its result`)
 
           if (id === 'claude' && s.hasSubagents) {
             withSubagents++
             const sub = ok(await P.claude.dispatch('GET', '/api/subagents', q(`root=${root}&slug=${p.slug}&id=${s.id}`)), 'claude subagents')
             assert.ok(sub.agents.length > 0, 'sidecar agents listed')
-            const taskIds = new Set(full.timeline.flatMap((e) => (e.parts || []).filter((x) => x.kind === 'tool_use' && x.name === 'Task').map((x) => x.id)))
+            const taskIds = new Set(full.timeline.flatMap((e) => (e.parts || []).filter((x) => x.kind === 'tool_call' && x.name === 'Task').map((x) => x.id)))
             for (const a of sub.agents) {
               assert.ok(taskIds.has(a.toolUseId), 'meta.json toolUseId links the agent to a Task call in the parent')
               assert.ok(a.tokens.output > 0 && a.toolCalls > 0 && a.endTurn, 'agent transcript summarised')

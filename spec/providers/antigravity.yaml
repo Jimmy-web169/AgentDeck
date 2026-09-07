@@ -68,7 +68,7 @@ timeline:
   parts:
     text: { text: content }
     thinking: { text: thinking }
-    tool_use: { name: name, input: args, note: "no id in JSONL; SQLite step_payload.20.7.1 (planner) / steps.metadata.4.1 (result) carry call_<n>" }
+    tool_call: { name: name, input: args, note: "no id in JSONL; SQLite step_payload.20.7.1 (planner) / steps.metadata.4.1 (result) carry call_<n>" }
     tool_result:
       when: { type: [GENERIC, RUN_COMMAND, VIEW_FILE, CODE_ACTION, GREP_SEARCH, SEARCH_WEB, LIST_DIR, MCP_TOOL, INVOKE_SUBAGENT, BROWSER_SUBAGENT] }
       pair_by: adjacency

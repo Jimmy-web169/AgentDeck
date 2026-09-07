@@ -48,7 +48,7 @@ export function buildThreadMap(timeline, adapter, ctx) {
     if (ev.kind !== 'assistant' || !ev.parts?.length) continue
     let rctx = null
     for (const p of ev.parts) {
-      if (p.kind !== 'tool_use' || !p.id) continue
+      if (p.kind !== 'tool_call' || !p.id) continue
       if (!rctx) rctx = { ...ctx, claimed, ev }
       const item = adapter.resolve(p, rctx)
       if (item) map.set(p.id, item)

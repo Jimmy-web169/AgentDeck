@@ -98,7 +98,7 @@
           "properties": {
             "text": { "$ref": "#/$defs/partRule" },
             "thinking": { "$ref": "#/$defs/partRule" },
-            "tool_use": { "$ref": "#/$defs/partRule" },
+            "tool_call": { "$ref": "#/$defs/partRule" },
             "tool_result": {
               "type": "object",
               "allOf": [{ "$ref": "#/$defs/partRule" }],

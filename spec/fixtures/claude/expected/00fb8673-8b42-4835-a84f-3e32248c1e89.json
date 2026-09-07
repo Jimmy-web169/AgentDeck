@@ -58,7 +58,7 @@
           "text": "I'll start by reading what's there."
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_8c14ddc65e457d6f86584e9f",
           "name": "Grep",
           "server": false,
@@ -88,7 +88,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_33e00fe79b2819bd1950e424",
           "name": "Read",
           "server": false,
@@ -117,7 +117,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_96c45ac8b693163c2515ee9b",
           "name": "Read",
           "server": false,
@@ -146,7 +146,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_cea029346217bfaa751599e1",
           "name": "Edit",
           "server": false,
@@ -177,7 +177,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_04f9cea6d7c61d2233c08581",
           "name": "Write",
           "server": false,
@@ -207,7 +207,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_de4be7767958e291588fccb7",
           "name": "Bash",
           "server": false,
@@ -272,7 +272,7 @@
           "text": "Checking the current implementation."
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_eb2a4ba7a1653820fd2bb248",
           "name": "Read",
           "server": false,
@@ -301,7 +301,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_5be6f825688958ec40f719d3",
           "name": "Read",
           "server": false,
@@ -330,7 +330,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_6da6c2cde511f62555289277",
           "name": "Bash",
           "server": false,
@@ -360,7 +360,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_107219d70de4a34881962623",
           "name": "Edit",
           "server": false,
@@ -391,7 +391,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_e5643985df0d038471184a05",
           "name": "Edit",
           "server": false,
@@ -422,7 +422,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_3ee8a918f93882c42193f22c",
           "name": "Edit",
           "server": false,
@@ -453,7 +453,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_99c9dc7293486353b28d9514",
           "name": "Bash",
           "server": false,
@@ -518,7 +518,7 @@
           "text": "Checking the current implementation."
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_dda811b0a9104f7ba24bb7e7",
           "name": "Glob",
           "server": false,
@@ -547,7 +547,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_453b6046300b6a833fd75c89",
           "name": "Write",
           "server": false,
@@ -577,7 +577,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_38a5acb892557d617fe9f0e6",
           "name": "Read",
           "server": false,
@@ -606,7 +606,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_30aa46bea6bdd7e30aff3299",
           "name": "Write",
           "server": false,
@@ -636,7 +636,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_b0caa6b24f21bb0ca1601a24",
           "name": "Edit",
           "server": false,
@@ -667,7 +667,7 @@
       "isSidechain": false,
       "parts": [
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "toolu_221e850f82237375a3fe3d1f",
           "name": "Bash",
           "server": false,

@@ -174,7 +174,7 @@ function assistantEvent(rec, toolResults) {
         parts.push({ kind: 'thinking', text: b.thinking || b.text || '' })
       } else if (b.type === 'tool_use' || b.type === 'server_tool_use') {
         parts.push({
-          kind: 'tool_use',
+          kind: 'tool_call',
           id: b.id,
           name: b.name,
           server: b.type === 'server_tool_use',

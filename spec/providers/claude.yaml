@@ -43,7 +43,7 @@ timeline:
   map:
     - when: { type: user, "message.content[].type": tool_result }
       kind: attachment
-      note: tool results ride on user records; they are paired onto the assistant's tool_use part, not shown as a user turn
+      note: tool results ride on user records; they are paired onto the assistant's tool_call part, not shown as a user turn
     - when: { type: user }
       kind: user
       text: message.content            # string or [{type:text}]
@@ -60,7 +60,7 @@ timeline:
   parts:
     text: { when: { type: text }, text: text }
     thinking: { when: { type: [thinking, redacted_thinking] }, text: thinking }
-    tool_use: { when: { type: [tool_use, server_tool_use] }, id: id, name: name, input: input }
+    tool_call: { when: { type: [tool_use, server_tool_use] }, id: id, name: name, input: input }
     tool_result:
       when: { type: tool_result }
       pair_by: id

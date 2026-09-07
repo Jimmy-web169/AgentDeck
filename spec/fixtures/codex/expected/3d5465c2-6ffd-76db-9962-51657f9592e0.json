@@ -62,7 +62,7 @@
           "text": "**Correlation ids in request logs**\n\nFastify already has a request id generator; the plugin should override it to honour the header and add the id to the log bindings and the response."
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_DaGvvtaxwoUE6Ov6aURldU",
           "name": "shell",
           "input": {
@@ -84,7 +84,7 @@
           }
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_r1jwUpA772AfZ3AE12Kaoa",
           "name": "apply_patch",
           "input": {
@@ -100,7 +100,7 @@
           }
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_yWtLdq6iUTxuHsVyRIbKun",
           "name": "apply_patch",
           "input": {
@@ -116,7 +116,7 @@
           }
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_3H98y8SPOyOg8xCFiHztp4",
           "name": "shell",
           "input": {
@@ -159,7 +159,7 @@
           "text": "**Fastify 5 upgrade**\n\nBump, run the tests, and follow the deprecation output rather than guessing at the migration guide."
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_GTSx5q7AaX4nAIiwqRRSNY",
           "name": "shell",
           "input": {
@@ -181,7 +181,7 @@
           }
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_7mV1Em6yx3cB5lw5ymJTM1",
           "name": "shell",
           "input": {
@@ -203,7 +203,7 @@
           }
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_x6AunN9bMAp0sYOZLuQVhU",
           "name": "shell",
           "input": {
@@ -225,7 +225,7 @@
           }
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_NxhqKNa1qufik43i02UCJ2",
           "name": "apply_patch",
           "input": {
@@ -241,7 +241,7 @@
           }
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_1C3qJ5chkU32SNpDmnKzZW",
           "name": "shell",
           "input": {
@@ -284,7 +284,7 @@
           "text": "**Fix flaky webhook retry test**\n\nReproduce first to confirm the flake rate, then read the test and the code under test. A timing race between real timers and the runner timeout is the likely culprit."
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_dxNhN1LIRDXHeC4AmaG6Hx",
           "name": "shell",
           "input": {
@@ -306,7 +306,7 @@
           }
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_DaTZIlcLL9arxwk1TnhAnD",
           "name": "shell",
           "input": {
@@ -328,7 +328,7 @@
           }
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_rebZyvDqaV09FUuopNTG3X",
           "name": "apply_patch",
           "input": {
@@ -344,7 +344,7 @@
           }
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_Vn0VsLcBTnIhr3IO35vxyx",
           "name": "apply_patch",
           "input": {
@@ -360,7 +360,7 @@
           }
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_CidJdb1BoOZcU6YOxyHqIc",
           "name": "shell",
           "input": {

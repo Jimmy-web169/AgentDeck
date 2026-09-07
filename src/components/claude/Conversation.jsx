@@ -37,7 +37,7 @@ function AssistantMsg({ ev, threads, ctx }) {
         )}
         {ev.parts.map((p, i) => {
           if (p.kind === 'thinking') return <Thinking key={i} text={p.text} />
-          if (p.kind === 'tool_use') {
+          if (p.kind === 'tool_call') {
             const thread = threads ? threads.get(p.id) : null
             if (!thread) return <ToolCall key={i} part={p} />
             return (

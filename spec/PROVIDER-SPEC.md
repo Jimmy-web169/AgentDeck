@@ -25,7 +25,7 @@ already used in the code; renames are listed as decisions in §7.
 | `SessionSummary` | `id, title, firstPrompt, firstTs, lastTs, userTurns, assistantTurns, toolCalls, models[], toolCounts{}, tokens` + `cwd?, origin?('user'\|'subagent'), parentId?, childCount?, contextWindow?, mtime?, oversized?` | `origin`/`parentId` let sub-agents be plain sessions (codex) or nested (claude) |
 | `Tokens` | `input, output, cacheRead, cacheCreate, reasoning, total` | **provider computes `total`; UI never re-derives it** (today three formulas disagree) |
 | `TimelineEvent` | `kind('user'\|'assistant'\|'system'\|'attachment'), ts, id?` + `text` (user/system) or `model, usage?, parts[]` (assistant) | `id` nullable so codex can opt out explicitly |
-| `Part` | `kind('text'\|'thinking'\|'tool_use')`; `tool_use` = `{id, name, input, result?{content, isError, meta?}, server?}` | matches OTel `tool_call` / `tool_call_response` one-to-one |
+| `Part` | `kind('text'\|'thinking'\|'tool_call')`; `tool_call` = `{id, name, input, result?{content, isError, meta?}, server?}` | matches OTel `tool_call` / `tool_call_response` one-to-one (raw vendor types stay: Claude `tool_use`, Codex `function_call`) |
 | `Child` | `id, parentId, label, role?, depth?, summary: SessionSummary` | replaces claude `runs[]/agents[]` and codex `children[]`; workflow runs become optional `groups[]` |
 | `Memory` | `scope('project'\|'thread'\|'user'), title, content, updatedAt?, writable` | claude = per-project `.md` (writable); codex = sqlite per thread (read-only) |
 | `McpServer` | `name, scope('user'\|'project'\|'plugin'), sourcePath, transport('stdio'\|'http'\|'sse'\|'ws'), command?, args?, env?, cwd?, url?, headers?, enabled, toolAllow?, toolDeny?, raw` | never expand `${VAR}` secrets; show the literal template |
@@ -170,7 +170,7 @@ Precedence when the same name appears twice: local > project > user > plugin.
 
 ## 7. Decisions to make together
 
-1. Rename `tool_use` → `tool_call` (OTel) now, or keep and alias? (rename touches
+1. ~~Rename `tool_use` → `tool_call`~~ — done 2026-09-07 (the normalized part kind is `tool_call`; raw vendor types unchanged). (rename touched
    every Conversation/ToolCall component)
 2. Sub-agents: one `children[]` for both providers, with claude workflow runs as an
    optional `groups[]` — agree?

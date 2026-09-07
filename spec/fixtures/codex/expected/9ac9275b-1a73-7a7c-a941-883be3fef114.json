@@ -50,7 +50,7 @@
           "text": "**Timer audit**\n\nA grep over the test directory is enough here."
         },
         {
-          "kind": "tool_use",
+          "kind": "tool_call",
           "id": "call_kx0wNiJWKBwOCAha1Dg9iX",
           "name": "shell",
           "input": {

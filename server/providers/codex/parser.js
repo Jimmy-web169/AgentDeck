@@ -228,7 +228,7 @@ export function buildTimeline(records) {
       } else if (kind === 'function_call' || kind === 'custom_tool_call') {
         const id = body.call_id || body.id
         ensureAsst(ts).parts.push({
-          kind: 'tool_use',
+          kind: 'tool_call',
           id,
           name: body.name || 'tool',
           input: toolInput(kind, body),

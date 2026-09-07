@@ -60,7 +60,7 @@ timeline:
       note: no per-turn usage exists — see tokens (cumulative token_count events)
     - when: { type: response_item, "payload.type": [reasoning, function_call, custom_tool_call, function_call_output, custom_tool_call_output] }
       kind: assistant
-      note: folded into the open assistant turn as thinking / tool_use / tool_result parts
+      note: folded into the open assistant turn as thinking / tool_call / tool_result parts
     - when: { type: event_msg, "payload.type": [agent_message, agent_reasoning, token_count, thread_name_updated, task_started, task_complete] }
       kind: meta
     - when: { type: event_msg, "payload.type": turn_aborted }
@@ -69,7 +69,7 @@ timeline:
   parts:
     text: { when: { "payload.type": output_text }, text: text }
     thinking: { when: { "payload.type": reasoning }, text: "payload.summary[].text" }
-    tool_use: { when: { "payload.type": [function_call, custom_tool_call] }, id: payload.call_id, name: payload.name, input: payload.arguments }
+    tool_call: { when: { "payload.type": [function_call, custom_tool_call] }, id: payload.call_id, name: payload.name, input: payload.arguments }
     tool_result:
       when: { "payload.type": [function_call_output, custom_tool_call_output] }
       pair_by: id
