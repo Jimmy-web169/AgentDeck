@@ -7,7 +7,6 @@ import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import useActiveSessions, { toManagerItems } from '../../lib/useActiveSessions.js'
 import { PinIcon, SearchIcon, TerminalIcon } from './shellIcons.jsx'
-import FolderChips from './FolderChips.jsx'
 import InsightsPage from './InsightsPage.jsx'
 import { usePrefs } from '../../lib/prefs.js'
 import { ShortcutChips } from './ShortcutHints.jsx'
@@ -297,12 +296,8 @@ export default function HomeView({ providers = [], visible = true, target, scope
             </button>
           ))}
         </div>
-        {scoped && (
-          <div className="min-w-0 flex-1">
-            <FolderChips compact scopes={index.scopes} providers={providers} value={scope} onPick={onScope} onManage={onManageFolders} />
-          </div>
-        )}
-        {!scoped && <span className="flex-1" />}
+        {/* the folder is chosen once, in the sidebar's chips — the pages follow that scope */}
+        <span className="flex-1" />
         <button onClick={onSearch} title="Search projects & sessions  (Ctrl+K)" className="flex items-center gap-2 h-8 px-3 rounded-md bg-ink-800 border border-zinc-700 text-[12px] text-zinc-300 hover:text-zinc-100 hover:bg-ink-700">
           <SearchIcon className="w-3.5 h-3.5" />
           Jump to…

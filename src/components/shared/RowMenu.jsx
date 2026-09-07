@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { addToWorkspace, createWorkspace, inWorkspace, removeFromWorkspace } from '../../lib/workspaces.js'
+import { ACCENTS, accentClasses } from '../../lib/providerColors.js'
 import { PlusIcon } from './shellIcons.jsx'
 
 // The "⋯" menu of a sidebar row. Every row gets the same two hover controls —
@@ -9,7 +10,8 @@ import { PlusIcon } from './shellIcons.jsx'
 //
 //   items: [{ label, onClick, danger, disabled }]
 //   workspaceItem: the project / session to toggle in workspaces (optional)
-export default function RowMenu({ open, onClose, items = [], workspaceItem, workspaces = [] }) {
+//   swatches: { value, onPick } — a row of accent swatches (a workspace's colour)
+export default function RowMenu({ open, onClose, items = [], workspaceItem, workspaces = [], swatches = null }) {
   const ref = useRef(null)
   const onCloseRef = useRef(onClose)
   const [creating, setCreating] = useState(false)
@@ -53,9 +55,31 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
           {it.label}
         </button>
       ))}
-      {workspaceItem && (
+      {swatches && (
         <>
           {items.length > 0 && <div className="my-1 border-t border-zinc-800" />}
+          <div className="px-3 pt-1 pb-0.5 text-[10.5px] uppercase tracking-wider text-zinc-600">Colour</div>
+          <div className="flex items-center gap-1.5 px-3 pb-1.5">
+            {ACCENTS.map((a) => {
+              const on = swatches.value === a.k
+              return (
+                <button
+                  key={a.k}
+                  onClick={() => {
+                    swatches.onPick(on ? null : a.k)
+                    onClose()
+                  }}
+                  title={on ? `${a.label} — click to clear` : a.label}
+                  className={`w-4 h-4 rounded-full ${accentClasses(a.k).dot} ${on ? 'ring-2 ring-zinc-100 ring-offset-1 ring-offset-ink-800' : 'opacity-70 hover:opacity-100'}`}
+                />
+              )
+            })}
+          </div>
+        </>
+      )}
+      {workspaceItem && (
+        <>
+          {(items.length > 0 || swatches) && <div className="my-1 border-t border-zinc-800" />}
           <div className="px-3 pt-1 pb-0.5 text-[10.5px] uppercase tracking-wider text-zinc-600">Workspaces</div>
           {workspaces.map((w) => {
             const member = inWorkspace(w, workspaceItem)

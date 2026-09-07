@@ -19,7 +19,10 @@ export const DENSITIES = [
 
 // inlineSubagents: sub-agent threads expand under the tool call that spawned
 // them in the Conversation view (off = the pre-2.0 view, Sub-agents tab only).
-const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showFirstPrompt: true, inlineSubagents: true }
+// providerColors: { <providerId>: <accent name> } — the user's override of a
+// provider's shell accent (see lib/providerColors.js); absent = the registry default.
+const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {} }
+const ACCENT_NAMES = ['emerald', 'sky', 'violet', 'amber', 'red', 'zinc']
 
 function load() {
   let prefs = { ...DEFAULTS }
@@ -31,6 +34,8 @@ function load() {
   } catch {}
   if (!THEMES.some((x) => x.k === prefs.theme)) prefs.theme = DEFAULTS.theme
   if (!DENSITIES.some((x) => x.k === prefs.density)) prefs.density = DEFAULTS.density
+  const pc = prefs.providerColors && typeof prefs.providerColors === 'object' ? prefs.providerColors : {}
+  prefs.providerColors = Object.fromEntries(Object.entries(pc).filter(([, v]) => ACCENT_NAMES.includes(v)))
   return prefs
 }
 

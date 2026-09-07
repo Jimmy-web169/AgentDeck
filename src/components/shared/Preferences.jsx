@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { DENSITIES, THEMES, setPref, usePrefs } from '../../lib/prefs.js'
+import { ACCENTS, accentClasses, providerColorName } from '../../lib/providerColors.js'
 import { GearIcon } from './shellIcons.jsx'
 
 // The gear in the tab strip: a small popover with the things a person is likely
@@ -45,7 +46,39 @@ function Toggle({ label, hint, value, onChange }) {
   )
 }
 
-export default function Preferences({ className = '' }) {
+// One row per provider: its shell accent (tab dot, folder chip, source tag).
+// The registry default stays selectable; picking it again clears the override.
+function ProviderColors({ providers, prefs }) {
+  return providers.map((p) => {
+    const current = providerColorName(providers, p.id)
+    return (
+      <div key={p.id} className="flex items-center gap-2 py-1">
+        <span className={`w-2 h-2 rounded-full shrink-0 ${accentClasses(current).dot}`} />
+        <span className="text-[12.5px] text-zinc-200 flex-1 truncate">{p.label}</span>
+        <span className="flex items-center gap-1.5">
+          {ACCENTS.map((a) => {
+            const on = current === a.k
+            return (
+              <button
+                key={a.k}
+                onClick={() => {
+                  const next = { ...(prefs.providerColors || {}) }
+                  if (a.k === p.color) delete next[p.id]
+                  else next[p.id] = a.k
+                  setPref('providerColors', next)
+                }}
+                title={a.k === p.color ? `${a.label} (default)` : a.label}
+                className={`w-4 h-4 rounded-full ${accentClasses(a.k).dot} ${on ? 'ring-2 ring-zinc-100 ring-offset-1 ring-offset-ink-800' : 'opacity-60 hover:opacity-100'}`}
+              />
+            )
+          })}
+        </span>
+      </div>
+    )
+  })
+}
+
+export default function Preferences({ className = '', providers = [] }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const btn = useRef(null)
@@ -76,9 +109,15 @@ export default function Preferences({ className = '' }) {
           <Group title="Density">
             <Pills options={DENSITIES} value={prefs.density} onPick={(v) => setPref('density', v)} />
           </Group>
+          {providers.length > 0 && (
+            <Group title="Colours">
+              <ProviderColors providers={providers} prefs={prefs} />
+              <div className="text-[11px] text-zinc-500 mt-1">A workspace's colour is in its ⋯ menu.</div>
+            </Group>
+          )}
           <Group title="Sidebar">
-            <Toggle label="Workspaces section" value={prefs.showWorkspaces} onChange={(v) => setPref('showWorkspaces', v)} />
-            <Toggle label="Pinned section" value={prefs.showPinned} onChange={(v) => setPref('showPinned', v)} />
+            <Toggle label="Workspaces section" hint="Grouped projects and sessions leave the Projects list" value={prefs.showWorkspaces} onChange={(v) => setPref('showWorkspaces', v)} />
+            <Toggle label="Pinned section" hint="Pinned rows leave the Projects list" value={prefs.showPinned} onChange={(v) => setPref('showPinned', v)} />
           </Group>
           <Group title="Lists">
             <Toggle label="First prompt under session titles" hint="Activity and Ctrl+K" value={prefs.showFirstPrompt} onChange={(v) => setPref('showFirstPrompt', v)} />

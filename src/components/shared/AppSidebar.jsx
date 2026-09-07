@@ -3,10 +3,10 @@ import { createApi } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
-import { createWorkspace, deleteWorkspace, projectKey, removeFromWorkspace, renameWorkspace, sourceKey, suggestWorkspaces, useWorkspaces, workspaceSources } from '../../lib/workspaces.js'
+import { createWorkspace, deleteWorkspace, projectKey, removeFromWorkspace, renameWorkspace, setWorkspaceColor, sourceKey, suggestWorkspaces, useWorkspaces, workspaceHolding, workspaceSources } from '../../lib/workspaces.js'
 import { usePrefs } from '../../lib/prefs.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
-import { providerColor, providerLabel } from '../../lib/providerColors.js'
+import { accentClasses, providerColor, providerLabel } from '../../lib/providerColors.js'
 import { ChevronRightIcon, CloseIcon, DotsIcon, LayersIcon, PinIcon, PlusIcon } from './shellIcons.jsx'
 import { FolderIcon } from './icons.jsx'
 import PathPicker from './PathPicker.jsx'
@@ -171,13 +171,16 @@ function ProjectLine({ ctx, src, open, onToggle, menuKey, children }) {
 
 // sessions of a project from the index (pinned projects expand in place)
 function ProjectSessions({ ctx, src, indent = 'pl-9', keyPrefix }) {
-  const { index, openKeys, toggleKey, hidePinned } = ctx
+  const { index, openKeys, toggleKey, hidePinned, hideGrouped, workspaces } = ctx
   const full = index.sessionsFor(src.provider, src.root, src.slug)
   const all = openKeys.has(`${keyPrefix}|all`)
   if (full === null) return <div className={`${indent} pr-2 py-1.5 text-[11.5px] text-zinc-600`}>loading…</div>
-  // pinned sessions live in the Pinned section, not under their project
-  const lst = hidePinned ? full.filter((s) => !isPinned({ provider: src.provider, root: src.root, slug: src.slug, id: s.id })) : full
-  const hidden = full.length - lst.length
+  // pinned sessions live in the Pinned section and grouped ones in their
+  // workspace, not under their project — nothing is listed twice
+  const notPinned = hidePinned ? full.filter((s) => !isPinned({ provider: src.provider, root: src.root, slug: src.slug, id: s.id })) : full
+  const hidden = full.length - notPinned.length
+  const lst = hideGrouped ? notPinned.filter((s) => !workspaceHolding({ kind: 'session', provider: src.provider, root: src.root, slug: src.slug, id: s.id }, workspaces)) : notPinned
+  const grouped = notPinned.length - lst.length
   if (!full.length) return <div className={`${indent} pr-2 py-1.5 text-[11.5px] text-zinc-600`}>no sessions yet</div>
   const shown = all ? lst : lst.slice(0, INLINE_SESSIONS)
   return (
@@ -192,6 +195,12 @@ function ProjectSessions({ ctx, src, indent = 'pl-9', keyPrefix }) {
         <div className={`${indent} pr-2 py-1 text-[11px] text-zinc-600 flex items-center gap-1`} title="Pinned sessions are listed in the Pinned section above">
           <PinIcon className="w-3 h-3 text-amber-300/70" />
           {lst.length ? `${hidden} more pinned · see Pinned` : `${hidden === 1 ? 'its only session is' : `all ${hidden} sessions are`} pinned · see Pinned`}
+        </div>
+      )}
+      {grouped > 0 && (
+        <div className={`${indent} pr-2 py-1 text-[11px] text-zinc-600 flex items-center gap-1`} title="Sessions in a workspace are listed under that workspace above">
+          <LayersIcon className="w-3 h-3 text-sky-300/70" />
+          {`${grouped} more in a workspace · see Workspaces`}
         </div>
       )}
     </>
@@ -292,10 +301,14 @@ export default function AppSidebar({
     setMenuFor(null)
   }, [provider, root, openSlug])
 
-  // pinning moves a row into Pinned; the move is undone while searching or when the Pinned section is switched off
+  // pinning moves a row into Pinned and grouping moves it into its workspace;
+  // both moves are undone while searching or when that section is switched off
   const hidePinned = !filter && !!prefs.showPinned
-  const list = (sessions || []).filter((s) => !hidePinned || !isPinned({ provider, root, slug: openSlug, id: s.id }))
-  const hiddenPinned = (sessions || []).length - list.length
+  const hideGrouped = !filter && !!prefs.showWorkspaces
+  const notPinned = (sessions || []).filter((s) => !hidePinned || !isPinned({ provider, root, slug: openSlug, id: s.id }))
+  const hiddenPinned = (sessions || []).length - notPinned.length
+  const list = notPinned.filter((s) => !hideGrouped || !workspaceHolding({ kind: 'session', provider, root, slug: openSlug, id: s.id }, workspaces))
+  const hiddenGrouped = notPinned.length - list.length
   const selCount = list.filter((s) => selected.has(s.id)).length
 
   const toggleSelected = (id) =>
@@ -422,10 +435,11 @@ export default function AppSidebar({
     if (ok) deleteWorkspace(w.id)
   }
 
-  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, askTrash, menuFor, setMenuFor, workspaces, openKeys, toggleKey, hidePinned }
+  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, askTrash, menuFor, setMenuFor, workspaces, openKeys, toggleKey, hidePinned, hideGrouped }
 
   const filtered = projects.filter((p) => {
     if (hidePinned && isPinned({ provider, root, slug: p.slug })) return false
+    if (hideGrouped && workspaceHolding({ kind: 'project', provider, root, slug: p.slug }, workspaces)) return false
     if (!filter) return true
     const hay = `${p.cwd || ''} ${p.slug} ${p.name}`.toLowerCase()
     return hay.includes(filter.toLowerCase())
@@ -492,7 +506,7 @@ export default function AppSidebar({
                       <div className={`group relative flex items-stretch hover:bg-ink-700/50 ${open ? 'bg-ink-700/30' : ''}`}>
                         <button onClick={() => toggleWs(w.id)} className="flex-1 min-w-0 text-left pl-2 pr-1 py-1.5 flex items-center gap-1.5">
                           <ChevronRightIcon className={`w-3 h-3 text-zinc-600 shrink-0 transition-transform ${open ? 'rotate-90' : ''}`} />
-                          <LayersIcon className="w-3.5 h-3.5 text-sky-300/80 shrink-0" />
+                          <LayersIcon className={`w-3.5 h-3.5 shrink-0 ${w.color ? accentClasses(w.color).text : 'text-sky-300/80'}`} />
                           {renaming?.id === w.id ? (
                             <input
                               autoFocus
@@ -509,7 +523,7 @@ export default function AppSidebar({
                               className="flex-1 min-w-0 bg-ink-700 border border-zinc-700 rounded px-1.5 py-0.5 text-[12.5px] text-zinc-100"
                             />
                           ) : (
-                            <span className="text-[12.5px] text-zinc-200 truncate" title={w.name}>{wsName.get(w.id) || w.name}</span>
+                            <span className={`text-[12.5px] truncate ${w.color ? accentClasses(w.color).text : 'text-zinc-200'}`} title={w.name}>{wsName.get(w.id) || w.name}</span>
                           )}
                           {!open && sources.length > 0 && (
                             <span className="flex -space-x-0.5 shrink-0 ml-1">
@@ -530,6 +544,7 @@ export default function AppSidebar({
                             { label: 'Rename', onClick: () => setRenaming({ id: w.id, name: w.name }) },
                             { label: 'Delete workspace', danger: true, onClick: () => askDeleteWorkspace(w) },
                           ]}
+                          swatches={{ value: w.color, onPick: (c) => setWorkspaceColor(w.id, c) }}
                         />
                       </div>
                       {open && (
@@ -689,6 +704,12 @@ export default function AppSidebar({
                         <div className="pl-7 pr-2 py-1 text-[11px] text-zinc-600 flex items-center gap-1" title="Pinned sessions are listed in the Pinned section above">
                           <PinIcon className="w-3 h-3 text-amber-300/70" />
                           {list.length ? `${hiddenPinned} more pinned · see Pinned` : `${hiddenPinned === 1 ? 'its only session is' : `all ${hiddenPinned} sessions are`} pinned · see Pinned`}
+                        </div>
+                      )}
+                      {hiddenGrouped > 0 && (
+                        <div className="pl-7 pr-2 py-1 text-[11px] text-zinc-600 flex items-center gap-1" title="Sessions in a workspace are listed under that workspace above">
+                          <LayersIcon className="w-3 h-3 text-sky-300/70" />
+                          {`${hiddenGrouped} more in a workspace · see Workspaces`}
                         </div>
                       )}
                     </div>

@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { tabLabel } from '../../lib/tabs.js'
 import { providerColor } from '../../lib/providerColors.js'
+import { usePrefs } from '../../lib/prefs.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { ActivityIcon } from './icons.jsx'
 import { CloseIcon, PanelLeftIcon, PlusIcon, SearchIcon } from './shellIcons.jsx'
@@ -33,6 +34,7 @@ export default function TabStrip({
   sidebarCollapsed,
   onToggleSidebar,
 }) {
+  usePrefs() // tab dots / bars follow Preferences › Colours
   const scrollRef = useRef(null)
   const els = useRef(new Map()) // key -> element
   const lefts = useRef(new Map()) // key -> last measured left (for FLIP)
@@ -203,7 +205,7 @@ export default function TabStrip({
           <PanelLeftIcon />
         </button>
       )}
-      <Preferences className="shrink-0 self-center mr-1" />
+      <Preferences className="shrink-0 self-center mr-1" providers={providers} />
       <button
         onClick={() => setHelp((h) => !h)}
         onMouseDown={(e) => e.stopPropagation()}

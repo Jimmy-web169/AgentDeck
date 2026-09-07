@@ -91,7 +91,7 @@ its real terminal.
   tmux/ttyd/node-pty) + `check:privacy` (no home paths, e-mails or keys in what git
   ships; LICENSE present). CI (`.github/workflows/ci.yml`) runs tests and the build
   on Ubuntu, Windows and macOS. `RELEASE-CHECKLIST.md` lists the manual steps.
-- `PROVIDER-SPEC.md` + `spec/` — a draft protocol for providers: the normalized
+- `spec/` (`PROVIDER-SPEC.md`, `DATA-MODEL.md`, the schema and descriptors) — a draft protocol for providers: the normalized
   core components, a JSON-Schema-validated YAML descriptor per provider
   (`spec/providers/claude.yaml`, `codex.yaml`: paths, record→timeline rules, token
   fields, capabilities graded per feature, drift probe), the shared route table,
@@ -116,12 +116,28 @@ its real terminal.
   the real `~/.claude` / `~/.codex`. `scripts/demo/shoot.mjs` drives headless
   Chrome/Edge over the DevTools protocol (no puppeteer): every shot in every
   theme, storage seeded from the fixture manifest (pins, a workspace, tabs),
-  readiness predicates instead of sleeps, `demo/v2-tour.gif` when ffmpeg is on
-  PATH. `test/demo-fixture.test.js` pins the override and runs every scenario
-  through the real parsers. `.privacyignore` allow-lists the placeholder home
-  paths so `check:privacy` stays green. README's demo section uses the new set.
+  readiness predicates instead of sleeps, `tour.gif` when ffmpeg is on PATH.
+  Every release keeps its own folder (`demo/v1.0/` is the original material,
+  `demo/v2.0/` this release's; the script picks the folder from
+  `package.json`). `test/demo-fixture.test.js` pins the override and runs
+  every scenario through the real parsers. `.privacyignore` allow-lists the
+  placeholder home paths so `check:privacy` stays green. README's demo section
+  shows both releases.
+
+- **Colours you choose.** Preferences › Colours sets each provider's accent
+  (tab dot, active-tab bar, folder chips, source tags) from the theme palette;
+  a workspace's ⋯ menu sets its own colour (icon and name). Accents are theme
+  tokens, so every theme stays consistent.
 
 ### Changed
+- **One set of folder chips.** The sidebar's chips are the only scope picker;
+  Home's header no longer repeats them — Stats, Insights, History, Plugins and
+  Resources follow the folder chosen in the sidebar.
+- **Grouping moves a row, like pinning.** A project or session that belongs to
+  a workspace is listed under that workspace only: it leaves the Projects list /
+  its project's inline list (a muted "N more in a workspace" hint stays). A row
+  can be pinned and grouped at once. Searching, or switching the Workspaces
+  section off in Preferences, shows everything again.
 - The "+" next to the folder chips opens a centered **Tracked folders** dialog
   (list with editable labels, untrack, one add form) instead of a Home page;
   `#/home/folders` links fall back to Home › Activity.

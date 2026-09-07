@@ -6,9 +6,10 @@ import { baseName, shortPath } from './paths.js'
 // Claude Code, by a second Claude account and by Codex shows up as three
 // projects; a workspace puts them under one name and shows their sessions as
 // one list.
-//   workspace = { id, name, items: [item], at }
+//   workspace = { id, name, items: [item], at, color? }   color = an accent name (lib/providerColors.js ACCENTS)
 //   item      = { kind: 'project' | 'session', provider, root, rootLabel, slug, cwd, project, id?, title? }
 const KEY = 'agentdeck_workspaces'
+const ACCENT_NAMES = ['emerald', 'sky', 'violet', 'amber', 'red', 'zinc']
 
 export const projectKey = (p) => `${p?.provider || ''}|${p?.root || ''}|${p?.slug || ''}`
 export const itemKey = (it) => `${projectKey(it)}|${it?.kind === 'session' || it?.id ? it.id || '' : ''}`
@@ -40,6 +41,7 @@ function load() {
         id: w.id,
         name: w.name,
         at: w.at || 0,
+        color: ACCENT_NAMES.includes(w.color) ? w.color : null,
         // v1 stored `projects`; fold them into `items`
         items: [...(Array.isArray(w.items) ? w.items : []), ...(Array.isArray(w.projects) ? w.projects.map((p) => ({ ...p, kind: 'project' })) : [])].map(normItem).filter(Boolean),
       }))
@@ -105,6 +107,23 @@ export function renameWorkspace(id, name) {
 
 export function deleteWorkspace(id) {
   save(workspaces.filter((w) => w.id !== id))
+}
+
+// null clears the colour (back to the neutral workspace icon)
+export function setWorkspaceColor(id, color) {
+  const c = ACCENT_NAMES.includes(color) ? color : null
+  save(workspaces.map((w) => (w.id === id ? { ...w, color: c } : w)))
+}
+
+// The workspace that holds this project or session, or null. Grouping moves a
+// row into its workspace the way pinning moves it into Pinned: the sidebar
+// hides a held project from Projects and a held session from its project's
+// inline list, so nothing is listed twice (searching shows everything again).
+export function workspaceHolding(raw, list = workspaces) {
+  const it = normItem(raw)
+  if (!it) return null
+  const k = itemKey(it)
+  return list.find((w) => w.items.some((x) => itemKey(x) === k)) || null
 }
 
 export function addToWorkspace(id, raw) {
