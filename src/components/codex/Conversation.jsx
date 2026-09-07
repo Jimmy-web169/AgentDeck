@@ -1,5 +1,7 @@
-import { Fragment, memo, useMemo, useState } from 'react'
+import { Fragment, memo, useMemo, useRef } from 'react'
 import Markdown from '../shared/Markdown.jsx'
+import EarlierBar from '../shared/EarlierBar.jsx'
+import { useEarlier } from '../../lib/useEarlier.js'
 import ToolCall from './ToolCall.jsx'
 import Thinking from '../shared/Thinking.jsx'
 import SubagentThread, { buildThreadMap, useSubagentIndex } from '../shared/SubagentThread.jsx'
@@ -68,11 +70,11 @@ function SystemMsg({ ev }) {
 }
 
 // Mounting a long transcript parses + highlights every message synchronously;
-// render only the tail by default so returning to a conversation stays instant.
-const INITIAL_TAIL = 40
+// only the tail renders at first (lib/useEarlier.js); earlier messages come in
+// chunks without moving what the reader is looking at.
 
 // `subagentCtx` (optional, from CodexApp) enables inline sub-agent threads:
-// { root, id, onOpenSubagent, depth? }. Without it — or with the inlineSubagents
+// { root, id, depth? }. Without it — or with the inlineSubagents
 // preference off — the view renders exactly as before. Linking works from this
 // session's own `children` (they ride on the session payload); the parent
 // (depth 0) additionally fetches the rich children list for tokens / tool
@@ -81,8 +83,8 @@ const INITIAL_TAIL = 40
 function Conversation({ data, onOpenSession, subagentCtx = null, compact = false }) {
   const { summary, timeline } = data
   const children = data.children || []
-  const [startIdx, setStartIdx] = useState(() => Math.max(0, timeline.length - INITIAL_TAIL))
-  const visible = startIdx > 0 ? timeline.slice(startIdx) : timeline
+  const rootRef = useRef(null)
+  const { startIdx, visible, showEarlier, topRef, chunk } = useEarlier(timeline, rootRef)
 
   const { inlineSubagents } = usePrefs()
   const depth = subagentCtx?.depth || 0
@@ -104,7 +106,7 @@ function Conversation({ data, onOpenSession, subagentCtx = null, compact = false
   const threads = useMemo(() => (ctx ? buildThreadMap(timeline, subagentAdapter, ctx) : null), [timeline, ctx])
 
   return (
-    <div className={compact ? 'px-3 py-3' : 'mx-auto max-w-3xl px-4 py-6'}>
+    <div ref={rootRef} className={compact ? 'px-3 py-3' : 'mx-auto max-w-3xl px-4 py-6'}>
       <div className={`${compact ? 'mb-3 pb-3' : 'mb-5 pb-4'} border-b border-zinc-700/60`}>
         <h1 className={`${compact ? 'text-[14px]' : 'text-lg'} font-semibold text-zinc-100`}>{summary.title}</h1>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-zinc-500">
@@ -140,17 +142,7 @@ function Conversation({ data, onOpenSession, subagentCtx = null, compact = false
       </div>
 
       <div className={compact ? 'space-y-4' : 'space-y-6'}>
-        {startIdx > 0 && (
-          <button
-            onClick={() => setStartIdx(0)}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-sky-500/30 bg-sky-500/10 text-[13px] text-sky-200 hover:bg-sky-500/20 hover:border-sky-500/50 transition-colors"
-            title="Only the latest messages are rendered at first; click to load the whole conversation"
-          >
-            <span aria-hidden>↑</span>
-            Show {startIdx} earlier {startIdx > 1 ? 'messages' : 'message'}
-            <span className="text-[11px] text-sky-300/70">· {timeline.length} in total</span>
-          </button>
-        )}
+        <EarlierBar startIdx={startIdx} chunk={chunk} total={timeline.length} onMore={() => showEarlier(false)} onAll={() => showEarlier(true)} topRef={topRef} />
         {visible.map((ev, i) => {
           const k = startIdx + i
           if (ev.kind === 'user') return <UserMsg key={k} ev={ev} />

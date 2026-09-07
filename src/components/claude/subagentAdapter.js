@@ -100,12 +100,8 @@ export function fetchTranscript(item, ctx) {
   return api.subagent(ctx.root, ctx.slug, ctx.id, item.runId, item.agentId)
 }
 
-export function openInModal(item, ctx) {
-  ctx.onOpenSubagent?.({ agentId: item.agentId, runId: item.runId })
-}
-
 export function cacheKey(item, ctx) {
   return `claude|${ctx.root}|${ctx.slug}|${ctx.id}|${item.runId || ''}|${item.agentId || ''}`
 }
 
-export default { accent, resolve, fetchTranscript, openInModal, cacheKey }
+export default { accent, resolve, fetchTranscript, cacheKey }

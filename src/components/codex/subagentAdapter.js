@@ -91,12 +91,8 @@ export function fetchTranscript(item, ctx) {
   return api.session(ctx.root, item.childId)
 }
 
-export function openInModal(item, ctx) {
-  ctx.onOpenSubagent?.(item.childId)
-}
-
 export function cacheKey(item, ctx) {
   return `codex|${ctx.root}|${item.childId}`
 }
 
-export default { accent, resolve, fetchTranscript, openInModal, cacheKey }
+export default { accent, resolve, fetchTranscript, cacheKey }

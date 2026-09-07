@@ -8,8 +8,9 @@ import { fmtTokens } from '../../lib/format.js'
 // codex/subagentAdapter.js), which supplies:
 //   resolve(part, ctx)         → item | null   (ctx.claimed = ids already linked, ctx.ev = the assistant event)
 //   fetchTranscript(item, ctx) → Promise<{ summary, timeline, … }>  (a Conversation `data`)
-//   openInModal(item, ctx)     → jump to the Sub-agents tab focused on this agent
 //   cacheKey(item, ctx)        → string
+// The thread never navigates away: the Sub-agents tab is a separate way in,
+// and the maintainer did not want the conversation to jump while reading.
 //   accent                     → { border, rail, badge, text } theme-token classes
 // item: { key, label, type, status, elapsedMs, toolCalls, tokens, expandable, agentCount?, note? }
 //
@@ -175,9 +176,6 @@ function SubagentThread({ item, adapter, ctx, Conversation }) {
             ↻
           </button>
         )}
-        <button onClick={() => adapter.openInModal(item, ctx)} className="shrink-0 text-[11px] text-sky-400 hover:text-sky-300" title="Open this agent in the Sub-agents tab">
-          Open in Sub-agents ↗
-        </button>
       </div>
       {open && (
         <div className={`mx-2 mb-2 border-l-2 ${accent.rail} bg-ink-900/40 rounded-r-md max-h-[60vh] overflow-y-auto`}>

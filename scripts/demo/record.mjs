@@ -140,7 +140,7 @@ async function tour(t, fx, cdp) {
     // the tab element carries `title="<project> · <session title>\n<cwd>"` (TabStrip); it is not a <button>
     await t.click(`[...document.querySelectorAll('[title]')].find((el) => (el.getAttribute('title') || '').startsWith(${JSON.stringify(tabTitle)}))`, { after: 1200 })
     await t.wait(`/\\d+ prompts?/.test(${T})`, 8000)
-    await t.click(`document.querySelector('button[title^="Only the latest messages"]')`, { after: 900 })
+    await t.click(`document.querySelector('[data-earlier-all]')`, { after: 900 })
     const thread = `[...document.querySelectorAll('button')].find((x) => /show thread/.test(x.textContent || ''))`
     if (await t.wait(`!!(${thread})`, 4000)) {
       await t.click(thread, { after: 900 })

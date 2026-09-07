@@ -190,10 +190,7 @@ function TranscriptModal({ tx, onClose }) {
 // wasteful — the trailing timeout still picks up the final state
 const VERSION_REFETCH_THROTTLE_MS = 750
 
-// `focus` ({ agentId, runId, sessionId }) comes from an inline thread's "Open in
-// Sub-agents" (Conversation): once this session's list is loaded, the agent's
-// transcript modal opens by itself. Absent, the view behaves as it always has.
-export default function SubagentsView({ data, version = 0, active = true, focus = null }) {
+export default function SubagentsView({ data, version = 0, active = true }) {
   const [tx, setTx] = useState(null)
   const lastVersion = useRef(version)
   const lastFetchAt = useRef(0)
@@ -211,18 +208,6 @@ export default function SubagentsView({ data, version = 0, active = true, focus 
       .then((d) => setTx((prev) => (prev && prev.agent.id === agent.id && prev.runId === runId ? { agent, runId, data: d } : prev)))
       .catch((e) => setTx((prev) => (prev && prev.agent.id === agent.id && prev.runId === runId ? { agent, runId, error: e.message } : prev)))
   }
-
-  const lastFocus = useRef(null)
-  useEffect(() => {
-    if (!focus || !data || lastFocus.current === focus) return
-    if (focus.sessionId && data.id && focus.sessionId !== data.id) return // a request for another session
-    lastFocus.current = focus
-    if (!focus.agentId) return // a workflow run: the list itself is the destination
-    const run = focus.runId ? (data.runs || []).find((r) => r.runId === focus.runId) : null
-    const a = (run ? run.agents : data.agents || []).find((x) => x.id === focus.agentId)
-    if (a) openAgent(a, focus.runId || null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focus, data])
 
   // keep an open transcript modal fresh, the same way the main conversation
   // stays fresh: refetch when this session's SSE version bumps (subagent

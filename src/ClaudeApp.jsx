@@ -41,7 +41,6 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
   const [active, setActive] = useState(null)
   const [sessionData, setSessionData] = useState(null)
   const [subagents, setSubagents] = useState(null)
-  const [subagentFocus, setSubagentFocus] = useState(null) // { agentId, runId, sessionId } — open this agent's modal on the Sub-agents tab
   const [raw, setRaw] = useState(null)
   const [usage, setUsage] = useState(null)
   const [tab, setTab] = useState('conversation')
@@ -106,23 +105,9 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
   }
 
   // ---- inline sub-agent threads (Conversation) ----
-  // "Open in Sub-agents" on an inline thread: switch to the tab with that agent
-  // focused (SubagentsView opens its transcript modal once the list is in).
-  const openSubagentInModal = useCallback(
-    (target) => {
-      setSubagentFocus({ ...target, sessionId: activeRef.current?.id || null, n: Date.now() })
-      setTab('subagents')
-      tabRef.current = 'subagents'
-      report(currentTarget('subagents'))
-    },
-    [report, currentTarget]
-  )
   // memoised on ids only — a new object here would re-render the (memo) Conversation
   const activeId = active?.id || null
-  const subagentCtx = useMemo(
-    () => (root && openSlug && activeId ? { root, slug: openSlug, id: activeId, onOpenSubagent: openSubagentInModal } : null),
-    [root, openSlug, activeId, openSubagentInModal]
-  )
+  const subagentCtx = useMemo(() => (root && openSlug && activeId ? { root, slug: openSlug, id: activeId } : null), [root, openSlug, activeId])
 
   // ---- roots + projects ----
   const reloadRoots = useCallback(async () => {
@@ -505,10 +490,11 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
           <button onClick={() => setError(null)} className="text-red-400">×</button>
         </div>
       )}
-      {tab === 'conversation' ? (
-        <ErrorBoundary label="this conversation" resetKey={`conv|${root}|${openSlug || ''}|${active?.id || ''}`}>
-          <div className="flex-1 min-h-0 flex flex-col">
-            <div ref={mainRef} onScroll={onMainScroll} className="flex-1 overflow-y-auto">
+      {/* the conversation stays mounted (hidden) while another tab shows, so its
+          scroll position and expanded threads are exactly where the reader left them */}
+      <ErrorBoundary label="this conversation" resetKey={`conv|${root}|${openSlug || ''}|${active?.id || ''}`}>
+        <div className={tab === 'conversation' ? 'flex-1 min-h-0 flex flex-col' : 'hidden'}>
+          <div ref={mainRef} onScroll={onMainScroll} className="flex-1 overflow-y-auto">
               {termDraft ? (
                 <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
               ) : sessionData ? (
@@ -522,12 +508,12 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
             ) : active ? (
               <TerminalPanel root={root} slug={openSlug} id={active.id} title={active.title} contextUsed={termCtxUsed} onChange={refreshTerminals} runningKeys={runningTermKeys} onOpenTool={(what) => api.open(root, openSlug, active.id, what)} />
             ) : null}
-          </div>
-        </ErrorBoundary>
-      ) : (
+        </div>
+      </ErrorBoundary>
+      {tab !== 'conversation' && (
         <div className="flex-1 overflow-y-auto">
           <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
-            {tab === 'subagents' && <SubagentsView key={(active && active.id) || 'none'} data={subagents} version={active ? getSessionVersion(sessionVersions, 'claude', root, active.id) : 0} active={appActive} focus={subagentFocus} />}
+            {tab === 'subagents' && <SubagentsView key={(active && active.id) || 'none'} data={subagents} version={active ? getSessionVersion(sessionVersions, 'claude', root, active.id) : 0} active={appActive} />}
             {tab === 'raw' && raw && <RawView records={raw.records} />}
             {tab === 'memory' && root && openSlug && <MemoryView key={`mem-${root}-${openSlug}`} root={root} slug={openSlug} />}
             {tab === 'config' && root && openSlug && <Resources key={`cfg-${root}-${openSlug}`} root={root} slug={openSlug} />}

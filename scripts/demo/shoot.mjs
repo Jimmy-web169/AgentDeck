@@ -124,7 +124,7 @@ const SHOTS = [
       // that spawned the sub-agent is usually earlier. Load the whole transcript,
       // open the first inline thread ("▸ show thread") and scroll it into view.
       const findThread = `[...document.querySelectorAll('button')].find((x) => /show thread/.test(x.textContent || ''))`
-      await cdp.eval(`(() => { const more = document.querySelector('button[title^="Only the latest messages"]'); if (more) more.click(); return !!more })()`)
+      await cdp.eval(`(() => { const more = document.querySelector('[data-earlier-all]'); if (more) more.click(); return !!more })()`)
       await cdp.waitFor(`!!(${findThread})`, { timeout: 4000 })
       await cdp.eval(`(() => { const b = ${findThread}; if (!b) return false; b.click(); return true })()`)
       await cdp.waitFor(`/hide thread/.test(${T})`, { timeout: 4000 })
