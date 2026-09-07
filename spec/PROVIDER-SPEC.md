@@ -107,13 +107,13 @@ shell; keep it that way.
 
 ## 4. Known misalignments (work items)
 
-1. **Three total-token formulas disagree** (`lib/format.js`, `shared/Stats.jsx`,
+1. ~~Three total-token formulas disagree~~ **done 2026-09-07** — `server/shared/tokens.js`: the provider computes `tokens.total`; clients only fall back to the sum. Was: (`lib/format.js`, `shared/Stats.jsx`,
    `shared/activity.js`) whenever `total` is present or `reasoning` ≠ 0, i.e. always
    for codex. Fix: providers emit `tokens.total`; one helper reads only that.
 2. **Codex `getStats` mixes populations**: per-project `sessions` excludes
    sub-agents, the token/turn loop includes them, so root `sessions` ≠ Σ projects.
    Fix: emit `sessions` and `subagentSessions` separately, same population everywhere.
-3. **Two Stats components** (`shared/Stats.jsx` vs `codex/Stats.jsx`): "user
+3. **Two Stats components** — *partly done 2026-09-07*: both now render the token tiles through `shared/TokenTiles.jsx` from `GET /api/stats` `fields` (common first, then provider-specific); the remaining differences below still stand. Was: (`shared/Stats.jsx` vs `codex/Stats.jsx`): "user
    prompts"/"Prompts", "cache read"/"Cached input", "Tool usage"/"Tools used", model
    chips (counts dropped) vs bars, `cacheCreate` tile always 0 for codex, reasoning
    only for codex, `assistantTurns` shown only by codex, session id/time range only
@@ -172,9 +172,9 @@ Precedence when the same name appears twice: local > project > user > plugin.
 
 1. ~~Rename `tool_use` → `tool_call`~~ — done 2026-09-07 (the normalized part kind is `tool_call`; raw vendor types unchanged). (rename touched
    every Conversation/ToolCall component)
-2. Sub-agents: one `children[]` for both providers, with claude workflow runs as an
+2. ~~Sub-agents: one `children[]`~~ **done 2026-09-07** (`server/shared/children.js`; `groups[]` for workflow runs; provider lists kept so the UI is unchanged). Was: one `children[]` for both providers, with claude workflow runs as an
    optional `groups[]` — agree?
-3. Should the UI ever show provider-specific tiles (reasoning, cache create) or only
+3. **decided 2026-09-07**: show the common fields first, then the provider's own, and the backend must say which is which (`fields` on `/api/stats`). Was: should the UI ever show provider-specific tiles (reasoning, cache create) or only
    non-zero fields of the common `Tokens`?
 4. Drift `changed` vs `drift` thresholds: is a new optional key worth a badge?
 5. Memory: expose codex thread memories under the same project tab (read-only) — yes?

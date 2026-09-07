@@ -24,7 +24,8 @@
       "input": 168,
       "output": 2016,
       "cacheCreate": 50696,
-      "cacheRead": 1163232
+      "cacheRead": 1163232,
+      "total": 1216112
     }
   },
   "timeline": [

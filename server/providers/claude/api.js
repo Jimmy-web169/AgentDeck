@@ -15,6 +15,8 @@ import {
   expandHome,
 } from './paths.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
+import { addTokens, tokenFields, zeroTokens as zeroTokensShared } from '../../shared/tokens.js'
+import { child } from '../../shared/children.js'
 import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../shared/parseCache.js'
 import { withOversizeFallback } from '../../shared/transcriptGuard.js'
 
@@ -219,12 +221,36 @@ function getSubagents(q) {
   const slug = q.get('slug')
   const id = q.get('id')
   if (!slug || !id) throw httpErr(400, 'missing slug/id')
+  const runs = discoverRuns(root.dir, slug, id)
+  const agents = discoverPlainAgents(root.dir, slug, id)
+  // `children` / `groups` is the provider-neutral shape (server/shared/children.js);
+  // `runs` / `agents` stay for the Sub-agents view, which is unchanged
+  const toChild = (a, group) =>
+    child({
+      id: a.id,
+      parentId: id,
+      kind: 'agent',
+      label: a.description || a.label || a.id,
+      type: a.agentType || null,
+      status: a.status,
+      firstTs: a.firstTs,
+      lastTs: a.lastTs,
+      toolCalls: a.toolCalls,
+      tokens: a.tokens || null,
+      model: a.model || null,
+      depth: a.spawnDepth,
+      group,
+      oversized: a.oversized,
+      extra: { toolUseId: a.toolUseId || null, description: a.description || null },
+    })
   return {
     root: root.id,
     slug,
     id,
-    runs: discoverRuns(root.dir, slug, id),
-    agents: discoverPlainAgents(root.dir, slug, id),
+    runs,
+    agents,
+    children: [...agents.map((a) => toChild(a, null)), ...runs.flatMap((r) => (r.agents || []).map((a) => toChild(a, r.runId)))],
+    groups: runs.map((r) => ({ id: r.runId, name: r.name || r.description || r.runId, status: r.runStatus || 'unknown', agentCount: r.agentCount ?? (r.agents || []).length, elapsedMs: r.elapsedMs ?? null, tokens: r.totals || null })),
   }
 }
 
@@ -253,13 +279,9 @@ function getSubagent(q) {
   return { root: root.id, run, agent, summary: { ...sessionSummary(file, agent, fp) }, timeline: sessionTimeline(file, fp), _etag: etagOf(fp) }
 }
 
-const zeroTokens = () => ({ input: 0, output: 0, cacheCreate: 0, cacheRead: 0 })
-function addTokens(into, t) {
-  into.input += t.input
-  into.output += t.output
-  into.cacheCreate += t.cacheCreate
-  into.cacheRead += t.cacheRead
-}
+// token fields: the common set every provider has, plus Claude's own cacheCreate
+const TOKEN_SPECIFIC = ['cacheCreate']
+const zeroTokens = () => zeroTokensShared(TOKEN_SPECIFIC)
 
 // root-level totals + a per-project rollup. Drill into a project's per-session
 // breakdown via GET /api/sessions?root=&slug= (already per-session summaries).
@@ -310,7 +332,9 @@ function getStats(q) {
     projects.push({ ...proj, models: [...proj.models] })
   }
   projects.sort((a, b) => b.lastActivity - a.lastActivity)
-  return { root: root.id, projectCount: projects.length, sessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects }
+  // `fields` tells the UI which token fields every provider shares (add these up
+  // across folders) and which are Claude's own
+  return { root: root.id, projectCount: projects.length, sessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
 }
 
 function getHistory(q) {

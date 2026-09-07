@@ -21,6 +21,8 @@ import {
 } from './paths.js'
 import { safeTrash } from '../../shared/trash.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
+import { addTokens, tokenFields, zeroTokens as zeroTokensShared } from '../../shared/tokens.js'
+import { child } from '../../shared/children.js'
 import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../shared/parseCache.js'
 import { withOversizeFallback } from '../../shared/transcriptGuard.js'
 
@@ -209,20 +211,36 @@ function getSubagents(q) {
         parts.push(`${c.id}:${fp.key}`)
       }
     } catch {}
-    return {
-      ...c,
-      title: s?.title || null,
-      firstPrompt: s?.firstPrompt || '',
-      userTurns: s?.userTurns || 0,
-      assistantTurns: s?.assistantTurns || 0,
-      toolCalls: s?.toolCalls || 0,
-      models: s?.models || [],
-      tokens: s?.tokens || null,
-      contextWindow: s?.contextWindow || 0,
-      lastTokenUsage: s?.lastTokenUsage || null,
-      firstTs: s?.firstTs || null,
+    // the provider-neutral child shape (server/shared/children.js) plus the
+    // Codex-specific fields the Sub-agents view and the inline thread already use
+    return child({
+      id: c.id,
+      parentId: id,
+      kind: 'session',
+      label: s?.title || s?.firstPrompt || c.agentRole || c.id,
+      type: c.agentRole || null,
+      status: c.mtimeMs && Date.now() - c.mtimeMs < 60000 ? 'running' : 'done',
+      firstTs: s?.firstTs || c.startTs || null,
       lastTs: s?.lastTs || null,
-    }
+      toolCalls: s?.toolCalls || 0,
+      tokens: s?.tokens || null,
+      model: s?.models?.[0] || null,
+      depth: c.depth ?? null,
+      extra: {
+        mtimeMs: c.mtimeMs,
+        startTs: c.startTs,
+        agentRole: c.agentRole,
+        agentNickname: c.agentNickname,
+        agentPath: c.agentPath,
+        title: s?.title || null,
+        firstPrompt: s?.firstPrompt || '',
+        userTurns: s?.userTurns || 0,
+        assistantTurns: s?.assistantTurns || 0,
+        models: s?.models || [],
+        contextWindow: s?.contextWindow || 0,
+        lastTokenUsage: s?.lastTokenUsage || null,
+      },
+    })
   })
   const _etag = `"${sha1(parts.join('|'))}"`
   return { root: root.id, id, children, _etag }
@@ -239,15 +257,11 @@ function getRaw(q) {
 
 // --- stats -------------------------------------------------------------------
 
-const zeroTokens = () => ({ input: 0, output: 0, cacheRead: 0, cacheCreate: 0, reasoning: 0, total: 0 })
-function addTokens(into, t) {
-  into.input += t.input || 0
-  into.output += t.output || 0
-  into.cacheRead += t.cacheRead || 0
-  into.cacheCreate += t.cacheCreate || 0
-  into.reasoning += t.reasoning || 0
-  into.total += t.total || 0
-}
+// token fields: the common set every provider has, plus Codex's own reasoning
+// (cacheCreate rides on the summary shape but is always 0 for Codex, so it is
+// not declared as one of its fields)
+const TOKEN_SPECIFIC = ['reasoning']
+const zeroTokens = () => zeroTokensShared([...TOKEN_SPECIFIC, 'cacheCreate'])
 
 // root-level totals + a per-project (cwd) rollup. Drill into a project's
 // per-session breakdown via GET /api/sessions?root=&slug= .
@@ -286,7 +300,9 @@ function getStats(q) {
     projects.push({ ...acc, models: [...acc.models] })
   }
   projects.sort((a, b) => b.lastActivity - a.lastActivity)
-  return { root: root.id, projectCount: projects.length, sessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects }
+  // `fields` tells the UI which token fields every provider shares (add these up
+  // across folders) and which are Codex's own
+  return { root: root.id, projectCount: projects.length, sessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
 }
 
 // --- history -----------------------------------------------------------------

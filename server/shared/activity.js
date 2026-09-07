@@ -35,7 +35,8 @@ export const dayKey = (d) => {
   return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`
 }
 
-export const totalTokens = (t = {}) => (t.input || 0) + (t.output || 0) + (t.cacheRead || 0) + (t.cacheCreate || 0)
+// the provider computes `total` (server/shared/tokens.js); the sum is only a fallback for old shapes
+export const totalTokens = (t = {}) => (typeof t.total === 'number' && t.total > 0 ? t.total : (t.input || 0) + (t.output || 0) + (t.cacheRead || 0) + (t.cacheCreate || 0))
 
 export function bucketActivity(sessions = [], { days = 84, now = Date.now() } = {}) {
   const n = Number(days)

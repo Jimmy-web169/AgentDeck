@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
-import { fmtTokens } from '../../lib/format.js'
+import { fmtTokens, totalTokens } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
+import TokenTiles from './TokenTiles.jsx'
 
-const sumTokens = (t = {}) => (t.input || 0) + (t.output || 0) + (t.cacheCreate || 0) + (t.cacheRead || 0)
+// the provider computes `total` (server/shared/tokens.js); totalTokens only falls back to the sum
+const sumTokens = (t) => totalTokens(t)
 const shortName = (cwd, slug) => (cwd ? shortPath(cwd) : slug)
 
-function Tile({ label, value }) {
+function Tile({ label, value, hint }) {
   return (
-    <div className="rounded-lg bg-ink-700/60 border border-zinc-800 p-4">
+    <div className={`rounded-lg bg-ink-700/60 border p-4 ${hint ? 'border-dashed border-zinc-700' : 'border-zinc-800'}`}>
       <div className="text-2xl font-semibold text-zinc-100">{value}</div>
       <div className="text-[12px] text-zinc-500 mt-0.5">{label}</div>
+      {hint && <div className="text-[10.5px] text-zinc-600">{hint}</div>}
     </div>
   )
 }
@@ -50,18 +53,16 @@ function BarList({ title, data, color }) {
 }
 
 // reusable stats panel — used at folder / project / session level
-function StatBlock({ tokens, sessions, userTurns, toolCalls, toolCounts, models }) {
+// `fields` (from GET /api/stats) says which token tiles are common to every
+// provider and which are this provider's own — common first, then specific
+function StatBlock({ tokens, sessions, userTurns, toolCalls, toolCounts, models, fields }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
         {sessions != null && <Tile label="sessions" value={sessions} />}
         <Tile label="user prompts" value={userTurns ?? 0} />
         <Tile label="tool calls" value={toolCalls ?? 0} />
-        <Tile label="total tokens" value={fmtTokens(sumTokens(tokens))} />
-        <Tile label="input" value={fmtTokens(tokens?.input)} />
-        <Tile label="output" value={fmtTokens(tokens?.output)} />
-        <Tile label="cache read" value={fmtTokens(tokens?.cacheRead)} />
-        <Tile label="cache create" value={fmtTokens(tokens?.cacheCreate)} />
+        <TokenTiles tokens={tokens} fields={fields} Tile={Tile} providerLabel="Claude Code" />
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <BarList title="Tool usage" data={toolCounts} color="bg-emerald-500/70" />
@@ -157,7 +158,7 @@ export default function Stats({ stats, root, focus, onOpenSession, apiClient }) 
       {!path.slug ? (
         // FOLDER level
         <>
-          <StatBlock tokens={stats.tokens} sessions={stats.sessions} userTurns={stats.userTurns} toolCalls={stats.toolCalls} toolCounts={stats.toolCounts} models={Object.keys(stats.modelCounts || {})} />
+          <StatBlock tokens={stats.tokens} sessions={stats.sessions} userTurns={stats.userTurns} toolCalls={stats.toolCalls} toolCounts={stats.toolCounts} models={Object.keys(stats.modelCounts || {})} fields={stats.fields} />
           <div>
             <div className="text-[12px] uppercase tracking-wide text-zinc-500 mb-2">By project ({projects.length}) — click for project stats</div>
             <div className="rounded-lg border border-zinc-800 overflow-hidden">
@@ -175,7 +176,7 @@ export default function Stats({ stats, root, focus, onOpenSession, apiClient }) 
         // PROJECT level
         <>
           {proj ? (
-            <StatBlock tokens={proj.tokens} sessions={proj.sessions} userTurns={proj.userTurns} toolCalls={proj.toolCalls} toolCounts={proj.toolCounts} models={proj.models} />
+            <StatBlock tokens={proj.tokens} sessions={proj.sessions} userTurns={proj.userTurns} toolCalls={proj.toolCalls} toolCounts={proj.toolCounts} models={proj.models} fields={stats.fields} />
           ) : (
             <div className="text-zinc-600 text-sm">project not found</div>
           )}
@@ -200,7 +201,7 @@ export default function Stats({ stats, root, focus, onOpenSession, apiClient }) 
         // SESSION level
         <>
           {session ? (
-            <StatBlock tokens={session.tokens} userTurns={session.userTurns} toolCalls={session.toolCalls} toolCounts={session.toolCounts} models={session.models} />
+            <StatBlock tokens={session.tokens} userTurns={session.userTurns} toolCalls={session.toolCalls} toolCounts={session.toolCounts} models={session.models} fields={stats.fields} />
           ) : (
             <div className="text-zinc-600 text-sm">session not found</div>
           )}

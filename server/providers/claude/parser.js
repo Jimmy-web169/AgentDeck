@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import { guardTranscriptSize } from '../../shared/transcriptGuard.js'
+import { withTotal } from '../../shared/tokens.js'
 
 /**
  * Parse a Claude Code session .jsonl into raw records.
@@ -278,6 +279,6 @@ export function summarize(records, id) {
     hasSidechain,
     models: [...models],
     toolCounts,
-    tokens: totals,
+    tokens: withTotal(totals), // `total` is the provider's job (server/shared/tokens.js)
   }
 }

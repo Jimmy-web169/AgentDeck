@@ -127,6 +127,19 @@ its real terminal.
   placeholder home paths so `check:privacy` stays green. README records the
   v1 → v2 progression and shows both releases' material.
 
+- **One token vocabulary, and the provider does the sum.** `server/shared/tokens.js`
+  names the fields every provider has (`input`, `output`, `cacheRead`, `total`)
+  and each provider declares its own (`cacheCreate` for Claude Code, `reasoning`
+  for Codex). `total` is computed by the provider — the three client-side
+  formulas that used to disagree are gone. `GET /api/stats` carries `fields`
+  `{ common, specific }`, and Stats shows the common tiles first, then the
+  provider's own marked "… only". The normalized part kind is now `tool_call`
+  (OTel naming); raw vendor types are untouched.
+- **One sub-agent shape.** `GET /api/subagents` returns `children[]` for every
+  provider (`server/shared/children.js`: id, parentId, kind, label, type,
+  status, firstTs, lastTs, toolCalls, tokens, model, depth, group) — Claude's
+  workflow runs also as `groups[]`. The provider lists (`runs[]`, `agents[]`)
+  stay, so nothing the Sub-agents view shows has changed.
 - **Spec conformance gate.** `npm run check:spec` (in `npm test` and
   `release:check`) validates every `spec/providers/*.yaml` against the JSON
   Schema, parses the fictional fixture sessions in `spec/fixtures/<id>/` with

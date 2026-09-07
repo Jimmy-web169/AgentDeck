@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { codexApi as api } from '../../api.js'
 import { fmtTokens, fmtRelative, fmtTime, totalTokens } from '../../lib/format.js'
+import TokenTiles from '../shared/TokenTiles.jsx'
 import { shortPath } from '../../lib/paths.js'
 
 function Card({ label, value, sub }) {
@@ -42,13 +43,13 @@ function Bars({ counts, color = 'bg-emerald-500/40' }) {
   )
 }
 
-function TokenCards({ t }) {
+// common token fields first (comparable across providers), Codex's own after —
+// which is which comes from GET /api/stats `fields`
+const TileCard = ({ label, value, hint }) => <Card label={label} value={value} sub={hint} />
+function TokenCards({ t, fields }) {
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-      <Card label="Input tokens" value={fmtTokens(t.input)} />
-      <Card label="Output tokens" value={fmtTokens(t.output)} />
-      <Card label="Cached input" value={fmtTokens(t.cacheRead)} />
-      <Card label="Total tokens" value={fmtTokens(t.total || totalTokens(t))} sub={t.reasoning ? `incl. ${fmtTokens(t.reasoning)} reasoning` : undefined} />
+    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <TokenTiles tokens={t} fields={fields} Tile={TileCard} providerLabel="Codex" />
     </div>
   )
 }
@@ -136,7 +137,7 @@ export default function Stats({ root, stats, focus, onOpenSession }) {
             <Card label="Tool calls" value={sess.toolCalls} />
             <Card label="Models" value={sess.models?.join(', ') || '—'} />
           </div>
-          <TokenCards t={sess.tokens} />
+          <TokenCards t={sess.tokens} fields={stats.fields} />
           <div>
             <h3 className="text-[12px] uppercase tracking-wide text-zinc-500 mb-2">Tools used</h3>
             <Bars counts={sess.toolCounts} />
@@ -148,13 +149,12 @@ export default function Stats({ root, stats, focus, onOpenSession }) {
       ) : proj ? (
         /* ---- level 2: a project's per-session stats ---- */
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <Card label="Sessions" value={proj.sessions} />
             <Card label="Prompts" value={proj.userTurns} />
             <Card label="Tool calls" value={proj.toolCalls} />
-            <Card label="Total tokens" value={fmtTokens(proj.tokens.total || totalTokens(proj.tokens))} />
           </div>
-          <TokenCards t={proj.tokens} />
+          <TokenCards t={proj.tokens} fields={stats.fields} />
           <div className="grid sm:grid-cols-2 gap-6">
             <div>
               <h3 className="text-[12px] uppercase tracking-wide text-zinc-500 mb-2">Tools used</h3>
@@ -207,7 +207,7 @@ export default function Stats({ root, stats, focus, onOpenSession }) {
             <Card label="Prompts" value={stats.userTurns} />
             <Card label="Tool calls" value={stats.toolCalls} />
           </div>
-          <TokenCards t={stats.tokens} />
+          <TokenCards t={stats.tokens} fields={stats.fields} />
           <div className="grid sm:grid-cols-2 gap-6">
             <div>
               <h3 className="text-[12px] uppercase tracking-wide text-zinc-500 mb-2">Tools used</h3>
