@@ -3,7 +3,7 @@ import { tabLabel } from '../../lib/tabs.js'
 import { providerColor } from '../../lib/providerColors.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { ActivityIcon } from './icons.jsx'
-import { CloseIcon, PlusIcon, SearchIcon } from './shellIcons.jsx'
+import { CloseIcon, PanelLeftIcon, PlusIcon, SearchIcon } from './shellIcons.jsx'
 import { ShortcutList } from './ShortcutHints.jsx'
 import ThemeToggle from './ThemeToggle.jsx'
 
@@ -30,6 +30,8 @@ export default function TabStrip({
   onSearch,
   onHome,
   onCopyLink,
+  sidebarCollapsed,
+  onToggleSidebar,
 }) {
   const scrollRef = useRef(null)
   const els = useRef(new Map()) // key -> element
@@ -196,6 +198,11 @@ export default function TabStrip({
         <span className="hidden md:inline">Search…</span>
         <kbd className="hidden md:inline text-[10px] px-1 py-px rounded bg-ink-700 text-zinc-500 border border-zinc-800">Ctrl K</kbd>
       </button>
+      {onToggleSidebar && (
+        <button onClick={onToggleSidebar} title={`${sidebarCollapsed ? 'Show' : 'Hide'} sidebar  (Ctrl+B)`} className={`shrink-0 self-center mr-1 w-7 h-7 rounded-md flex items-center justify-center hover:bg-ink-700 ${sidebarCollapsed ? 'text-zinc-300 bg-ink-800' : 'text-zinc-500 hover:text-zinc-100'}`}>
+          <PanelLeftIcon />
+        </button>
+      )}
       <ThemeToggle compact className="shrink-0 self-center mr-1" />
       <button
         onClick={() => setHelp((h) => !h)}

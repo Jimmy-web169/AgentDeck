@@ -38,9 +38,10 @@ Per provider, in one UI:
 - **Memory per project** — a Memory tab next to Config for both providers
   (Claude's `memory/*.md`, Codex's per-thread memories filtered to the project).
 - **Pins and Workspaces** — pin projects or sessions you're working on (they
-  lead the sidebar, the quick switcher and Home), and group projects from any
-  provider or folder under a named workspace; the sidebar suggests one when the
-  same folder shows up under several providers.
+  lead the sidebar, the quick switcher and Home), and group projects and
+  sessions from any provider or folder under a named workspace, shown as one
+  session list with colour-coded source tags; the sidebar suggests one when
+  the same folder shows up in several places.
 - **Live updates** — the UI lights up the moment an agent writes to disk
   (file-watching + Server-Sent Events).
 - **Tabs** — a Chrome-style tab strip across providers and tracked folders:

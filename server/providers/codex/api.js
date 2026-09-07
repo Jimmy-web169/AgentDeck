@@ -4,6 +4,7 @@ import os from 'node:os'
 import crypto from 'node:crypto'
 import {
   rootsWithMeta,
+  renameRoot,
   addRoot,
   removeRoot,
   resolveRoot,
@@ -71,6 +72,12 @@ function getRoots() {
 function postRoots(_q, body) {
   if (!body?.path) throw httpErr(400, 'missing path')
   return addRoot(body.path, body.label)
+}
+
+// relabel a tracked folder (display only; empty label = back to the default)
+function postRootLabel(_q, body) {
+  if (!body?.id) throw httpErr(400, 'missing id')
+  return renameRoot(body.id, body.label)
 }
 
 function deleteRoots(q) {
@@ -497,6 +504,7 @@ async function getPickFolder() {
 const ROUTES = {
   'GET /api/roots': getRoots,
   'POST /api/roots': postRoots,
+  'POST /api/roots/label': postRootLabel,
   'DELETE /api/roots': deleteRoots,
   'GET /api/projects': getProjects,
   'GET /api/sessions': getSessions,

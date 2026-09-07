@@ -67,6 +67,7 @@ export function createApi(provider) {
   // ---- shared core ----
   roots: () => get('roots'),
   addRoot: (path, label) => request('POST', 'roots', { body: { path, label } }),
+  relabelRoot: (id, label) => request('POST', 'roots/label', { body: { id, label } }),
   removeRoot: (id) => request('DELETE', 'roots', { params: { id } }),
   projects: (root) => get('projects', { root }),
   sessions: (root, slug) => get('sessions', { root, slug }),

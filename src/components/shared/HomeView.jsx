@@ -7,7 +7,8 @@ import { providerColor, providerLabel } from '../../lib/providerColors.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import useActiveSessions, { toManagerItems } from '../../lib/useActiveSessions.js'
-import { PinIcon, SearchIcon, TerminalIcon } from './shellIcons.jsx'
+import { PencilIcon, PinIcon, SearchIcon, TerminalIcon } from './shellIcons.jsx'
+import FolderChips from './FolderChips.jsx'
 import { ShortcutChips } from './ShortcutHints.jsx'
 
 // Home pages — the main area when a tab points at Home. The page switch is in
@@ -278,6 +279,7 @@ function Folders({ providers, index }) {
   const [label, setLabel] = useState('')
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
+  const [editing, setEditing] = useState(null) // { provider, id, label }
   const cfg = providers.find((p) => p.id === prov)
   const rows = providers.flatMap((p) => (index.roots[p.id] || []).map((r) => ({ ...r, provider: p.id, statusField: p.rootStatusField || 'hasProjects' })))
 
@@ -309,7 +311,24 @@ function Folders({ providers, index }) {
             <div key={`${r.provider}|${r.id}`} className="flex items-center gap-3 px-3 py-2.5">
               <ProviderBadge providers={providers} id={r.provider} />
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] text-zinc-200 truncate">{r.label}</div>
+                {editing?.provider === r.provider && editing?.id === r.id ? (
+                  <input
+                    autoFocus
+                    value={editing.label}
+                    onChange={(e) => setEditing({ ...editing, label: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') run(() => apis[r.provider].relabelRoot(r.id, editing.label)).then(() => setEditing(null))
+                      else if (e.key === 'Escape') setEditing(null)
+                    }}
+                    placeholder="label (empty = default)"
+                    className="w-full bg-ink-700 border border-zinc-700 rounded px-2 py-0.5 text-[13px] text-zinc-100 placeholder-zinc-600"
+                  />
+                ) : (
+                  <button onClick={() => setEditing({ provider: r.provider, id: r.id, label: r.label })} className="group flex items-center gap-1.5 max-w-full text-left" title="Rename this folder's label">
+                    <span className="text-[13px] text-zinc-200 truncate">{r.label}</span>
+                    <PencilIcon className="w-3 h-3 text-zinc-600 opacity-0 group-hover:opacity-100 shrink-0" />
+                  </button>
+                )}
                 <div className="text-[11px] text-zinc-500 font-mono truncate">{r.dir}</div>
               </div>
               <div className="text-[10.5px] flex gap-2 shrink-0">
@@ -348,7 +367,7 @@ function Folders({ providers, index }) {
           </div>
           {err && <div className="text-[12px] text-red-300">{err}</div>}
           <div className="text-[11px] text-zinc-600">
-            A folder is a CLI home (<span className="font-mono">~/.claude</span>, <span className="font-mono">~/.codex</span>) or any directory with a <span className="font-mono">.claude/</span> config. <span className="text-zinc-400">untrack</span> only removes it from this list.
+            A folder is a CLI home (<span className="font-mono">~/.claude</span>, <span className="font-mono">~/.codex</span>) or any directory with a <span className="font-mono">.claude/</span> config. Click a label above to rename it (a second account's home, say). <span className="text-zinc-400">untrack</span> only removes it from this list.
           </div>
         </Panel>
       </Section>
@@ -356,7 +375,7 @@ function Folders({ providers, index }) {
   )
 }
 
-export default function HomeView({ providers = [], visible = true, target, scope, index, live, termKeys, onOpen, onNavigate, onOpenHome, onSearch }) {
+export default function HomeView({ providers = [], visible = true, target, scope, onScope, index, live, termKeys, onOpen, onNavigate, onOpenHome, onSearch }) {
   const view = normalizeView(target?.view)
   const scopeInfo = scope ? index.scopes.find((s) => s.provider === scope.provider && s.root === scope.root) : null
   const providerCfg = scope ? providers.find((p) => p.id === scope.provider) : null
@@ -381,13 +400,12 @@ export default function HomeView({ providers = [], visible = true, target, scope
           ))}
         </div>
         {view === 'folders' && <span className="text-[13px] font-medium text-zinc-100">Folders</span>}
-        {scoped && scopeInfo && (
-          <span className="text-[12px] text-zinc-500 flex items-center gap-1.5">
-            <span className={`w-1.5 h-1.5 rounded-full ${providerColor(providers, scope.provider).dot}`} />
-            {providerLabel(providers, scope.provider)} · {scopeInfo.rootLabel}
-          </span>
+        {scoped && (
+          <div className="min-w-0 flex-1">
+            <FolderChips compact scopes={index.scopes} providers={providers} value={scope} onPick={onScope} />
+          </div>
         )}
-        <span className="flex-1" />
+        {!scoped && <span className="flex-1" />}
         <button onClick={onSearch} title="Search projects & sessions  (Ctrl+K)" className="flex items-center gap-2 h-8 px-3 rounded-md bg-ink-800 border border-zinc-700 text-[12px] text-zinc-300 hover:text-zinc-100 hover:bg-ink-700">
           <SearchIcon className="w-3.5 h-3.5" />
           Jump to…

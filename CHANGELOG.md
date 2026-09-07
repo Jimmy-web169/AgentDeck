@@ -25,18 +25,22 @@ its real terminal.
   projects and the keyboard map — plus Stats, History, Plugins and Resources
   per tracked folder. Folders (one list of every provider's tracked folders,
   one add form) opens from the "+" next to the folder chips.
-- **One sidebar for everything.** A provider rail (one square per provider,
-  so more providers just add rows) plus one sidebar the shell owns: the
-  provider's folders as chips, then Workspaces, Pinned and the folder's
-  projects/sessions from the cross-provider index — identical whether the tab
-  shows Home or a session. Clicking there navigates the current tab;
-  Ctrl/middle-click opens a new one. The Home page switch (Activity / Stats /
-  History / Plugins / Resources) sits in Home's own header.
-- **Workspaces**: name a group of projects from any provider or folder (the
-  same repo under Claude Code and Codex, say) and browse their sessions in
-  place; the sidebar suggests groups for folders it sees under several
-  providers. Pinned projects expand in place too, and Pinned / Workspaces
-  show every provider at once — no rail switch needed.
+- **One sidebar for everything.** The shell owns it: every tracked folder of
+  every provider as colour-coded chips (one click = scope), then Workspaces,
+  Pinned and the folder's projects/sessions from the cross-provider index —
+  identical whether the tab shows Home or a session. Every row has the same
+  two hover controls, pin and ⋯; select, trash, rename and workspace
+  membership live in the ⋯ menu. The Home page switch (Activity / Stats /
+  History / Plugins / Resources) and the same folder chips sit in Home's own
+  header, so Stats for another folder is one click.
+- **Workspaces**: name a group of projects *and sessions* from any provider or
+  folder (the same repo under Claude Code, a second Claude account and Codex,
+  say). A workspace shows ONE flat session list; a coloured source tag
+  (provider dot + folder label) tells members apart and the source chips
+  filter the list. The sidebar suggests groups for folders it sees in several
+  places. Pinned projects expand in place too.
+- Tracked folders can be relabelled from Folders (click the label), so a
+  second account's home reads as "work" rather than `~\.claude-info`.
 - **Memory is project-level** for both providers: a Memory tab next to Config
   (Claude: `projects/<slug>/memory/*.md`; Codex: the memories of that
   project's threads, filtered by cwd).

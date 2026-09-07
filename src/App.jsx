@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createApi } from './api.js'
 import HomeView from './components/shared/HomeView.jsx'
 import AppSidebar from './components/shared/AppSidebar.jsx'
-import ProviderRail from './components/shared/ProviderRail.jsx'
 import TabStrip from './components/shared/TabStrip.jsx'
 import QuickSwitcher from './components/shared/QuickSwitcher.jsx'
 import { PROVIDER_LIST } from './providers/index.js'
@@ -14,9 +13,8 @@ import useActiveSessions from './lib/useActiveSessions.js'
 import useLiveKeys, { liveSessionKey } from './lib/useLiveKeys.js'
 import useNavIndex from './lib/useNavIndex.js'
 
-// Shell: a Chrome-style tab strip; below it a provider rail, one sidebar, and
-// the main area that shows Home or a provider's app depending on the active
-// tab.
+// Shell: a Chrome-style tab strip; below it one sidebar and the main area that
+// shows Home or a provider's app depending on the active tab.
 //
 // Each tab holds a target (see lib/tabs.js). A target with a provider shows
 // that provider's app; without one it shows Home (activity / stats / history /
@@ -24,12 +22,11 @@ import useNavIndex from './lib/useNavIndex.js'
 // all times (their terminals + sockets survive a switch), so a tab switch is
 // instant.
 //
-// The rail picks the provider, the sidebar the folder (chips) — together the
-// "scope" that the sidebar's project list and Home's per-folder pages use. The
-// scope follows the active tab; on Home it is whatever was picked last. Both
-// columns are the shell's, so they are identical on every tab. Clicking in
-// them navigates the current tab, like a link click in Chrome; Ctrl/middle-
-// click opens a new tab.
+// The sidebar's folder chips (every provider's folders, colour-coded) pick the
+// "scope" that the project list and Home's per-folder pages use; it follows the
+// active tab, and on Home it is whatever was picked last. The sidebar is the
+// shell's, so it is identical on every tab. Clicking in it navigates the
+// current tab, like a link click in Chrome; Ctrl/middle-click opens a new tab.
 //
 // Two directions of sync with the apps:
 //   shell → app   `pendingOpen`: "show this target". The app walks root →
@@ -45,7 +42,6 @@ const PROVIDER_IDS = PROVIDER_LIST.map((p) => p.id)
 const identity = (t) => `${t?.root || ''}|${t?.slug || ''}|${t?.id || ''}|${t?.draft ? 'd' : ''}`
 const HOME = { provider: null, view: 'activity' }
 const SCOPE_KEY = 'agentdeck_scope'
-const ROOTS_KEY = 'agentdeck_lastRoots' // providerId -> last root picked
 
 function initialState() {
   const saved = loadTabs()
@@ -115,7 +111,6 @@ export default function App() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [recent, setRecent] = useState(loadRecent)
   const [sticky, setSticky] = useState(() => loadJson(SCOPE_KEY, null)) // last scope picked while on Home
-  const [lastRoots, setLastRoots] = useState(() => loadJson(ROOTS_KEY, {}))
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('agentdeck_collapsed') === '1')
   const [sidebarW, setSidebarW] = useState(() => {
     const v = Number(localStorage.getItem('agentdeck_sidebarW'))
@@ -166,12 +161,12 @@ export default function App() {
     const t = activeTarget
     if (t?.provider && t.root && has({ provider: t.provider, root: t.root })) return { provider: t.provider, root: t.root }
     if (t?.provider) {
-      const s = index.scopes.find((x) => x.provider === t.provider && x.root === lastRoots[t.provider]) || index.scopes.find((x) => x.provider === t.provider)
+      const s = index.scopes.find((x) => x.provider === t.provider)
       if (s) return { provider: s.provider, root: s.root }
     }
     if (has(sticky)) return sticky
     return index.scopes[0] ? { provider: index.scopes[0].provider, root: index.scopes[0].root } : null
-  }, [activeTarget, sticky, lastRoots, index.scopes])
+  }, [activeTarget, sticky, index.scopes])
 
   // ---- persistence + deep link ----
   useEffect(() => saveTabs(tabs, activeKey), [tabs, activeKey])
@@ -209,11 +204,6 @@ export default function App() {
   const setScope = useCallback((s) => {
     setSticky(s)
     saveJson(SCOPE_KEY, s)
-    setLastRoots((prev) => {
-      const next = { ...prev, [s.provider]: s.root }
-      saveJson(ROOTS_KEY, next)
-      return next
-    })
   }, [])
 
   // Home: navigate the current tab to a Home page; a `scope` in the patch
@@ -245,14 +235,6 @@ export default function App() {
     },
     [openTarget, setScope]
   )
-  const pickProvider = useCallback(
-    (pid) => {
-      const s = index.scopes.find((x) => x.provider === pid && x.root === lastRoots[pid]) || index.scopes.find((x) => x.provider === pid)
-      if (s) onScope({ provider: s.provider, root: s.root })
-    },
-    [index.scopes, lastRoots, onScope]
-  )
-
   const activateTab = useCallback((key) => {
     const cur = stateRef.current
     const tab = cur.tabs.find((t) => t.key === key)
@@ -484,9 +466,10 @@ export default function App() {
         onSearch={() => setSearchOpen(true)}
         onHome={() => openHome()}
         onCopyLink={copyLink}
+        sidebarCollapsed={collapsed}
+        onToggleSidebar={() => setCollapsed((c) => !c)}
       />
       <div className="flex-1 min-h-0 flex">
-        <ProviderRail providers={PROVIDER_LIST} scopes={index.scopes} activeProvider={scope?.provider || null} onPick={pickProvider} collapsed={collapsed} onToggleSidebar={() => setCollapsed((c) => !c)} />
         {!collapsed && (
           <>
             <div style={{ width: sidebarW }} className="shrink-0 h-full min-w-0">
@@ -530,7 +513,7 @@ export default function App() {
             )
           })}
           <div className="absolute inset-0" style={{ display: showHome ? 'block' : 'none' }}>
-            <HomeView providers={PROVIDER_LIST} visible={showHome} target={showHome ? activeTarget : null} scope={scope} index={index} live={live} termKeys={termKeys} onOpen={openSession} onNavigate={updateHome} onOpenHome={openHome} onSearch={() => setSearchOpen(true)} />
+            <HomeView providers={PROVIDER_LIST} visible={showHome} target={showHome ? activeTarget : null} scope={scope} onScope={onScope} index={index} live={live} termKeys={termKeys} onOpen={openSession} onNavigate={updateHome} onOpenHome={openHome} onSearch={() => setSearchOpen(true)} />
           </div>
         </div>
       </div>

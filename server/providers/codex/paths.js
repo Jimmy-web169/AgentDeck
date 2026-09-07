@@ -30,7 +30,7 @@ function autodetectSeed() {
   return out
 }
 const _roots = makeRoots({ configPath: CONFIG_PATH, autodetectSeed, defaultRoots, dataProbe: (dir) => ({ hasSessions: hasSessions(dir) }), onRootsChanged: (dir) => invalidateIndex(dir) })
-export const { loadRoots, rootsWithMeta, addRoot, removeRoot, resolveRoot } = _roots
+export const { loadRoots, rootsWithMeta, addRoot, renameRoot, removeRoot, resolveRoot } = _roots
 export { assertInside, HOME, expandHome, dirExists }
 
 export function sessionsDir(rootDir) {

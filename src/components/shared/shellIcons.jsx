@@ -101,6 +101,16 @@ export function PencilIcon({ className = 'w-4 h-4' }) {
   )
 }
 
+export function DotsIcon({ className = 'w-4 h-4' }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="currentColor" stroke="none">
+      <circle cx="6" cy="12" r="1.6" />
+      <circle cx="12" cy="12" r="1.6" />
+      <circle cx="18" cy="12" r="1.6" />
+    </svg>
+  )
+}
+
 export function TerminalIcon({ className = 'w-4 h-4' }) {
   return (
     <svg viewBox="0 0 24 24" className={className} {...base}>

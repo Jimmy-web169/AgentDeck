@@ -105,6 +105,15 @@ export function makeRoots({ configPath, autodetectSeed, defaultRoots, dataProbe,
     onRootsChanged?.(dir)
     return { id, dir }
   }
+  function renameRoot(id, label) {
+    const roots = loadRoots()
+    const found = roots.find((r) => r.id === id)
+    if (!found) throw httpish(404, 'Root not found')
+    const l = String(label || '').trim()
+    found.label = l || found.dir // empty label → back to the default (home-relative dir)
+    writeConfig(roots)
+    return { id, label: l || found.dir.replace(HOME, '~') }
+  }
   function removeRoot(id) {
     const roots = loadRoots()
     const found = roots.find((r) => r.id === id)
@@ -122,5 +131,5 @@ export function makeRoots({ configPath, autodetectSeed, defaultRoots, dataProbe,
     if (!found) throw httpish(404, `Unknown root: ${rootId}`)
     return found
   }
-  return { loadRoots, rootsWithMeta, addRoot, removeRoot, resolveRoot }
+  return { loadRoots, rootsWithMeta, addRoot, renameRoot, removeRoot, resolveRoot }
 }
