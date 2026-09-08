@@ -7,7 +7,7 @@ All notable changes to AgentDeck are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
-- **find-skills ships with the repo** (`.agents/skills/find-skills`, mirrored to
+- **find-skills ships with the repo** (`skills/find-skills`, mirrored to
   `.claude/skills`, pinned by `skills-lock.json`) so any CLI can search the
   skills ecosystem during a hand-off.
 - **AI hand-off interviews first**: the brief now lists the provider's building

@@ -35,9 +35,9 @@ probe.*.json
 # AI hand-off briefs (server/shared/handoff.js), written under the config dir like probe.*.json
 handoffs/
 # .claude/ is local (settings.local.json, the maintainer's own skills) — except the
-# find-skills skill, installed project-wide with `npx skills add` so every agent
-# (Claude Code via .claude/skills, Codex and Antigravity via .agents/skills) can
-# search the skills ecosystem during an AI hand-off; skills-lock.json pins it
+# find-skills skill (canonical copy in skills/find-skills; this one is what Claude
+# Code loads) so any CLI can search the skills ecosystem during an AI hand-off;
+# skills-lock.json pins it
 .claude/*
 !.claude/skills/
 .claude/skills/*
