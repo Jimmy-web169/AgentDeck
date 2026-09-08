@@ -37,6 +37,9 @@ Runs `npm test` → `npm run build` → `npm run check:providers` → `npm run c
 
 ## 3. OS matrix
 
+- [ ] `docs/site.json` carries the new version (the GitHub Pages one-pager reads
+      it); the page's image links point at files that exist in `demo/<release>/`
+      and `docs/tour.mp4` is the release's tour.
 - [ ] GitHub Actions `ci` is green for the release commit on ubuntu-latest,
       windows-latest and macos-latest (`npm ci`, `npm test`, `npm run build`,
       `npm run check:spec`, `npm run check:privacy`).

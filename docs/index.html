@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentDeck — one dashboard for your CLI coding agents</title>
+<meta name="description" content="A local dashboard for Claude Code, Codex and Antigravity: browse every session like a browser tab, see what your agents did, and continue any of them in its real terminal. Reads the files the CLIs already write; nothing leaves your machine.">
+<meta property="og:title" content="AgentDeck — one dashboard for your CLI coding agents">
+<meta property="og:description" content="Claude Code, Codex and Antigravity in one browser tab. Local-first: reads the files the CLIs already write, never sends data anywhere.">
+<meta property="og:image" content="https://raw.githubusercontent.com/Jimmy-web169/AgentDeck/main/demo/v2.0/home-activity.png">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2334d399' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 12h4l3-8 4 16 3-8h6'/%3E%3C/svg%3E">
+<style>
+  /* Midnight — the same tokens as src/index.css :root */
+  :root {
+    --ink-950: 10 13 20; --ink-900: 12 15 23; --ink-800: 16 20 30; --ink-700: 22 27 40; --ink-600: 30 37 54;
+    --zinc-100: 241 244 250; --zinc-200: 222 228 238; --zinc-300: 196 205 220; --zinc-400: 148 160 184; --zinc-500: 106 118 142; --zinc-700: 56 66 88; --zinc-800: 34 41 58;
+    --emerald: 52 211 153; --sky: 56 189 248; --violet: 167 139 250; --amber: 251 191 36;
+    --claude: #34d399; --codex: #38bdf8; --agy: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; scroll-behavior: smooth; }
+  body { margin: 0; background: rgb(var(--ink-950)); color: rgb(var(--zinc-200)); font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  a { color: rgb(var(--sky)); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code, kbd, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; }
+  code { background: rgb(var(--ink-700)); padding: 0.1em 0.4em; border-radius: 4px; color: rgb(var(--zinc-100)); }
+  kbd { border: 1px solid rgb(var(--zinc-700)); background: rgb(var(--ink-700)); border-radius: 4px; padding: 0.05em 0.4em; color: rgb(var(--zinc-300)); font-size: 0.85em; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+  header.top { position: sticky; top: 0; z-index: 10; backdrop-filter: blur(10px); background: rgba(10,13,20,0.82); border-bottom: 1px solid rgb(var(--zinc-800)); }
+  header.top .wrap { display: flex; align-items: center; gap: 18px; height: 56px; }
+  .brand { display: flex; align-items: center; gap: 8px; color: rgb(var(--zinc-100)); font-weight: 600; letter-spacing: -0.01em; }
+  .brand svg { width: 22px; height: 22px; color: var(--claude); }
+  nav.links { margin-left: auto; display: flex; gap: 18px; font-size: 13px; }
+  nav.links a { color: rgb(var(--zinc-400)); }
+  nav.links a:hover { color: rgb(var(--zinc-100)); text-decoration: none; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid rgb(var(--zinc-700)); color: rgb(var(--zinc-100)); background: rgb(var(--ink-700)); }
+  .btn:hover { background: rgb(var(--ink-600)); text-decoration: none; }
+  .btn.primary { background: rgba(52,211,153,0.16); border-color: rgba(52,211,153,0.4); color: #a7f3d0; }
+  .btn.primary:hover { background: rgba(52,211,153,0.26); }
+  section { padding: 72px 0; border-top: 1px solid rgb(var(--zinc-800)); }
+  section.hero { border-top: 0; padding-top: 64px; }
+  h1 { font-size: clamp(30px, 4.6vw, 48px); line-height: 1.12; letter-spacing: -0.025em; color: rgb(var(--zinc-100)); margin: 0 0 16px; max-width: 18ch; }
+  h2 { font-size: clamp(22px, 3vw, 30px); line-height: 1.2; letter-spacing: -0.02em; color: rgb(var(--zinc-100)); margin: 0 0 10px; }
+  h3 { font-size: 16px; margin: 0 0 6px; color: rgb(var(--zinc-100)); }
+  .lead { font-size: 18px; color: rgb(var(--zinc-300)); max-width: 62ch; margin: 0 0 26px; }
+  .muted { color: rgb(var(--zinc-400)); }
+  .eyebrow { font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(var(--zinc-500)); margin-bottom: 10px; }
+  .hero .cta { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 36px; }
+  .video { border-radius: 12px; overflow: hidden; border: 1px solid rgb(var(--zinc-800)); background: rgb(var(--ink-900)); box-shadow: 0 30px 80px rgba(0,0,0,0.5); }
+  .video video, .video img { display: block; width: 100%; height: auto; }
+  .note { font-size: 12.5px; color: rgb(var(--zinc-500)); margin-top: 10px; }
+  .grid { display: grid; gap: 20px; }
+  .grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 860px) { .grid.three, .grid.two { grid-template-columns: 1fr; } }
+  .card { background: rgb(var(--ink-800)); border: 1px solid rgb(var(--zinc-800)); border-radius: 12px; padding: 20px; }
+  .card .dot { display: inline-block; width: 10px; height: 10px; border-radius: 999px; margin-right: 8px; vertical-align: 1px; }
+  .card ul { margin: 10px 0 0; padding-left: 18px; color: rgb(var(--zinc-300)); font-size: 14px; }
+  .card li { margin: 4px 0; }
+  .tag { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid rgb(var(--zinc-700)); color: rgb(var(--zinc-400)); margin-left: 8px; vertical-align: 2px; }
+  .shot { border-radius: 10px; overflow: hidden; border: 1px solid rgb(var(--zinc-800)); background: rgb(var(--ink-900)); }
+  .shot img { display: block; width: 100%; height: auto; }
+  .feature { display: grid; grid-template-columns: 5fr 7fr; gap: 32px; align-items: center; margin-top: 28px; }
+  .feature.flip { grid-template-columns: 7fr 5fr; }
+  .feature.flip .text { order: 2; }
+  @media (max-width: 860px) { .feature, .feature.flip { grid-template-columns: 1fr; } .feature.flip .text { order: 0; } }
+  .feature p { color: rgb(var(--zinc-300)); margin: 8px 0 0; font-size: 15px; }
+  .keys { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 13px; color: rgb(var(--zinc-400)); margin-top: 12px; }
+  pre { background: rgb(var(--ink-900)); border: 1px solid rgb(var(--zinc-800)); border-radius: 10px; padding: 14px 16px; overflow-x: auto; color: rgb(var(--zinc-200)); font-size: 13px; line-height: 1.55; }
+  pre code { background: none; padding: 0; }
+  .reqs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 22px; }
+  @media (max-width: 860px) { .reqs { grid-template-columns: 1fr; } }
+  footer { padding: 32px 0 48px; border-top: 1px solid rgb(var(--zinc-800)); font-size: 13px; color: rgb(var(--zinc-500)); }
+  footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; }
+  footer a { color: rgb(var(--zinc-400)); }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="#top">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg>
+      AgentDeck
+    </a>
+    <nav class="links">
+      <a href="#providers">Providers</a>
+      <a href="#browse">Browse</a>
+      <a href="#steer">See &amp; steer</a>
+      <a href="#protocol">Protocol</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/Jimmy-web169/AgentDeck">GitHub ↗</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <div class="wrap">
+      <div class="eyebrow">Local-first · open source · v<span data-version>2.0.0</span></div>
+      <h1>One dashboard for your CLI coding agents.</h1>
+      <p class="lead">Claude Code, Codex and Antigravity in one browser tab. Browse every session like a web page, see exactly what each agent did, and continue any of them in its real terminal. AgentDeck reads the files the CLIs already write to disk and never sends anything anywhere.</p>
+      <div class="cta">
+        <a class="btn primary" href="#install">Get started</a>
+        <a class="btn" href="https://github.com/Jimmy-web169/AgentDeck">View on GitHub</a>
+        <a class="btn" href="https://github.com/Jimmy-web169/AgentDeck/releases/tag/v2.0.0">Release notes</a>
+      </div>
+      <div class="video">
+        <video src="tour.mp4" poster="https://raw.githubusercontent.com/Jimmy-web169/AgentDeck/main/demo/v2.0/home-activity.png" autoplay muted loop playsinline controls preload="metadata"></video>
+      </div>
+      <p class="note">A one-minute tour: Home → ⌘K → a Claude Code session with an inline sub-agent → Stats → Insights → an Antigravity session → Config › Ask the agent → tracked folders → a workspace → Preferences. Recorded from a synthetic data root; every name and path is fictional.</p>
+    </div>
+  </section>
+
+  <section id="providers">
+    <div class="wrap">
+      <div class="eyebrow">Three providers, one UI</div>
+      <h2>The same screens for every agent.</h2>
+      <p class="lead">Conversation, Sub-agents, Raw, Stats, Memory, Config — per session, per project, per tracked folder. A provider is one directory on the server and one YAML descriptor.</p>
+      <div class="grid three">
+        <div class="card">
+          <h3><span class="dot" style="background:var(--claude)"></span>Claude Code</h3>
+          <p class="muted" style="margin:0">Reads <code>~/.claude/projects/**</code>.</p>
+          <ul>
+            <li>Every tool call with its input and output; sub-agents inline under the call that spawned them; workflow runs</li>
+            <li>Memory files, plugins, skills, hooks, MCP servers, output styles — read and edit at user or project scope</li>
+            <li>Usage meters from the status line; resume any session with <code>claude --resume</code></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3><span class="dot" style="background:var(--codex)"></span>OpenAI Codex</h3>
+          <p class="muted" style="margin:0">Reads <code>~/.codex/sessions/**</code>.</p>
+          <ul>
+            <li>Shell and apply_patch calls, reasoning, rate-limit and context meters</li>
+            <li>Spawned child rollouts as sub-agents; per-thread memories (read-only)</li>
+            <li>config.toml, skills, hooks and MCP servers editable; <code>codex resume</code> in the embedded terminal</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3><span class="dot" style="background:var(--agy)"></span>Google Antigravity <span class="tag">experimental</span></h3>
+          <p class="muted" style="margin:0">Reads <code>~/.gemini/antigravity-cli/**</code>.</p>
+          <ul>
+            <li>Transcripts plus the protobuf blobs in its SQLite for workspace, model and tokens</li>
+            <li>Artifacts (its brain notes), skills, MCP, plugins, hooks and rules, read-only</li>
+            <li>Sub-agent conversations linked from the transcripts; <code>agy --conversation</code> to continue</li>
+          </ul>
+        </div>
+      </div>
+      <div class="shot" style="margin-top:24px">
+        <img src="https://raw.githubusercontent.com/Jimmy-web169/AgentDeck/main/demo/v2.0/session-antigravity.png" alt="An Antigravity session in AgentDeck" loading="lazy">
+      </div>
+    </div>
+  </section>
+
+  <section id="browse">
+    <div class="wrap">
+      <div class="eyebrow">Browse like a browser</div>
+      <h2>Tabs, a quick switcher, one sidebar.</h2>
+      <div class="feature">
+        <div class="text">
+          <h3>Chrome-style tabs across providers and folders</h3>
+          <p>Every session is a tab with a deep link. Tabs persist, reorder, remember their view, and the terminal you opened in one keeps running while you look at another.</p>
+          <div class="keys"><span><kbd>Alt</kbd>+<kbd>T</kbd> new</span><span><kbd>Alt</kbd>+<kbd>W</kbd> close</span><span><kbd>Alt</kbd>+<kbd>[</kbd> <kbd>]</kbd> cycle</span><span><kbd>Alt</kbd>+<kbd>1…9</kbd> jump</span></div>
+        </div>
+        <div class="shot"><img src="https://raw.githubusercontent.com/Jimmy-web169/AgentDeck/main/demo/v2.0/home-activity.png" alt="Home · Activity with the tab strip and the shared sidebar" loading="lazy"></div>
+      </div>
+      <div class="feature flip">
+        <div class="text">
+          <h3>⌘/Ctrl+K</h3>
+          <p>Fuzzy-jump to any project or session in any provider or folder. → browses a project's sessions by title and first prompt, for the ones you don't remember by name. Enter opens; ⌘/Ctrl+Enter opens a new tab.</p>
+        </div>
+        <div class="shot"><img src="https://raw.githubusercontent.com/Jimmy-web169/AgentDeck/main/demo/v2.0/quick-switcher-open.png" alt="The quick switcher" loading="lazy"></div>
+      </div>
+      <div class="feature">
+        <div class="text">
+          <h3>Workspaces and pins</h3>
+          <p>Colour-coded folder chips are the only scope picker. A workspace groups the same repo from several providers and folders — suggested automatically when a folder shows up in more than one place. Pins hold what you are on now. Pinning or grouping moves a row, so nothing is listed twice.</p>
+        </div>
+        <div class="shot"><img src="https://raw.githubusercontent.com/Jimmy-web169/AgentDeck/main/demo/v2.0/sidebar-workspaces-pinned.png" alt="A cross-provider workspace and pinned rows in the sidebar" loading="lazy"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="steer">
+    <div class="wrap">
+      <div class="eyebrow">See &amp; steer</div>
+      <h2>Know what happened. Ask the agent for what's next.</h2>
+      <div class="feature">
+        <div class="text">
+          <h3>Insights — how you work with agents</h3>
+          <p>Active days, streaks, hour-of-day and weekday rhythm, session length, prompts per session, and the projects that have gone quiet. Tokens, tools and models stay in Stats, one view for every provider.</p>
+        </div>
+        <div class="shot"><img src="https://raw.githubusercontent.com/Jimmy-web169/AgentDeck/main/demo/v2.0/insights.png" alt="Insights" loading="lazy"></div>
+      </div>
+      <div class="feature flip">
+        <div class="text">
+          <h3>Ask the agent — interview first, then configure</h3>
+          <p>From any Config view, say what you want in your own words. AgentDeck opens that CLI's own terminal with a brief: your request, the file as it is, the official docs, and the CLI's building blocks — commands, rules, output styles, workflows, skills, sub-agents, hooks, MCP servers, plugins. The brief asks the CLI to explain each one, ask one question at a time, search the skills ecosystem with the bundled <code>find-skills</code>, show a plan, and only then edit. AgentDeck itself never calls a model or edits a file.</p>
+        </div>
+        <div class="shot"><img src="https://raw.githubusercontent.com/Jimmy-web169/AgentDeck/main/demo/v2.0/config-handoff.png" alt="Ask the agent: the hand-off dialog" loading="lazy"></div>
+      </div>
+      <div class="feature">
+        <div class="text">
+          <h3>Continue in the real terminal</h3>
+          <p>Any session resumes in an embedded terminal running the real CLI, backed by tmux so it survives navigation and can be attached from any shell. Fork a session from any reply to branch without touching the original.</p>
+        </div>
+        <div class="shot"><img src="https://raw.githubusercontent.com/Jimmy-web169/AgentDeck/main/demo/v2.0/session-conversation.png" alt="A Claude Code session with an inline sub-agent thread" loading="lazy"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="protocol">
+    <div class="wrap">
+      <div class="eyebrow">A provider protocol</div>
+      <h2>Know the day a vendor changes its format.</h2>
+      <div class="feature">
+        <div class="text">
+          <p>Every CLI writes its own format under <code>~/.claude</code>, <code>~/.codex</code>, <code>~/.gemini</code>, and there is no shared spec. AgentDeck's <code>spec/</code> defines the contract every provider implements — one vocabulary for sessions, sub-agents, tool calls, tokens, memory, MCP servers, history and stats — plus a YAML descriptor per CLI and a conformance gate with golden outputs.</p>
+          <p>A <strong>format probe</strong> reads each tracked folder's newest records on every start and compares them with the descriptor. A new record type, a missing required field or a changed type badges that folder the same day, with the details in the Folders dialog.</p>
+          <p><a href="https://github.com/Jimmy-web169/AgentDeck/blob/main/spec/PROVIDER-SPEC.md">Read the spec ↗</a></p>
+        </div>
+        <div class="shot"><img src="https://raw.githubusercontent.com/Jimmy-web169/AgentDeck/main/demo/v2.0/folders-dialog.png" alt="Tracked folders with the format probe" loading="lazy"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <div class="eyebrow">Runs on your machine</div>
+      <h2>Nothing leaves your computer.</h2>
+      <p class="lead">AgentDeck binds to 127.0.0.1, reads the transcripts your CLIs already keep, and calls no model of its own. Continuing a session runs the CLI you already have, logged in as you.</p>
+      <div class="grid two">
+        <div>
+          <h3>macOS · WSL · Linux</h3>
+<pre><code>git clone https://github.com/Jimmy-web169/AgentDeck.git
+cd AgentDeck
+make init   # npm install + optional ttyd + CLI checks
+make all    # → http://localhost:47842</code></pre>
+        </div>
+        <div>
+          <h3>Native Windows</h3>
+<pre><code>git clone https://github.com/Jimmy-web169/AgentDeck.git
+cd AgentDeck
+npm run init:win   # npm install + optional psmux + CLI checks
+npm run dev        # → http://localhost:47842</code></pre>
+        </div>
+      </div>
+      <div class="reqs">
+        <div class="card"><h3>Node.js ≥ 22.5</h3><p class="muted" style="margin:0;font-size:14px">The Antigravity provider reads its SQLite through <code>node:sqlite</code>; on an older Node everything else still works.</p></div>
+        <div class="card"><h3>To watch: nothing else</h3><p class="muted" style="margin:0;font-size:14px">Point it at <code>~/.claude</code>, <code>~/.codex</code> or <code>~/.gemini/antigravity-cli</code>. Defaults are detected on first run.</p></div>
+        <div class="card"><h3>To continue: the CLI</h3><p class="muted" style="margin:0;font-size:14px"><code>claude</code>, <code>codex</code> or <code>agy</code> installed and logged in, plus <code>ttyd</code> for the embedded terminal (native Windows uses the built-in one).</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>AgentDeck v<span data-version>2.0.0</span> · MIT</span>
+    <a href="https://github.com/Jimmy-web169/AgentDeck">GitHub</a>
+    <a href="https://github.com/Jimmy-web169/AgentDeck/blob/main/README.md">README</a>
+    <a href="https://github.com/Jimmy-web169/AgentDeck/blob/main/CHANGELOG.md">Changelog</a>
+    <a href="https://github.com/Jimmy-web169/AgentDeck/releases">Releases</a>
+    <a href="https://jimmyblog.site/zh/2026/06/17/agentdeck/">Blog (中文)</a>
+  </div>
+</footer>
+
+<script>
+  // the version and release date live in site.json (the release skill bumps it)
+  fetch('site.json', { cache: 'no-store' }).then((r) => r.json()).then((s) => {
+    if (s && s.version) document.querySelectorAll('[data-version]').forEach((el) => { el.textContent = s.version })
+  }).catch(() => {})
+</script>
+</body>
+</html>
