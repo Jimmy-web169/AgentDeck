@@ -29,7 +29,9 @@ export function fmtTokens(n) {
   if (!n) return '0'
   if (n < 1000) return String(n)
   if (n < 1_000_000) return (n / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
-  return (n / 1_000_000).toFixed(2).replace(/\.00$/, '') + 'M'
+  if (n < 1_000_000_000) return (n / 1_000_000).toFixed(n < 100_000_000 ? 2 : 1).replace(/\.0+$/, '') + 'M'
+  // a billion-token folder reads as 1.06B, not 1056.42M (which overflows a Stats tile)
+  return (n / 1_000_000_000).toFixed(2).replace(/\.00$/, '') + 'B'
 }
 
 // Codex reports a cumulative `total`; fall back to summing the parts
