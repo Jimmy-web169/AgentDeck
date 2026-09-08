@@ -24,7 +24,7 @@ import { MOD_WORD } from './ShortcutHints.jsx'
 // chips), not on a page of their own.
 
 const RECENT_PROJECTS_SCANNED = 10 // projects whose session lists feed "Latest sessions"
-const LATEST_SESSIONS = 14
+const LATEST_SESSIONS_MAX = 60 // what "show all" can expand to (the scan is 10 projects deep)
 
 function ProviderBadge({ providers, id }) {
   const c = providerColor(providers, id)
@@ -36,7 +36,7 @@ function ProviderBadge({ providers, id }) {
   )
 }
 
-const RECENT_LIMIT = 8
+const RECENT_LIMIT = 5
 
 // Recent projects, two ways: one row per provider × tracked folder ('source',
 // what the index lists), or one row per working folder with every source that
@@ -189,6 +189,8 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
   const liveItems = toManagerItems(active)
   const pins = usePins()
   const prefs = usePrefs()
+  const [allLatest, setAllLatest] = useState(false)
+  const latestLimit = prefs.homeSessions || 10
   const [ended, setEnded] = useState(() => new Set())
   const [copied, setCopied] = useState(null)
   const [versions, setVersions] = useState({})
@@ -227,7 +229,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
       for (const s of list) out.push({ ...s, rootLabel: p.rootLabel, project: p.name, cwd: p.cwd })
     }
     out.sort((a, b) => String(b.lastTs || '').localeCompare(String(a.lastTs || '')))
-    return out.slice(0, LATEST_SESSIONS)
+    return out.slice(0, LATEST_SESSIONS_MAX)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, index, scanned.map((p) => `${p.provider}|${p.root}|${p.slug}`).join('|')])
   const loadingLatest = visible && scanned.some((p) => index.sessionsFor(p.provider, p.root, p.slug) === null)
@@ -249,6 +251,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
   const shownLive = liveItems.filter((it) => !ended.has(it.key))
   const today = Date.now() - 24 * 3600 * 1000
   const activeToday = latest.filter((s) => s.lastTs && new Date(s.lastTs).getTime() > today).length
+  const shownLatest = allLatest ? latest : latest.slice(0, latestLimit)
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-5">
@@ -286,14 +289,19 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
           )}
         </Section>
 
-        <Section title="Latest sessions" count={loadingLatest ? 'loading…' : `${activeToday} active in the last 24h`}>
+        <Section title="Latest sessions" count={loadingLatest ? 'loading…' : `${shownLatest.length} · ${activeToday} active in the last 24h`}>
           {latest.length === 0 ? (
             <Empty>{loadingLatest ? 'Loading…' : 'No sessions yet. Track a folder with the + next to the folder chips.'}</Empty>
           ) : (
             <Panel>
-              {latest.map((s) => (
+              {shownLatest.map((s) => (
                 <SessionRow key={`${s.provider}|${s.root}|${s.id}`} s={s} providers={providers} live={live} termKeys={termKeys} onOpen={onOpen} showPrompt={prefs.showFirstPrompt} />
               ))}
+              {latest.length > latestLimit && (
+                <button onClick={() => setAllLatest((a) => !a)} className="w-full px-3 py-1.5 text-left text-[11px] text-sky-400 hover:text-sky-300">
+                  {allLatest ? `show the latest ${latestLimit}` : `show all ${latest.length}`}
+                </button>
+              )}
             </Panel>
           )}
         </Section>

@@ -35,9 +35,15 @@ export const PATH_DEPTHS = [
   { k: 4, label: '4', hint: 'four folders' },
   { k: 0, label: 'Full', hint: 'the whole path' },
 ]
+// homeSessions: how many rows Home › Activity › Latest sessions shows before "show all" (5–15).
+export const HOME_SESSIONS = [
+  { k: 5, label: '5' },
+  { k: 10, label: '10' },
+  { k: 15, label: '15' },
+]
 // recentProjectsBy: Home › Activity › Recent projects as one row per provider ×
 // tracked folder ('source') or one row per working folder across all of them ('folder').
-const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {}, customAccents: [], statusColors: {}, pathDepth: 2, recentProjectsBy: 'source' }
+const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {}, customAccents: [], statusColors: {}, pathDepth: 2, recentProjectsBy: 'source', homeSessions: 10 }
 const MAX_SWATCHES = 24
 
 function load() {
@@ -51,6 +57,7 @@ function load() {
   if (!THEMES.some((x) => x.k === prefs.theme)) prefs.theme = DEFAULTS.theme
   if (!DENSITIES.some((x) => x.k === prefs.density)) prefs.density = DEFAULTS.density
   if (!PATH_DEPTHS.some((x) => x.k === prefs.pathDepth)) prefs.pathDepth = DEFAULTS.pathDepth
+  if (!HOME_SESSIONS.some((x) => x.k === prefs.homeSessions)) prefs.homeSessions = DEFAULTS.homeSessions
   if (prefs.recentProjectsBy !== 'source' && prefs.recentProjectsBy !== 'folder') prefs.recentProjectsBy = DEFAULTS.recentProjectsBy
   // colours are stored as hex; legacy palette names from before still resolve
   const pc = prefs.providerColors && typeof prefs.providerColors === 'object' ? prefs.providerColors : {}

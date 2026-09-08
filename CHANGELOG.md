@@ -15,6 +15,8 @@ All notable changes to AgentDeck are recorded here. The format follows
   sub-agents, hooks, MCP servers, plugins) with their docs and tells the CLI to
   explain each and ask, one question at a time, before editing — then use
   find-skills to find skills that serve the intent, show a plan, and only then write. Same brief for all providers.
+- **Preferences › Home**: Latest sessions shows 5, 10 or 15 rows (default 10) before
+  “show all”; Recent projects shows 5. Section counts are what is on screen.
 - Home › Activity › Recent projects can list **by folder** (one row per working
   folder with a dot per provider / tracked folder that has sessions there, the
   same grouping as the workspace suggestions) or by source; the header count is
@@ -74,6 +76,8 @@ All notable changes to AgentDeck are recorded here. The format follows
   45 s tick or a page switch.
 
 ### Fixed
+- Stats tiles no longer overflow on billion-token folders: totals read 1.06B
+  instead of 1056.42M, and a tile value truncates with the full number on hover.
 - An (i) tooltip near the window edge (Preferences sits at the far right) is
   clamped to the viewport instead of being cut off.
 - The API log no longer repeats tmux's "no server running" line every poll

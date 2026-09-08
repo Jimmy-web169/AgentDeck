@@ -10,7 +10,7 @@ const shortName = (cwd, slug) => (cwd ? shortPath(cwd) : slug)
 function Tile({ label, value, hint }) {
   return (
     <div className={`rounded-lg bg-ink-700/60 border p-4 ${hint ? 'border-dashed border-zinc-700' : 'border-zinc-800'}`}>
-      <div className="text-2xl font-semibold text-zinc-100">{value}</div>
+      <div className="text-2xl font-semibold text-zinc-100 leading-tight truncate" title={String(value)}>{value}</div>
       <div className="text-[12px] text-zinc-500 mt-0.5">{label}</div>
       {hint && <div className="text-[10.5px] text-zinc-600">{hint}</div>}
     </div>
