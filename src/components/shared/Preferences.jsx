@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { DENSITIES, HOME_SESSIONS, PATH_DEPTHS, THEMES, setPref, usePrefs } from '../../lib/prefs.js'
+import { DENSITIES, HOME_PROJECTS, HOME_SESSIONS, PATH_DEPTHS, THEMES, setPref, usePrefs } from '../../lib/prefs.js'
 import InfoDot from './InfoDot.jsx'
 import { MOD_WORD } from './ShortcutHints.jsx'
 import { providerColorValue, providerDefaultColor, STATUS_KINDS, STATUS_DEFAULTS, statusColorValue } from '../../lib/providerColors.js'
@@ -159,8 +159,11 @@ export default function Preferences({ className = '', providers = [] }) {
           <Group title="Paths" info={`How many folders of a project path to show — sidebar, ${MOD_WORD}+K, Home, Stats. Windows and macOS/Linux paths alike.`}>
             <Pills options={PATH_DEPTHS} value={prefs.pathDepth} onPick={(v) => setPref('pathDepth', v)} />
           </Group>
-          <Group title="Home" info="How many rows Activity’s Latest sessions shows before “show all”. Recent projects shows 5.">
+          <Group title="Home" info="Rows per page in Activity’s lists. Longer lists page with ‹ › in their header; the page never grows past this.">
+            <div className="text-[10.5px] uppercase tracking-wide text-zinc-600 mb-0.5">Latest sessions</div>
             <Pills options={HOME_SESSIONS} value={prefs.homeSessions} onPick={(v) => setPref('homeSessions', v)} />
+            <div className="text-[10.5px] uppercase tracking-wide text-zinc-600 mt-2 mb-0.5">Recent projects</div>
+            <Pills options={HOME_PROJECTS} value={prefs.homeProjects} onPick={(v) => setPref('homeProjects', v)} />
           </Group>
           <Group title="Sidebar" info="Which sections the sidebar shows. Grouped and pinned rows leave the Projects list; suggestions are the “same folder in several places” box.">
             <Toggle label="Workspaces section" hint="Grouped projects and sessions leave the Projects list" value={prefs.showWorkspaces} onChange={(v) => setPref('showWorkspaces', v)} />

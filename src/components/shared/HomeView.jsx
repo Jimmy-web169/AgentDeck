@@ -24,7 +24,7 @@ import { MOD_WORD } from './ShortcutHints.jsx'
 // chips), not on a page of their own.
 
 const RECENT_PROJECTS_SCANNED = 10 // projects whose session lists feed "Latest sessions"
-const LATEST_SESSIONS_MAX = 60 // what "show all" can expand to (the scan is 10 projects deep)
+const LATEST_SESSIONS_MAX = 60 // how far the pager can go (the scan is 10 projects deep)
 
 function ProviderBadge({ providers, id }) {
   const c = providerColor(providers, id)
@@ -36,7 +36,24 @@ function ProviderBadge({ providers, id }) {
   )
 }
 
-const RECENT_LIMIT = 5
+// ‹ 1/3 › in a section header: the page size is the user’s (Preferences › Home),
+// so a long list pages instead of stretching the screen
+function Pager({ page, pages, onPage }) {
+  if (pages <= 1) return null
+  const btn = "w-6 h-6 rounded flex items-center justify-center text-zinc-500 hover:text-zinc-100 hover:bg-ink-700 disabled:opacity-30 disabled:hover:bg-transparent"
+  return (
+    <span className="flex items-center gap-0.5 text-[11px] text-zinc-500">
+      <button onClick={() => onPage(page - 1)} disabled={page <= 0} className={btn} title="Previous page">‹</button>
+      <span className="tabular-nums">{page + 1}/{pages}</span>
+      <button onClick={() => onPage(page + 1)} disabled={page >= pages - 1} className={btn} title="Next page">›</button>
+    </span>
+  )
+}
+function pageOf(list, page, size) {
+  const pages = Math.max(1, Math.ceil(list.length / size))
+  const p = Math.min(page, pages - 1)
+  return { pages, page: p, items: list.slice(p * size, p * size + size) }
+}
 
 // Recent projects, two ways: one row per provider × tracked folder ('source',
 // what the index lists), or one row per working folder with every source that
@@ -62,10 +79,10 @@ function groupByFolder(projects) {
 }
 
 function RecentProjects({ providers, index, onOpen }) {
-  const { recentProjectsBy: by } = usePrefs()
-  const [all, setAll] = useState(false)
+  const { recentProjectsBy: by, homeProjects: size } = usePrefs()
+  const [pageN, setPageN] = useState(0)
   const rows = useMemo(() => (by === 'folder' ? groupByFolder(index.projects) : index.projects), [by, index.projects])
-  const shown = all ? rows : rows.slice(0, RECENT_LIMIT)
+  const { pages, page, items: shown } = pageOf(rows, pageN, size || 5)
   const open = (p, e) => onOpen(p.provider, { root: p.root, rootLabel: p.rootLabel, slug: p.slug, cwd: p.cwd, project: p.name }, { newTab: e.ctrlKey || e.metaKey })
   const pill = (k, label, title) => (
     <button onClick={() => setPref('recentProjectsBy', k)} title={title} className={`h-6 px-2 rounded text-[11px] transition-colors ${by === k ? 'bg-ink-600 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200 hover:bg-ink-700'}`}>
@@ -82,6 +99,7 @@ function RecentProjects({ providers, index, onOpen }) {
           {pill('folder', 'By folder', 'One row per working folder — every provider and tracked folder that has sessions there, like the workspace suggestions')}
         </span>
       }
+      pager={<Pager page={page} pages={pages} onPage={setPageN} />}
     >
       {rows.length === 0 ? (
         <Empty>{index.loading ? 'Loading…' : 'No projects yet.'}</Empty>
@@ -120,18 +138,13 @@ function RecentProjects({ providers, index, onOpen }) {
                   <span className="shrink-0 text-[10.5px] text-zinc-600">{fmtRelative(p.lastActivity)}</span>
                 </button>
               ))}
-          {rows.length > RECENT_LIMIT && (
-            <button onClick={() => setAll((a) => !a)} className="w-full px-3 py-1.5 text-left text-[11px] text-sky-400 hover:text-sky-300">
-              {all ? `show the latest ${RECENT_LIMIT}` : `show all ${rows.length}`}
-            </button>
-          )}
         </Panel>
       )}
     </Section>
   )
 }
 
-function Section({ title, count, right, children, className = '' }) {
+function Section({ title, count, right, pager, children, className = '' }) {
   return (
     <section className={className}>
       <div className="flex items-center gap-2 mb-2.5">
@@ -139,6 +152,7 @@ function Section({ title, count, right, children, className = '' }) {
         {count != null && <span className="text-[11px] text-zinc-600">· {count}</span>}
         <span className="flex-1" />
         {right}
+        {pager}
       </div>
       {children}
     </section>
@@ -189,7 +203,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
   const liveItems = toManagerItems(active)
   const pins = usePins()
   const prefs = usePrefs()
-  const [allLatest, setAllLatest] = useState(false)
+  const [latestPage, setLatestPage] = useState(0)
   const latestLimit = prefs.homeSessions || 10
   const [ended, setEnded] = useState(() => new Set())
   const [copied, setCopied] = useState(null)
@@ -251,7 +265,8 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
   const shownLive = liveItems.filter((it) => !ended.has(it.key))
   const today = Date.now() - 24 * 3600 * 1000
   const activeToday = latest.filter((s) => s.lastTs && new Date(s.lastTs).getTime() > today).length
-  const shownLatest = allLatest ? latest : latest.slice(0, latestLimit)
+  const latestPaged = pageOf(latest, latestPage, latestLimit)
+  const shownLatest = latestPaged.items
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-5">
@@ -289,7 +304,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
           )}
         </Section>
 
-        <Section title="Latest sessions" count={loadingLatest ? 'loading…' : `${shownLatest.length} · ${activeToday} active in the last 24h`}>
+        <Section title="Latest sessions" count={loadingLatest ? 'loading…' : `${shownLatest.length} · ${activeToday} active in the last 24h`} pager={<Pager page={latestPaged.page} pages={latestPaged.pages} onPage={setLatestPage} />}>
           {latest.length === 0 ? (
             <Empty>{loadingLatest ? 'Loading…' : 'No sessions yet. Track a folder with the + next to the folder chips.'}</Empty>
           ) : (
@@ -297,11 +312,6 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
               {shownLatest.map((s) => (
                 <SessionRow key={`${s.provider}|${s.root}|${s.id}`} s={s} providers={providers} live={live} termKeys={termKeys} onOpen={onOpen} showPrompt={prefs.showFirstPrompt} />
               ))}
-              {latest.length > latestLimit && (
-                <button onClick={() => setAllLatest((a) => !a)} className="w-full px-3 py-1.5 text-left text-[11px] text-sky-400 hover:text-sky-300">
-                  {allLatest ? `show the latest ${latestLimit}` : `show all ${latest.length}`}
-                </button>
-              )}
             </Panel>
           )}
         </Section>
