@@ -7,6 +7,9 @@ All notable changes to AgentDeck are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **GitHub Pages one-pager** (`docs/`, served from `main`): the tour, the three
+  providers, browse / see & steer / protocol, install. Images come from
+  `demo/v2.0/` on `main`; the version from `docs/site.json`.
 - **Copy** on every prompt and reply, and **fork from here** on the last reply
   of a turn (Claude Code and Codex): the server copies the transcript up to the
   next prompt into a new session id — the original is untouched — and the fork
