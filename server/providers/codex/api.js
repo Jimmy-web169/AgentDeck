@@ -4,12 +4,14 @@ import os from 'node:os'
 import crypto from 'node:crypto'
 import {
   rootsWithMeta,
+  renameRoot,
   addRoot,
   removeRoot,
   resolveRoot,
   listProjects,
   sessionFiles,
   sessionFileById,
+  NO_CWD,
   childrenOf,
   cwdForId,
   expandHome,
@@ -19,10 +21,14 @@ import {
   invalidateIndex,
 } from './paths.js'
 import { safeTrash } from '../../shared/trash.js'
+import { probeStatus, runProbe, acceptProbe } from '../../shared/formatProbe.js'
+import { writeBrief, composeBrief, seedPrompt } from '../../shared/handoff.js'
+import { HOME as USER_HOME } from '../../shared/roots.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
-import { forkLines } from './fork.js'
+import { addTokens, tokenFields, zeroTokens as zeroTokensShared } from '../../shared/tokens.js'
+import { child } from '../../shared/children.js'
 import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../shared/parseCache.js'
-import { withOversizeFallback, guardTranscriptSize } from '../../shared/transcriptGuard.js'
+import { withOversizeFallback } from '../../shared/transcriptGuard.js'
 
 // Rollout reads go through the shared fingerprint cache (same discipline as
 // the claude provider): one stat per file per request — taken BEFORE any
@@ -44,14 +50,19 @@ import { parseSkillsAdd, runSkillsAdd } from '../../shared/skills.js'
 import { SKILL_CONFIG } from './skills.js'
 import { readMemories, readPlugins } from './codex-data.js'
 import { makeDispatch } from '../../shared/dispatch.js'
-import { openTool, pickFolderNative } from '../../shared/launch.js'
+import { forkLines } from './fork.js'
+import { bucketActivity } from '../../shared/activity.js'
+import { openTool } from '../../shared/launch.js'
+import { getBrowse, getPickFolder } from '../../shared/browse.js'
 import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } from '../../shared/terminal.js'
 
 const TERMINAL_CONFIG = {
   findBin: () => findOnPath(['codex'], [path.join(os.homedir(), '.local/bin/codex'), '/opt/homebrew/bin/codex', '/usr/local/bin/codex']),
+  id: 'codex',
   title: 'codex',
   envKey: 'CODEX_HOME',
   resumeArgs: (id) => ['resume', id],
+  promptArgs: (p) => [p], // `codex "<prompt>"` — interactive, seeded (AI hand-off)
   checkOrigin: true,
 }
 
@@ -65,13 +76,30 @@ function httpErr(status, message) {
 // --- roots -------------------------------------------------------------------
 
 function getRoots() {
-  const roots = rootsWithMeta()
+  const roots = rootsWithMeta().map((r) => ({ ...r, probe: probeStatus('codex', r.id) }))
   return { roots, default: roots[0]?.id || null }
+}
+
+// format-drift probe (server/shared/formatProbe.js): re-sample now / take the
+// current shape as the new baseline
+function postProbeRun(_q, body) {
+  const root = resolveRoot(body?.root)
+  return { root: root.id, probe: runProbe('codex', root) }
+}
+function postProbeAccept(_q, body) {
+  const root = resolveRoot(body?.root)
+  return { root: root.id, probe: acceptProbe('codex', root) }
 }
 
 function postRoots(_q, body) {
   if (!body?.path) throw httpErr(400, 'missing path')
   return addRoot(body.path, body.label)
+}
+
+// relabel a tracked folder (display only; empty label = back to the default)
+function postRootLabel(_q, body) {
+  if (!body?.id) throw httpErr(400, 'missing id')
+  return renameRoot(body.id, body.label)
 }
 
 function deleteRoots(q) {
@@ -153,42 +181,6 @@ function getSession(q) {
   }
 }
 
-// --- fork --------------------------------------------------------------------
-// Copy a rollout into a NEW session id, keeping everything strictly before the
-// N-th real user prompt (1-based `cut`; see fork.js for the counting rules).
-// No `cut` = full copy (branch from the end). The new file gets today's date
-// dir, a fresh rollout filename and a rewritten session_meta id, so
-// `codex resume <newId>` picks the fork up. The original is never touched.
-function postFork(_q, body) {
-  const root = resolveRoot(body?.root)
-  const id = body?.id
-  const cut = Number.isInteger(body?.cut) && body.cut > 0 ? body.cut : null
-  if (!id) throw httpErr(400, 'missing id')
-  const entry = findFile(root.dir, id)
-  guardTranscriptSize(entry.file, 'rollout')
-  const fp = fingerprintOf(entry.file)
-  const newId = crypto.randomUUID()
-  let out
-  try {
-    out = forkLines(fs.readFileSync(entry.file, 'utf8').split('\n'), cut, newId)
-  } catch (e) {
-    throw httpErr(e.code === 'CUT_NOT_FOUND' ? 404 : 400, e.message)
-  }
-  // a trailing thread_name_updated event (same shape codex writes) labels the
-  // fork AND stamps a fresh lastTs, so it sorts as recent in the session list
-  const title = sessionSummary(entry.file, id, fp).title
-  out.push(JSON.stringify({ timestamp: new Date().toISOString(), type: 'event_msg', payload: { type: 'thread_name_updated', thread_name: `${title} (fork)` } }))
-  const now = new Date()
-  const pad = (n) => String(n).padStart(2, '0')
-  const dir = path.join(root.dir, 'sessions', String(now.getFullYear()), pad(now.getMonth() + 1), pad(now.getDate()))
-  fs.mkdirSync(dir, { recursive: true })
-  const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`
-  const dst = path.join(dir, `rollout-${stamp}-${newId}.jsonl`)
-  fs.writeFileSync(dst, out.join('\n') + '\n')
-  invalidateIndex(root.dir)
-  return { root: root.id, id: newId, slug: entry.cwd || null, forkedFrom: id }
-}
-
 // Move a session to the OS trash (recoverable): its rollout .jsonl plus every
 // descendant subagent rollout (codex subagents are separate rollouts linked by
 // parent id — the analogue of claude's sidecar dir). Files are located only by
@@ -238,20 +230,36 @@ function getSubagents(q) {
         parts.push(`${c.id}:${fp.key}`)
       }
     } catch {}
-    return {
-      ...c,
-      title: s?.title || null,
-      firstPrompt: s?.firstPrompt || '',
-      userTurns: s?.userTurns || 0,
-      assistantTurns: s?.assistantTurns || 0,
-      toolCalls: s?.toolCalls || 0,
-      models: s?.models || [],
-      tokens: s?.tokens || null,
-      contextWindow: s?.contextWindow || 0,
-      lastTokenUsage: s?.lastTokenUsage || null,
-      firstTs: s?.firstTs || null,
+    // the provider-neutral child shape (server/shared/children.js) plus the
+    // Codex-specific fields the Sub-agents view and the inline thread already use
+    return child({
+      id: c.id,
+      parentId: id,
+      kind: 'session',
+      label: s?.title || s?.firstPrompt || c.agentRole || c.id,
+      type: c.agentRole || null,
+      status: c.mtimeMs && Date.now() - c.mtimeMs < 60000 ? 'running' : 'done',
+      firstTs: s?.firstTs || c.startTs || null,
       lastTs: s?.lastTs || null,
-    }
+      toolCalls: s?.toolCalls || 0,
+      tokens: s?.tokens || null,
+      model: s?.models?.[0] || null,
+      depth: c.depth ?? null,
+      extra: {
+        mtimeMs: c.mtimeMs,
+        startTs: c.startTs,
+        agentRole: c.agentRole,
+        agentNickname: c.agentNickname,
+        agentPath: c.agentPath,
+        title: s?.title || null,
+        firstPrompt: s?.firstPrompt || '',
+        userTurns: s?.userTurns || 0,
+        assistantTurns: s?.assistantTurns || 0,
+        models: s?.models || [],
+        contextWindow: s?.contextWindow || 0,
+        lastTokenUsage: s?.lastTokenUsage || null,
+      },
+    })
   })
   const _etag = `"${sha1(parts.join('|'))}"`
   return { root: root.id, id, children, _etag }
@@ -268,15 +276,11 @@ function getRaw(q) {
 
 // --- stats -------------------------------------------------------------------
 
-const zeroTokens = () => ({ input: 0, output: 0, cacheRead: 0, cacheCreate: 0, reasoning: 0, total: 0 })
-function addTokens(into, t) {
-  into.input += t.input || 0
-  into.output += t.output || 0
-  into.cacheRead += t.cacheRead || 0
-  into.cacheCreate += t.cacheCreate || 0
-  into.reasoning += t.reasoning || 0
-  into.total += t.total || 0
-}
+// token fields: the common set every provider has, plus Codex's own reasoning
+// (cacheCreate rides on the summary shape but is always 0 for Codex, so it is
+// not declared as one of its fields)
+const TOKEN_SPECIFIC = ['reasoning']
+const zeroTokens = () => zeroTokensShared([...TOKEN_SPECIFIC, 'cacheCreate'])
 
 // root-level totals + a per-project (cwd) rollup. Drill into a project's
 // per-session breakdown via GET /api/sessions?root=&slug= .
@@ -289,14 +293,29 @@ function getStats(q) {
   const modelCounts = {}
   const tokens = zeroTokens()
   const projects = []
+  let subagentSessions = 0
   for (const proj of listProjects(root.dir)) {
-    const acc = { slug: proj.slug, cwd: proj.cwd, sessions: proj.sessionCount, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: proj.lastActivity }
+    // one population everywhere: `sessions` counts top-level rollouts (what the
+    // sidebar lists), `subagentSessions` the spawned children; turns and tokens
+    // add up over both, so the root numbers equal the sum of the projects
+    const acc = { slug: proj.slug, cwd: proj.cwd, sessions: 0, subagentSessions: 0, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: proj.lastActivity }
     for (const f of sessionFiles(root.dir, proj.slug)) {
+      // one stat per file, before its content is read (see parseCache.js)
+      let fp = null
+      try {
+        fp = fingerprintOf(f.file)
+      } catch {}
       const s = withOversizeFallback(
-        () => sessionSummary(f.file, f.id),
+        () => sessionSummary(f.file, f.id, fp || undefined),
         (e) => oversizeStub(f.id, e) // counts as a session, contributes zeros
       )
-      sessions++
+      if (f.isSubagent) {
+        subagentSessions++
+        acc.subagentSessions++
+      } else {
+        sessions++
+        acc.sessions++
+      }
       userTurns += s.userTurns
       toolCalls += s.toolCalls
       acc.userTurns += s.userTurns
@@ -315,13 +334,23 @@ function getStats(q) {
     projects.push({ ...acc, models: [...acc.models] })
   }
   projects.sort((a, b) => b.lastActivity - a.lastActivity)
-  return { root: root.id, projectCount: projects.length, sessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects }
+  // `fields` tells the UI which token fields every provider shares (add these up
+  // across folders) and which are Codex's own
+  return { root: root.id, projectCount: projects.length, sessions, subagentSessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
 }
 
 // --- history -----------------------------------------------------------------
 
 function getHistory(q) {
   const root = resolveRoot(q.get('root'))
+  const projectOfId = (id) => {
+    try {
+      const cwd = sessionFileById(root.dir, id)?.cwd
+      return cwd && cwd !== NO_CWD ? cwd : null
+    } catch {
+      return null
+    }
+  }
   const out = []
   try {
     for (const line of fs.readFileSync(path.join(root.dir, 'history.jsonl'), 'utf8').split('\n')) {
@@ -329,8 +358,10 @@ function getHistory(q) {
       if (!s) continue
       try {
         const o = JSON.parse(s)
-        // ts is unix seconds → ms for the UI's time formatter
-        out.push({ display: o.text || '', sessionId: o.session_id || null, ts: o.ts ? o.ts * 1000 : null })
+        // ts is unix seconds → ms for the UI's time formatter; the cwd comes from
+        // the rollout index when the thread is known (history.jsonl has none)
+        const sid = o.session_id || null
+        out.push({ display: o.text || '', project: (sid && projectOfId(sid)) || null, sessionId: sid, ts: o.ts ? o.ts * 1000 : null })
       } catch {}
     }
   } catch {}
@@ -391,7 +422,7 @@ function deleteResourceHandler(q) {
 function getUsage(q) {
   const root = resolveRoot(q.get('root'))
   const snap = latestRateLimits(root.dir) // { rateLimits, ts, sessionId } | null
-  return { rateLimits: snap?.rateLimits || null, ts: snap?.ts || null, sessionId: snap?.sessionId || null }
+  return { root: root.id, rateLimits: snap?.rateLimits || null, contextWindow: null, sessionId: snap?.sessionId || null, ts: snap?.ts ? (typeof snap.ts === 'number' ? snap.ts : Date.parse(snap.ts) || null) : null }
 }
 
 // The Codex CLI version observed in the most recent tracked session.
@@ -403,7 +434,8 @@ function getVersion(q) {
 // Codex per-conversation memories (read-only, from memories_1.sqlite).
 function getMemory(q) {
   const root = resolveRoot(q.get('root'))
-  return { root: root.id, ...readMemories(root.dir) }
+  // thread memories Codex writes itself — read-only here (spec §4 item 4)
+  return { root: root.id, scope: 'thread', writable: false, ...readMemories(root.dir) }
 }
 
 // Installed Codex plugins (from plugins/cache + config.toml enabled-state).
@@ -461,13 +493,24 @@ async function postTerminal(_q, body) {
   } else if (body.slug && path.isAbsolute(body.slug)) {
     cwd = body.slug // new conversation under an existing project (slug is the cwd)
     key = `${root.id}|new|${body.slug}`
+  } else if (body.brief) {
+    cwd = USER_HOME // a hand-off with no folder (Insights) runs from the home directory
+    key = `${root.id}|new|${cwd}`
   } else {
     throw httpErr(400, 'missing id or cwd')
   }
   if (!cwd || !fs.existsSync(cwd)) cwd = root.dir
+  // AI hand-off: the request + file + docs go into a brief file; the CLI starts
+  // seeded with a one-line prompt that points at it (server/shared/handoff.js)
+  let promptArgs = null
+  let briefFile = null
+  if (!resumeId && body.brief && typeof body.brief === 'object') {
+    briefFile = writeBrief(composeBrief({ ...body.brief, providerLabel: 'Codex', cwd }), { key })
+    promptArgs = TERMINAL_CONFIG.promptArgs(seedPrompt(briefFile))
+  }
   const meta = { root: root.id, slug: body.slug || null, id: resumeId, cwd, isNew: !resumeId, title: body.title || null }
-  const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, meta, config: TERMINAL_CONFIG })
-  return { ok: true, key, ...res }
+  const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, promptArgs, meta, config: TERMINAL_CONFIG })
+  return { ok: true, key, brief: briefFile, ...res }
 }
 
 function getTerminals() {
@@ -491,55 +534,22 @@ function getActiveSessions() {
 // --- filesystem folder browser (for "new project at a path" picker) ----------
 // localhost-only; lists directory NAMES only (no file contents).
 
-function getBrowse(q) {
-  const home = os.homedir()
-  let dir = expandHome((q.get('path') || '').trim()) || home
-  let resolved
-  try {
-    resolved = fs.realpathSync(dir)
-  } catch {
-    resolved = path.resolve(dir)
-  }
-  let stat
-  try {
-    stat = fs.statSync(resolved)
-  } catch {}
-  if (!stat || !stat.isDirectory()) throw httpErr(404, `Not a directory: ${dir}`)
-  let dirs = []
-  try {
-    dirs = fs
-      .readdirSync(resolved, { withFileTypes: true })
-      .filter((e) => {
-        try {
-          return (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith('.')
-        } catch {
-          return false
-        }
-      })
-      .map((e) => ({ name: e.name, path: path.join(resolved, e.name) }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  } catch {
-    // permission denied etc. — return an empty listing rather than failing
-  }
-  const parent = path.dirname(resolved)
-  return { path: resolved, parent: parent !== resolved ? parent : null, home, dirs }
-}
 
-async function getPickFolder() {
-  return await pickFolderNative()
-}
 
 // --- dispatcher --------------------------------------------------------------
 
 const ROUTES = {
   'GET /api/roots': getRoots,
+  'POST /api/probe/run': postProbeRun,
+  'POST /api/probe/accept': postProbeAccept,
   'POST /api/roots': postRoots,
+  'POST /api/roots/label': postRootLabel,
+  'GET /api/activity': getActivity,
   'DELETE /api/roots': deleteRoots,
   'GET /api/projects': getProjects,
   'GET /api/sessions': getSessions,
   'GET /api/session': getSession,
   'DELETE /api/session': deleteSession,
-  'POST /api/fork': postFork,
   'GET /api/subagents': getSubagents,
   'GET /api/raw': getRaw,
   'GET /api/stats': getStats,
@@ -563,3 +573,26 @@ const ROUTES = {
 }
 
 export const dispatch = makeDispatch(ROUTES)
+
+// --- activity ----------------------------------------------------------------
+// GET /api/activity?root=&days= — per-day / hour / weekday usage profile of one
+// Codex home (see server/shared/activity.js for the attribution rules).
+function getActivity(q) {
+  const root = resolveRoot(q.get('root'))
+  const days = Number(q.get('days')) || 84
+  const list = []
+  for (const proj of listProjects(root.dir)) {
+    for (const f of sessionFiles(root.dir, proj.slug)) {
+      let fp = null
+      try {
+        fp = fingerprintOf(f.file) // one stat per file, same discipline as claude
+      } catch {}
+      const s = withOversizeFallback(
+        () => sessionSummary(f.file, f.id, fp || undefined),
+        (e) => oversizeStub(f.id, e)
+      )
+      list.push({ id: f.id, slug: proj.slug, cwd: proj.cwd, title: s.title, firstTs: s.firstTs, lastTs: s.lastTs, userTurns: s.userTurns, toolCalls: s.toolCalls, tokens: s.tokens, models: s.models })
+    }
+  }
+  return { root: root.id, ...bucketActivity(list, { days }) }
+}

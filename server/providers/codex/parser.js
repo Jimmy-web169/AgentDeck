@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import { guardTranscriptSize } from '../../shared/transcriptGuard.js'
+import { withTotal } from '../../shared/tokens.js'
 
 /**
  * Parse a Codex "rollout" .jsonl into raw records.
@@ -228,7 +229,7 @@ export function buildTimeline(records) {
       } else if (kind === 'function_call' || kind === 'custom_tool_call') {
         const id = body.call_id || body.id
         ensureAsst(ts).parts.push({
-          kind: 'tool_use',
+          kind: 'tool_call',
           id,
           name: body.name || 'tool',
           input: toolInput(kind, body),
@@ -336,7 +337,7 @@ export function summarize(records, id) {
     toolCalls,
     models: [...models],
     toolCounts,
-    tokens,
+    tokens: withTotal(tokens), // Codex reports its own total; the sum is only the fallback (server/shared/tokens.js)
     contextWindow,
     lastTokenUsage: lastUsage,
     rateLimits,

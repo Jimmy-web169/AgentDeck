@@ -1,4 +1,5 @@
 import { fmtRelative } from '../../lib/format.js'
+import { useProviderLabel } from '../../lib/providerApi.js'
 
 // Account-level Codex usage limits for the top bar. `usage` is the newest
 // rate_limits snapshot: { primary (5-hour), secondary (weekly) } each with
@@ -49,12 +50,13 @@ function Meter({ w, ts }) {
 }
 
 export default function RateLimitsBar({ usage, ts }) {
+  const label = useProviderLabel()
   if (!usage || (!usage.primary && !usage.secondary)) return null
   const age = ts ? fmtRelative(ts) : null
   return (
     <div
       className="flex items-center gap-3 text-[11px]"
-      title={`Codex usage — newest snapshot from your sessions${age ? `, as of ${age}` : ''} (not live)`}
+      title={`${label} usage — newest snapshot from your sessions${age ? `, as of ${age}` : ''} (not live)`}
     >
       <Meter w={usage.primary} ts={ts} />
       <Meter w={usage.secondary} ts={ts} />

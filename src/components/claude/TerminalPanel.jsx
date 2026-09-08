@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { shortPath } from '../../lib/paths.js'
 import { claudeApi as api } from '../../api.js'
 import ResizeHandle from '../shared/ResizeHandle.jsx'
 import OpenAppButtons from '../shared/OpenAppButtons.jsx'
@@ -114,7 +115,7 @@ export default function TerminalPanel({ root, slug, id, cwd, isNew, title, conte
     return (
       <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex items-center gap-3">
         <button onClick={start} disabled={loading} className="shrink-0 text-[13px] px-3 py-1.5 rounded bg-sky-500/20 text-sky-200 hover:bg-sky-500/30 disabled:opacity-50">
-          {loading ? 'starting…' : isNew ? '▸ Open terminal here (new conversation)' : '▸ Open terminal (continue this session)'}
+          {loading ? 'starting…' : isNew ? `▸ Open terminal in ${shortPath(cwd || slug)} (new conversation)` : '▸ Open terminal (continue this session)'}
         </button>
         <OpenAppButtons onOpenTool={onOpenTool} />
         {err ? (

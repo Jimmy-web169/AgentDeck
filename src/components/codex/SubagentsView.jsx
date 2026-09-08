@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { codexApi as api } from '../../api.js'
+import { useProviderApi, useProviderId } from '../../lib/providerApi.js'
 import useEscToClose from '../../lib/useEscToClose.js'
 import Conversation from './Conversation.jsx'
 import ContextMeter from './ContextMeter.jsx'
@@ -61,6 +61,8 @@ function TranscriptModal({ tx, onClose, onOpenSession }) {
 const VERSION_REFETCH_THROTTLE_MS = 750
 
 export default function SubagentsView({ root, parent, versions = {}, active = true, onOpenSession }) {
+  const api = useProviderApi()
+  const providerId = useProviderId()
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [tx, setTx] = useState(null)
@@ -75,9 +77,9 @@ export default function SubagentsView({ root, parent, versions = {}, active = tr
   // Codex subagents are independent rollouts, so SSE change events carry each
   // Child changes also bump the parent version on the server event, so a newly
   // spawned child invalidates this list before it is present in `data`.
-  const parentVersion = getSessionVersion(versions, 'codex', root, parent?.id)
+  const parentVersion = getSessionVersion(versions, providerId, root, parent?.id)
   const listVersion = parentVersion + (data?.children
-    ? data.children.reduce((n, c) => n + getSessionVersion(versions, 'codex', root, c.id), 0)
+    ? data.children.reduce((n, c) => n + getSessionVersion(versions, providerId, root, c.id), 0)
     : 0)
   const lastListVersion = useRef(listVersion)
   const lastListFetchAt = useRef(0)
@@ -114,14 +116,14 @@ export default function SubagentsView({ root, parent, versions = {}, active = tr
     }
   }, [active, root, parent?.id, listVersion])
 
-  const txVersion = tx?.c ? getSessionVersion(versions, 'codex', root, tx.c.id) : 0
+  const txVersion = tx?.c ? getSessionVersion(versions, providerId, root, tx.c.id) : 0
   const lastTxVersion = useRef(txVersion)
   const lastTxFetchAt = useRef(0)
 
   const open = (c) => {
     // the initial fetch already reflects the current version — sync the ref so
     // the effect doesn't immediately refetch what we just loaded
-    lastTxVersion.current = getSessionVersion(versions, 'codex', root, c.id)
+    lastTxVersion.current = getSessionVersion(versions, providerId, root, c.id)
     setTx({ c, loading: true })
     api
       .session(root, c.id)

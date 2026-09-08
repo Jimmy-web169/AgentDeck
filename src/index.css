@@ -3,14 +3,85 @@
 @tailwind utilities;
 
 /* ---- theme tokens ----
-   Default (no data-theme, or data-theme="dark") = the original dark palette,
-   values unchanged from before the light theme existed. data-theme="light"
-   overrides every token below with the light equivalent. Tailwind color
+   Three themes share one token set: Midnight (default, :root), Graphite
+   (data-theme="graphite") and Paper (data-theme="light"). Pick one in
+   Preferences (the gear in the tab strip). Tailwind color
    classes (bg-zinc-800, text-emerald-300, ...) are wired to these variables
    in tailwind.config.js, so no component needed to change. */
 :root {
   color-scheme: dark;
-  /* ink-950 was previously undefined (bg-ink-950 fell through to the body's
+  /* Midnight — the default: a cool slate with a blue undertone. Tailwind
+     classes (bg-ink-*, text-zinc-*, …) are wired to these variables in
+     tailwind.config.js; Graphite and Paper override the same tokens below. */
+  --ink-950: 10 13 20;
+  --ink-900: 12 15 23;
+  --ink-800: 16 20 30;
+  --ink-700: 22 27 40;
+  --ink-600: 30 37 54;
+  --ink-500: 40 49 72;
+  --ink-400: 52 62 88;
+  --white: 255 255 255;
+  --zinc-100: 241 244 250;
+  --zinc-200: 222 228 238;
+  --zinc-300: 196 205 220;
+  --zinc-400: 148 160 184;
+  --zinc-500: 106 118 142;
+  --zinc-600: 78 89 112;
+  --zinc-700: 56 66 88;
+  --zinc-800: 34 41 58;
+  --emerald-200: 167 243 208;
+  --emerald-300: 110 231 183;
+  --emerald-400: 52 211 153;
+  --emerald-500: 16 185 129;
+  --emerald-600: 5 150 105;
+  --amber-200: 253 230 138;
+  --amber-300: 252 211 77;
+  --amber-400: 251 191 36;
+  --amber-500: 245 158 11;
+  --sky-100: 224 242 254;
+  --sky-200: 186 230 253;
+  --sky-300: 125 211 252;
+  --sky-400: 56 189 248;
+  --sky-500: 14 165 233;
+  --violet-200: 221 214 254;
+  --violet-300: 196 181 253;
+  --violet-400: 167 139 250;
+  --violet-500: 139 92 246;
+  --rose-300: 253 164 175;
+  --rose-500: 244 63 94;
+  --red-200: 254 202 202;
+  --red-300: 252 165 165;
+  --red-400: 248 113 113;
+  --red-500: 239 68 68;
+  --cyan-300: 103 232 249;
+  --cyan-500: 6 182 212;
+  --fuchsia-300: 240 171 252;
+  --fuchsia-500: 217 70 239;
+  /* wider accent palette (Preferences › Colours, workspace colours) */
+  --rose-400: 251 113 133;
+  --cyan-400: 34 211 238;
+  --fuchsia-400: 232 121 249;
+  --teal-300: 94 234 212;
+  --teal-400: 45 212 191;
+  --teal-500: 20 184 166;
+  --orange-300: 253 186 116;
+  --orange-400: 251 146 60;
+  --orange-500: 249 115 22;
+  --lime-300: 190 242 100;
+  --lime-400: 163 230 53;
+  --lime-500: 132 204 22;
+  --indigo-300: 165 180 252;
+  --indigo-400: 129 140 248;
+  --indigo-500: 99 102 241;
+  --pink-300: 249 168 212;
+  --pink-400: 244 114 182;
+  --pink-500: 236 72 153;
+}
+
+:root[data-theme='graphite'] {
+  color-scheme: dark;
+  /* Graphite — the neutral dark palette AgentDeck 1.x shipped with.
+     ink-950 was previously undefined (bg-ink-950 fell through to the body's
      #171717), so it matches ink-800 to preserve the exact rendered appearance */
   --ink-950: 23 23 23;
   --ink-900: 13 13 13;
@@ -56,6 +127,25 @@
   --cyan-500: 6 182 212;
   --fuchsia-300: 240 171 252;
   --fuchsia-500: 217 70 239;
+  /* wider accent palette (Preferences › Colours, workspace colours) */
+  --rose-400: 251 113 133;
+  --cyan-400: 34 211 238;
+  --fuchsia-400: 232 121 249;
+  --teal-300: 94 234 212;
+  --teal-400: 45 212 191;
+  --teal-500: 20 184 166;
+  --orange-300: 253 186 116;
+  --orange-400: 251 146 60;
+  --orange-500: 249 115 22;
+  --lime-300: 190 242 100;
+  --lime-400: 163 230 53;
+  --lime-500: 132 204 22;
+  --indigo-300: 165 180 252;
+  --indigo-400: 129 140 248;
+  --indigo-500: 99 102 241;
+  --pink-300: 249 168 212;
+  --pink-400: 244 114 182;
+  --pink-500: 236 72 153;
 }
 
 :root[data-theme='light'] {
@@ -105,6 +195,25 @@
   --cyan-500: 14 116 144;
   --fuchsia-300: 165 45 138;
   --fuchsia-500: 163 21 126;
+  /* wider accent palette (Preferences › Colours, workspace colours) */
+  --rose-400: 225 29 72;
+  --cyan-400: 8 145 178;
+  --fuchsia-400: 192 38 211;
+  --teal-300: 15 118 110;
+  --teal-400: 13 148 136;
+  --teal-500: 15 118 110;
+  --orange-300: 194 65 12;
+  --orange-400: 234 88 12;
+  --orange-500: 194 65 12;
+  --lime-300: 77 124 15;
+  --lime-400: 101 163 13;
+  --lime-500: 77 124 15;
+  --indigo-300: 67 56 202;
+  --indigo-400: 79 70 229;
+  --indigo-500: 67 56 202;
+  --pink-300: 190 24 93;
+  --pink-400: 219 39 119;
+  --pink-500: 190 24 93;
 }
 
 /* ---- code highlighting (highlight.js) ----
@@ -268,4 +377,204 @@ body {
 }
 .md hr {
   @apply my-4 border-zinc-700;
+}
+
+/* ---- shell chrome: tab strip + quick switcher motion ----
+   Durations are short (110–180ms) and eased out so the UI feels quick, not
+   showy. prefers-reduced-motion turns all of it off. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+@keyframes tab-enter {
+  from {
+    max-width: 0;
+    min-width: 0;
+    opacity: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  to {
+    max-width: 220px;
+    opacity: 1;
+  }
+}
+.tab-enter {
+  animation: tab-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+@keyframes qs-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes qs-pop {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+.qs-backdrop {
+  animation: qs-fade 140ms ease-out both;
+}
+.qs-panel {
+  animation: qs-pop 170ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  transform-origin: 50% 0;
+}
+.qs-closing .qs-backdrop {
+  animation: qs-fade 110ms ease-in reverse both;
+}
+.qs-closing .qs-panel {
+  animation: qs-pop 110ms ease-in reverse both;
+}
+@keyframes qs-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes qs-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.qs-in-right {
+  animation: qs-in-right 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.qs-in-left {
+  animation: qs-in-left 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.qs-cursor {
+  transition:
+    top 130ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 130ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 100ms ease-out;
+}
+@keyframes qs-chip {
+  from {
+    opacity: 0;
+    transform: translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.qs-chip {
+  animation: qs-chip 160ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tab-enter,
+  .qs-backdrop,
+  .qs-panel,
+  .qs-closing .qs-backdrop,
+  .qs-closing .qs-panel,
+  .qs-in-right,
+  .qs-in-left,
+  .qs-chip {
+    animation: none !important;
+  }
+  .qs-cursor {
+    transition: none;
+  }
+}
+
+/* ---- density (Preferences → Density) ----
+   Sidebar rows carry .sb-row / .sb-row-lg instead of fixed paddings; compact
+   tightens them and hides the per-row meta line. */
+.sb-row {
+  padding-top: 0.375rem;
+  padding-bottom: 0.375rem;
+}
+.sb-row-lg {
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+:root[data-density='compact'] .sb-row {
+  padding-top: 0.125rem;
+  padding-bottom: 0.125rem;
+}
+:root[data-density='compact'] .sb-row-lg {
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+}
+:root[data-density='compact'] .sb-meta {
+  display: none;
+}
+/* the meta line is gone in compact — a small "2h ago" stays at the end of the title row */
+.sb-time {
+  display: none;
+}
+:root[data-density='compact'] .sb-time {
+  display: inline;
+}
+
+/* ---- accents chosen by the user (lib/accent.js, lib/providerColors.js) ----
+   A colour is stored as hex; the UI keeps only its hue (--ah / --ac-<id>-h)
+   and saturation (--as / --ac-<id>-s) and lets the theme decide how light it
+   paints: bright on the dark themes, deep on Paper. */
+:root {
+  --accent-l-dot: 62%;
+  --accent-l-text: 74%;
+  --accent-l-bar: 60%;
+}
+:root[data-theme='light'] {
+  --accent-l-dot: 44%;
+  --accent-l-text: 36%;
+  --accent-l-bar: 46%;
+}
+.accent-dot {
+  background-color: hsl(var(--ah, 0) var(--as, 0%) var(--accent-l-dot));
+}
+.accent-text {
+  color: hsl(var(--ah, 0) var(--as, 0%) var(--accent-l-text));
+}
+/* the hue / saturation sliders of the colour picker — thin, quiet, a small
+   thumb that carries the current colour */
+.accent-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  outline: none;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgb(var(--ink-900) / 0.6);
+}
+.accent-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--thumb, #fff);
+  border: 2px solid rgb(var(--zinc-100));
+  box-shadow: 0 0 0 1px rgb(var(--ink-900));
+  transition: transform 120ms;
+}
+.accent-range::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+.accent-range::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 9999px;
+  background: var(--thumb, #fff);
+  border: 2px solid rgb(var(--zinc-100));
+  box-shadow: 0 0 0 1px rgb(var(--ink-900));
 }

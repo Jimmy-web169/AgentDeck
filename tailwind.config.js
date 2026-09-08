@@ -57,6 +57,7 @@ export default {
         },
         rose: {
           300: 'rgb(var(--rose-300) / <alpha-value>)',
+          400: 'rgb(var(--rose-400) / <alpha-value>)',
           500: 'rgb(var(--rose-500) / <alpha-value>)',
         },
         red: {
@@ -67,11 +68,38 @@ export default {
         },
         cyan: {
           300: 'rgb(var(--cyan-300) / <alpha-value>)',
+          400: 'rgb(var(--cyan-400) / <alpha-value>)',
           500: 'rgb(var(--cyan-500) / <alpha-value>)',
         },
         fuchsia: {
           300: 'rgb(var(--fuchsia-300) / <alpha-value>)',
+          400: 'rgb(var(--fuchsia-400) / <alpha-value>)',
           500: 'rgb(var(--fuchsia-500) / <alpha-value>)',
+        },
+        teal: {
+          300: 'rgb(var(--teal-300) / <alpha-value>)',
+          400: 'rgb(var(--teal-400) / <alpha-value>)',
+          500: 'rgb(var(--teal-500) / <alpha-value>)',
+        },
+        orange: {
+          300: 'rgb(var(--orange-300) / <alpha-value>)',
+          400: 'rgb(var(--orange-400) / <alpha-value>)',
+          500: 'rgb(var(--orange-500) / <alpha-value>)',
+        },
+        lime: {
+          300: 'rgb(var(--lime-300) / <alpha-value>)',
+          400: 'rgb(var(--lime-400) / <alpha-value>)',
+          500: 'rgb(var(--lime-500) / <alpha-value>)',
+        },
+        indigo: {
+          300: 'rgb(var(--indigo-300) / <alpha-value>)',
+          400: 'rgb(var(--indigo-400) / <alpha-value>)',
+          500: 'rgb(var(--indigo-500) / <alpha-value>)',
+        },
+        pink: {
+          300: 'rgb(var(--pink-300) / <alpha-value>)',
+          400: 'rgb(var(--pink-400) / <alpha-value>)',
+          500: 'rgb(var(--pink-500) / <alpha-value>)',
         },
       },
       fontFamily: {

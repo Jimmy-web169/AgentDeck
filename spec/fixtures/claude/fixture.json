@@ -1,0 +1,11 @@
+{
+  "provider": "claude",
+  "origin": "scripts/demo/make-fixture.mjs --scenario single-project --seed 7 --now 2026-09-01T09:00:00Z --platform posix — fictional project /home/demo/code/orbit-api",
+  "sessions": [
+    {
+      "id": "00fb8673-8b42-4835-a84f-3e32248c1e89",
+      "file": "session-00fb8673.jsonl",
+      "covers": "user / assistant / tool_use + tool_result pairing / usage per message / summary title from the first prompt"
+    }
+  ]
+}

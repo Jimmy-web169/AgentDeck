@@ -82,7 +82,7 @@ export function resolveVendoredExe(bin, pkgName, exeName) {
 }
 
 let ttydBin
-const findTtyd = () => (ttydBin !== undefined ? ttydBin : (ttydBin = findOnPath(['ttyd'], ['/opt/homebrew/bin/ttyd', '/usr/local/bin/ttyd'])))
+export const findTtyd = () => (ttydBin !== undefined ? ttydBin : (ttydBin = findOnPath(['ttyd'], ['/opt/homebrew/bin/ttyd', '/usr/local/bin/ttyd'])))
 
 // On Windows "tmux" is psmux's tmux-compatible alias. winget's portable install
 // adds its package dir to the *user* PATH, which a server started from an older
@@ -94,7 +94,7 @@ const TMUX_EXTRA = IS_WIN
     ]
   : ['/opt/homebrew/bin/tmux', '/usr/local/bin/tmux']
 let tmuxBin
-const findTmux = () => (tmuxBin !== undefined ? tmuxBin : (tmuxBin = findOnPath(['tmux'], TMUX_EXTRA)))
+export const findTmux = () => (tmuxBin !== undefined ? tmuxBin : (tmuxBin = findOnPath(['tmux'], TMUX_EXTRA)))
 
 // A stable, collision-free tmux session name derived from the terminal key, so
 // reopening the same monitored session always re-attaches the same tmux session.
@@ -129,7 +129,7 @@ function err(status, message) {
 // Start (or reuse) a ttyd terminal running the provider's CLI (optionally
 // resuming a session). Resolves only after ttyd has had a moment to bind, so a
 // bad binary / taken port fails loudly instead of handing the browser a dead iframe.
-export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
+export function startTerminal({ key, cwd, configDir, resumeId, promptArgs = null, meta, config }) {
   const existing = sessions.get(key)
   if (existing && existing.proc && existing.proc.exitCode == null && !existing.proc.killed) {
     if (meta) existing.meta = { ...existing.meta, ...meta }
@@ -143,7 +143,8 @@ export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
   const port = pickPort()
   if (port == null) throw err(503, 'no free port for a terminal')
 
-  const cliArgs = resumeId ? config.resumeArgs(resumeId) : []
+  // resume an existing session, or start seeded with a prompt (AI hand-off), or plain
+  const cliArgs = resumeId ? config.resumeArgs(resumeId) : promptArgs && promptArgs.length ? promptArgs : []
 
   // Claude marks child processes with CLAUDE_CODE_CHILD_SESSION / CLAUDECODE and
   // — when it sees them (own env OR `tmux show-environment -g`) — silently stops
@@ -179,7 +180,7 @@ export function startTerminal({ key, cwd, configDir, resumeId, meta, config }) {
     const metaB64 = Buffer.from(
       JSON.stringify({
         key,
-        provider: config.title,
+        provider: config.id || config.title, // the registry id — clients key their live sets on it
         root: meta?.root ?? null,
         slug: meta?.slug ?? null,
         id: meta?.id ?? null,
@@ -246,12 +247,15 @@ export function listTerminals() {
 // currently attached (e.g. after closing the browser or restarting the server).
 // Metadata is read back from each session's AGENTDECK_META env var. `attached`
 // reflects whether something (a ttyd or a real terminal) is viewing it now.
+const LEGACY_PROVIDER = { agy: 'antigravity' }
+
 export function listLiveTmux() {
   const tmux = findTmux()
   if (!tmux) return []
   let rows
   try {
-    rows = execFileSync(tmux, ['list-sessions', '-F', '#{session_name}\t#{session_attached}'], { encoding: 'utf8', timeout: 3000 })
+    // stderr dropped: with no tmux server running, tmux prints "no server running on …" on every poll
+    rows = execFileSync(tmux, ['list-sessions', '-F', '#{session_name}\t#{session_attached}'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] })
       .split('\n')
       .filter(Boolean)
   } catch {
@@ -265,13 +269,15 @@ export function listLiveTmux() {
     try {
       // tmux prints just the named variable; psmux (the Windows tmux stand-in)
       // prints the whole environment — pick the right line either way.
-      const env = execFileSync(tmux, ['show-environment', '-t', name, 'AGENTDECK_META'], { encoding: 'utf8', timeout: 2000 })
+      const env = execFileSync(tmux, ['show-environment', '-t', name, 'AGENTDECK_META'], { encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] })
       const line = env
         .split('\n')
         .map((s) => s.trim())
         .find((s) => s.startsWith('AGENTDECK_META='))
       if (line) meta = JSON.parse(Buffer.from(line.slice('AGENTDECK_META='.length), 'base64').toString('utf8'))
     } catch {}
+    // sessions started before the id was stored carry the CLI title instead
+    if (LEGACY_PROVIDER[meta.provider]) meta.provider = LEGACY_PROVIDER[meta.provider]
     out.push({ tmuxName: name, attached: attached !== '0', ...meta })
   }
   return out

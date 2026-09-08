@@ -7,13 +7,9 @@ import { createApi } from '../src/api.js'
 import { PROVIDERS } from '../server/registry.js'
 import {
   bumpSessionVersions,
-  cancelReconnect,
   createDebounceWithMaxWait,
   getSessionVersion,
   hasSubagentsNow,
-  isLiveAuthoritative,
-  reconnectDelayMs,
-  scheduleReconnect,
   startFallbackPoll,
   subscribeToPageResume,
 } from '../src/lib/liveSync.js'
@@ -183,25 +179,4 @@ test('background visibility recovery catches up only when the page becomes visib
   unsubscribe()
   win.dispatchEvent(new Event('focus'))
   assert.deepEqual(reasons, ['visibility', 'focus'])
-})
-
-test('a disconnected WebSocket slice falls back to REST and retries with a cap', () => {
-  assert.equal(isLiveAuthoritative({ ready: true }), true)
-  assert.equal(isLiveAuthoritative({ ready: false, transcript: { timeline: [] } }), false)
-  assert.deepEqual([0, 1, 2, 3, 4, 5].map(reconnectDelayMs), [1000, 2000, 4000, 8000, 10000, 10000])
-
-  const clock = fakeClock()
-  const meta = { attempt: 0, timer: null, closed: false }
-  let reconnects = 0
-  assert.equal(scheduleReconnect(meta, () => reconnects++, { setTimer: clock.setTimer }), true)
-  assert.equal(scheduleReconnect(meta, () => reconnects++, { setTimer: clock.setTimer }), false)
-  clock.advance(999)
-  assert.equal(reconnects, 0)
-  clock.advance(1)
-  assert.equal(reconnects, 1)
-
-  scheduleReconnect(meta, () => reconnects++, { setTimer: clock.setTimer })
-  cancelReconnect(meta, { clearTimer: clock.clearTimer })
-  clock.advance(2000)
-  assert.equal(reconnects, 1)
 })

@@ -1,39 +1,36 @@
-import { memo, useMemo, useState } from 'react'
+import { Fragment, memo, useMemo, useRef } from 'react'
 import Markdown from '../shared/Markdown.jsx'
-import StreamingMarkdown from '../shared/StreamingMarkdown.jsx'
 import ToolCall from './ToolCall.jsx'
 import Thinking from '../shared/Thinking.jsx'
-import AskQuestionForm from './AskQuestionForm.jsx'
+import EarlierBar from '../shared/EarlierBar.jsx'
+import { useEarlier } from '../../lib/useEarlier.js'
+import SubagentThread, { buildThreadMap, useSubagentIndex } from '../shared/SubagentThread.jsx'
+import subagentAdapter from './subagentAdapter.js'
 import { BotIcon } from '../shared/icons.jsx'
+import { claudeApi as api } from '../../api.js'
+import { usePrefs } from '../../lib/prefs.js'
 import CopyButton from '../shared/CopyButton.jsx'
-import InfoDot from '../shared/InfoDot.jsx'
 import { fmtTime, fmtTokens, totalTokens } from '../../lib/format.js'
 
+// the text of a reply, for the copy button (thinking and tool calls left out)
 const assistantText = (ev) => ev.parts.filter((p) => p.kind === 'text').map((p) => p.text).join('\n\n')
 
-function UserMsg({ ev, onEdit }) {
+function UserMsg({ ev }) {
   return (
     <div className="group flex flex-col items-end">
       <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-ink-500 px-4 py-2.5">
         <div className="md whitespace-pre-wrap break-words text-[15px] leading-7">{ev.text}</div>
       </div>
       <div className="mt-0.5 flex items-center gap-3 pr-1">
-        {onEdit && (
-          <button
-            onClick={() => onEdit(ev)}
-            title="Edit this prompt and resend on a fork (the original session is untouched)"
-            className="text-[11px] text-zinc-500 hover:text-sky-300 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-          >
-            ✎ edit & resend
-          </button>
-        )}
         <CopyButton text={ev.text} title="Copy this prompt" />
       </div>
     </div>
   )
 }
 
-function AssistantMsg({ ev, onFork }) {
+// `threads` (Map tool_use id → resolved sub-agent, see buildThreadMap) is null
+// unless inline sub-agent threads are on and the agent index has loaded.
+function AssistantMsg({ ev, threads, ctx, onFork }) {
   return (
     <div className="group flex gap-3">
       <div className="mt-1 shrink-0 w-7 h-7 rounded-full bg-ink-600 border border-zinc-600 flex items-center justify-center text-zinc-300">
@@ -47,7 +44,16 @@ function AssistantMsg({ ev, onFork }) {
         )}
         {ev.parts.map((p, i) => {
           if (p.kind === 'thinking') return <Thinking key={i} text={p.text} />
-          if (p.kind === 'tool_use') return <ToolCall key={i} part={p} />
+          if (p.kind === 'tool_call') {
+            const thread = threads ? threads.get(p.id) : null
+            if (!thread) return <ToolCall key={i} part={p} />
+            return (
+              <Fragment key={i}>
+                <ToolCall part={p} />
+                <SubagentThread item={thread} adapter={subagentAdapter} ctx={ctx} Conversation={MemoConversation} />
+              </Fragment>
+            )
+          }
           if (p.kind === 'advisor')
             return (
               <div key={i} className="my-2 border-l-2 border-sky-500/40 pl-3 text-[13px] text-sky-200/80">
@@ -75,7 +81,7 @@ function AssistantMsg({ ev, onFork }) {
           {onFork && (
             <button
               onClick={() => onFork(ev)}
-              title="Fork a new session from this reply (keeps the history up to here)"
+              title="Fork a new session from this reply — keeps the history up to here, opens the fork in its own tab; the original is untouched"
               className="text-[11px] text-zinc-500 hover:text-sky-300 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
             >
               ⑂ fork from here
@@ -108,74 +114,21 @@ function AttachmentMsg({ ev }) {
   )
 }
 
-// ---- live (in-flight) turn, streamed in via the /chat WebSocket ----
-function LiveItem({ it, onPerm }) {
-  if (it.role === 'user') return <UserMsg ev={{ text: it.text }} />
-  if (it.role === 'assistant') {
-    return (
-      <div className="flex gap-3">
-        <div className="mt-1 shrink-0 w-7 h-7 rounded-full bg-ink-600 border border-emerald-600/50 flex items-center justify-center text-emerald-300">
-          <BotIcon className="w-4 h-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          {it.thinking && <Thinking text={it.thinking} />}
-          {it.text ? <StreamingMarkdown>{it.text}</StreamingMarkdown> : <span className="text-zinc-600 text-sm">▍</span>}
-        </div>
-      </div>
-    )
-  }
-  if (it.role === 'tool') {
-    return (
-      <div className="ml-10 min-w-0 max-w-full overflow-hidden rounded-lg border border-zinc-700/70 bg-ink-700/50 px-3 py-1.5 text-[12px]">
-        <div className="flex gap-2 min-w-0">
-          <span className="text-emerald-300 font-mono shrink-0">{it.name}</span>
-          <span className="text-zinc-500 font-mono min-w-0 break-all line-clamp-2">{JSON.stringify(it.input).slice(0, 200)}</span>
-        </div>
-        {it.result != null && <pre className="mt-1 text-[11px] text-zinc-400 whitespace-pre-wrap break-all max-h-40 overflow-auto">{String(it.result).slice(0, 1000)}</pre>}
-      </div>
-    )
-  }
-  if (it.role === 'perm' && it.toolName === 'AskUserQuestion' && it.input?.questions) {
-    // Claude is asking the user — render the options to pick, not an allow/deny gate
-    return (
-      <AskQuestionForm
-        questions={it.input.questions}
-        decided={it.decided}
-        onSubmit={(answers) => onPerm(it.reqId, 'allow', undefined, answers)}
-        onSkip={() => onPerm(it.reqId, 'deny')}
-      />
-    )
-  }
-  if (it.role === 'perm') {
-    const summary = it.input?.command || it.input?.file_path || it.input?.path || JSON.stringify(it.input || {}).slice(0, 400)
-    return (
-      <div className="ml-10 min-w-0 max-w-full overflow-hidden rounded-lg border border-amber-500/40 bg-amber-500/5 px-3 py-2.5 text-[13px]">
-        <div className="text-amber-200">Claude wants to use <span className="font-mono">{it.toolName}</span></div>
-        <pre className="text-[12px] text-zinc-300 whitespace-pre-wrap break-all max-h-32 overflow-auto mt-1 font-mono">{summary}</pre>
-        {it.decided ? (
-          <div className={`mt-1.5 text-[12px] ${it.decided === 'allow' ? 'text-emerald-300' : 'text-red-300'}`}>{it.decided === 'allow' ? '✓ allowed' : '✕ denied'}</div>
-        ) : (
-          <div className="mt-2 flex flex-col gap-1.5 max-w-md">
-            <button onClick={() => onPerm(it.reqId, 'allow', 'once')} className="text-left text-[12px] px-2.5 py-1.5 rounded bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30">1 · Yes (allow once)</button>
-            <button onClick={() => onPerm(it.reqId, 'allow', 'always')} className="text-left text-[12px] px-2.5 py-1.5 rounded bg-emerald-500/10 text-emerald-200/90 hover:bg-emerald-500/20">2 · Yes, allow all <span className="font-mono">{it.toolName}</span> this session</button>
-            <button onClick={() => onPerm(it.reqId, 'deny')} className="text-left text-[12px] px-2.5 py-1.5 rounded bg-red-500/15 text-red-200 hover:bg-red-500/25">3 · No (deny)</button>
-          </div>
-        )}
-      </div>
-    )
-  }
-  return null
-}
-
 // Mounting a long transcript parses + highlights every message synchronously;
-// render only the tail by default so returning to a conversation stays instant.
-const INITIAL_TAIL = 40
+// only the tail renders at first (lib/useEarlier.js); earlier messages come in
+// chunks without moving what the reader is looking at.
 
-function Conversation({ data, live, onEdit, onFork }) {
+// `subagentCtx` (optional, from ClaudeApp) enables inline sub-agent threads:
+// { root, slug, id, depth?, index? }. Without it — or with the
+// inlineSubagents preference off — the view renders exactly as before. The
+// parent (depth 0) fetches the agent index once; a child transcript rendered
+// inline receives the same index one level deeper and shows headers only.
+// `compact` is the inline-child styling (tighter padding, smaller title).
+function Conversation({ data, subagentCtx = null, compact = false, onFork = null }) {
   const { summary, timeline } = data
-  // fork cuts at turn boundaries, so only the LAST assistant bubble of each
-  // turn gets the button — a mid-turn (tool-call) bubble would fork identically
-  // and just muddle where the cut lands
+  // "fork from here" cuts at turn boundaries, so only the LAST assistant bubble
+  // of each turn gets the button — a mid-turn (tool-call) bubble would fork
+  // identically and only muddle where the cut lands
   const turnEnds = useMemo(() => {
     const s = new Set()
     let last = -1
@@ -189,12 +142,30 @@ function Conversation({ data, live, onEdit, onFork }) {
     if (last >= 0) s.add(last)
     return s
   }, [timeline])
-  const [startIdx, setStartIdx] = useState(() => Math.max(0, timeline.length - INITIAL_TAIL))
-  const visible = startIdx > 0 ? timeline.slice(startIdx) : timeline
+  const rootRef = useRef(null)
+  const { startIdx, visible, showEarlier, topRef, chunk } = useEarlier(timeline, rootRef, { memoKey: summary?.id })
+
+  const { inlineSubagents } = usePrefs()
+  const depth = subagentCtx?.depth || 0
+  const inlineOn = !!subagentCtx && inlineSubagents
+  const wantIndex = inlineOn && depth === 0 && !!summary.hasSubagents
+  const index = useSubagentIndex({
+    enabled: wantIndex,
+    key: wantIndex ? `${subagentCtx.root}|${subagentCtx.slug}|${subagentCtx.id}` : null,
+    version: data, // a refetched parent transcript is the cue to re-list its agents
+    fetcher: () => api.subagents(subagentCtx.root, subagentCtx.slug, subagentCtx.id),
+  })
+  const ctx = useMemo(() => {
+    if (!inlineOn) return null
+    const idx = depth === 0 ? index : subagentCtx.index || null
+    return idx ? { ...subagentCtx, index: idx, depth } : null
+  }, [inlineOn, subagentCtx, index, depth])
+  const threads = useMemo(() => (ctx ? buildThreadMap(timeline, subagentAdapter, ctx) : null), [timeline, ctx])
+
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6">
-      <div className="mb-5 pb-4 border-b border-zinc-700/60">
-        <h1 className="text-lg font-semibold text-zinc-100">{summary.title}</h1>
+    <div ref={rootRef} className={compact ? 'px-3 py-3' : 'mx-auto max-w-3xl px-4 py-6'}>
+      <div className={`${compact ? 'mb-3 pb-3' : 'mb-5 pb-4'} border-b border-zinc-700/60`}>
+        <h1 className={`${compact ? 'text-[14px]' : 'text-lg'} font-semibold text-zinc-100`}>{summary.title}</h1>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-zinc-500">
           <span>{summary.userTurns} prompts</span>
           <span>{summary.assistantTurns} replies</span>
@@ -202,47 +173,26 @@ function Conversation({ data, live, onEdit, onFork }) {
           {summary.models?.map((m) => (
             <span key={m} className="font-mono">{m}</span>
           ))}
-          <span className="inline-flex items-center gap-1.5">
-            Σ ↑{fmtTokens(summary.tokens.input)} ↓{fmtTokens(summary.tokens.output)} ⚡{fmtTokens(summary.tokens.cacheRead)}
-            <InfoDot
-              align="left"
-              text={
-                <>
-                  Session token totals:<br />
-                  <b>↑</b> input — prompts + context sent to the model<br />
-                  <b>↓</b> output — text the model generated<br />
-                  <b>⚡</b> cache read — context re-served from the prompt cache instead of being reprocessed (much cheaper than fresh input)
-                </>
-              }
-            />
-          </span>
+          <span>Σ ↑{fmtTokens(summary.tokens.input)} ↓{fmtTokens(summary.tokens.output)} ⚡{fmtTokens(summary.tokens.cacheRead)}</span>
           {summary.hasSidechain && <span className="text-violet-400">has sub-agents</span>}
         </div>
       </div>
 
-      <div className="space-y-6">
-        {startIdx > 0 && (
-          <div className="text-center">
-            <button onClick={() => setStartIdx(0)} className="text-[12px] text-zinc-400 hover:text-zinc-200 bg-ink-700/60 border border-zinc-700/60 rounded-full px-3 py-1">
-              Show {startIdx} earlier {startIdx > 1 ? 'messages' : 'message'}
-            </button>
-          </div>
-        )}
+      <div className={compact ? 'space-y-4' : 'space-y-6'}>
+        <EarlierBar startIdx={startIdx} chunk={chunk} total={timeline.length} onMore={() => showEarlier(false)} onAll={() => showEarlier(true)} topRef={topRef} />
         {visible.map((ev, i) => {
           const k = startIdx + i
-          if (ev.kind === 'user') return <UserMsg key={k} ev={ev} onEdit={ev.uuid ? onEdit : undefined} />
-          if (ev.kind === 'assistant') return <AssistantMsg key={k} ev={ev} onFork={turnEnds.has(k) ? onFork : undefined} />
+          if (ev.kind === 'user') return <UserMsg key={k} ev={ev} />
+          if (ev.kind === 'assistant') return <AssistantMsg key={k} ev={ev} threads={threads} ctx={ctx} onFork={onFork && turnEnds.has(k) ? onFork : undefined} />
           if (ev.kind === 'system') return <SystemMsg key={k} ev={ev} />
           if (ev.kind === 'attachment') return <AttachmentMsg key={k} ev={ev} />
           return null
         })}
-        {timeline.length === 0 && !(live && live.items.length) && (
-          <div className="text-center text-zinc-600 py-10">No renderable events in this session.</div>
-        )}
-        {live && live.items.map((it, i) => <LiveItem key={`live-${i}`} it={it} onPerm={live.onPerm} />)}
+        {timeline.length === 0 && <div className="text-center text-zinc-600 py-10">No renderable events in this session.</div>}
       </div>
     </div>
   )
 }
 
-export default memo(Conversation)
+const MemoConversation = memo(Conversation)
+export default MemoConversation

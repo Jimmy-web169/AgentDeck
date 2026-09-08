@@ -3,12 +3,13 @@
 PORT ?= 47841
 
 .DEFAULT_GOAL := help
-.PHONY: help init all be fe build install stop
+.PHONY: help init all be fe build install stop update
 
 help: ## list targets
 	@echo "AgentDeck:"
 	@echo "  make init     first-time setup: npm deps + ttyd + check codex (OS-friendly)"
-	@echo "  make all      backend + frontend, hot reload  -> http://localhost:47842"
+	@echo "  make all      update provider CLIs, then backend + frontend (hot reload) -> http://localhost:47842"
+	@echo "  make update   update every tracked provider CLI (claude / codex / agy update); AGENTDECK_SKIP_UPDATE=1 to skip"
 	@echo "  make be       backend (API) only              -> http://localhost:$(PORT)"
 	@echo "  make fe       frontend (Vite) only            -> http://localhost:47842"
 	@echo "  make build    build frontend into dist/"
@@ -20,7 +21,12 @@ help: ## list targets
 init: ## one-shot setup (npm install + ttyd + codex check)
 	@sh scripts/setup.sh
 
-all: stop ## backend + frontend together (hot reload)
+# keep every provider CLI current before the servers start — each CLI runs its
+# own updater; failures only warn (set AGENTDECK_SKIP_UPDATE=1 to skip offline)
+update: ## update every tracked provider CLI
+	@node scripts/update-providers.mjs
+
+all: stop update ## update provider CLIs, then backend + frontend together (hot reload)
 	@test -d node_modules || { echo "Dependencies not installed — run 'make init' first."; exit 1; }
 	@npm run dev || { echo ""; echo "'make all' failed. If this is a fresh checkout, run 'make init' first to set up dependencies."; exit 1; }
 

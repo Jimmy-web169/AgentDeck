@@ -1,10 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { makeRoots, HOME, expandHome, dirExists, idFor, assertInside } from '../../shared/roots.js'
+import { makeRoots, HOME, expandHome, dirExists, idFor, assertInside, configDir } from '../../shared/roots.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const CONFIG_PATH = path.join(__dirname, '..', '..', '..', 'roots.codex.json')
+// roots.codex.json lives in the config dir (repo root, or AGENTDECK_CONFIG_DIR)
+const CONFIG_PATH = () => path.join(configDir(), 'roots.codex.json')
 
 function hasSessions(dir) {
   try {
@@ -30,7 +29,7 @@ function autodetectSeed() {
   return out
 }
 const _roots = makeRoots({ configPath: CONFIG_PATH, autodetectSeed, defaultRoots, dataProbe: (dir) => ({ hasSessions: hasSessions(dir) }), onRootsChanged: (dir) => invalidateIndex(dir) })
-export const { loadRoots, rootsWithMeta, addRoot, removeRoot, resolveRoot } = _roots
+export const { loadRoots, rootsWithMeta, addRoot, renameRoot, removeRoot, resolveRoot } = _roots
 export { assertInside, HOME, expandHome, dirExists }
 
 export function sessionsDir(rootDir) {
@@ -77,13 +76,13 @@ function walkSessionFiles(dir, out) {
   return out
 }
 
-const EMPTY_HEAD = { cwd: null, startTs: null, branch: null, isSubagent: false, parentId: null, agentRole: null, agentNickname: null, depth: 0 }
+const EMPTY_HEAD = { cwd: null, startTs: null, branch: null, isSubagent: false, parentId: null, agentRole: null, agentNickname: null, agentPath: null, depth: 0 }
 
 // Read just the head of a rollout to learn its cwd / git branch / start time and
 // — for Codex subagents — its parent thread + role, without parsing the whole
 // file. The session_meta record is the first line; for a subagent it carries
 // `thread_source: 'subagent'` and `source.subagent.thread_spawn` linking it to
-// the parent thread (see DATA-MODEL.md).
+// the parent thread (see spec/DATA-MODEL.md).
 function readHead(file) {
   try {
     const fd = fs.openSync(file, 'r')
@@ -114,6 +113,10 @@ function readHead(file) {
         head.parentId = spawn.parent_thread_id || head.parentId
         head.agentRole = spawn.agent_role || p.agent_role || head.agentRole
         head.agentNickname = spawn.agent_nickname || p.agent_nickname || head.agentNickname
+        // agent_path ("/root/<task_name>") is also what the parent's spawn_agent
+        // tool result prints, so it links a child to the call that spawned it
+        // (see src/components/codex/subagentAdapter.js)
+        head.agentPath = typeof spawn.agent_path === 'string' ? spawn.agent_path : head.agentPath
         head.depth = spawn.depth || head.depth
       } else if (p.thread_source === 'subagent') {
         head.isSubagent = true
@@ -157,7 +160,7 @@ export function buildIndex(rootDir) {
     const head = readHead(f.file)
     const entry = {
       id: f.id, file: f.file, mtimeMs: f.mtimeMs, cwd: head.cwd, startTs: head.startTs, branch: head.branch,
-      isSubagent: head.isSubagent, parentId: head.parentId, agentRole: head.agentRole, agentNickname: head.agentNickname, depth: head.depth,
+      isSubagent: head.isSubagent, parentId: head.parentId, agentRole: head.agentRole, agentNickname: head.agentNickname, agentPath: head.agentPath, depth: head.depth,
     }
     byId.set(f.id, entry)
   }
@@ -201,7 +204,7 @@ export function childrenOf(rootDir, parentId) {
   return [...byId.values()]
     .filter((e) => e.parentId === parentId)
     .sort((a, b) => a.mtimeMs - b.mtimeMs)
-    .map((e) => ({ id: e.id, mtimeMs: e.mtimeMs, agentRole: e.agentRole, agentNickname: e.agentNickname, depth: e.depth }))
+    .map((e) => ({ id: e.id, mtimeMs: e.mtimeMs, startTs: e.startTs, agentRole: e.agentRole, agentNickname: e.agentNickname, agentPath: e.agentPath, depth: e.depth }))
 }
 
 /** Locate a single rollout file by its unique session id. */

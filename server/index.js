@@ -7,7 +7,9 @@ import { PROVIDERS } from './registry.js'
 import { isAllowedOrigin } from './shared/origin.js'
 import { stopAllTerminals } from './shared/terminal.js'
 import { registerWatchControl, restartWatchers } from './shared/watchGate.js'
+import { scheduleProbes, runAllProbes } from './shared/formatProbe.js'
 import { invalidate } from './shared/parseCache.js'
+import { configDir, isolatedConfig } from './shared/roots.js'
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -63,7 +65,9 @@ async function startWatchers() {
       const dir = p.watch.watchDir(root.dir)
       if (!fs.existsSync(dir)) continue
       try {
-        const w = chokidar.watch(dir, { ignoreInitial: true, persistent: true, ignorePermissionErrors: true })
+        const opts = { ignoreInitial: true, persistent: true, ignorePermissionErrors: true }
+        if (p.watch.ignored) opts.ignored = (absPath) => p.watch.ignored(root.dir, absPath)
+        const w = chokidar.watch(dir, opts)
         const onEvt = (absPath) => {
           const ev = p.watch.toEvent(root.id, root.dir, absPath)
           if (ev) queue(ev)
@@ -192,7 +196,10 @@ const server = http.createServer(async (req, res) => {
     const { status, body: out } = await provider.dispatch(req.method, apiPath, url.searchParams, body)
     // tracked-folder changes -> re-arm watchers so live updates cover new roots
     // (via the gate: deferred if a delete currently holds the watchers paused)
-    if (apiPath === '/api/roots' && req.method !== 'GET' && status < 400) await restartWatchers()
+    if (apiPath === '/api/roots' && req.method !== 'GET' && status < 400) {
+      await restartWatchers()
+      setTimeout(() => runAllProbes(PROVIDERS), 500) // a newly tracked folder gets its baseline right away
+    }
     // handlers may attach _etag (a content fingerprint) to a GET body: echo it
     // as an ETag and answer a matching If-None-Match with an empty 304, so
     // pollers pay nothing when nothing changed. The client sends no-store and
@@ -232,19 +239,11 @@ server.on('error', (err) => {
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`\n  AgentDeck API  →  http://localhost:${PORT}  (127.0.0.1 only)`)
   console.log(`  providers: ${Object.keys(PROVIDERS).join(', ')}`)
+  if (isolatedConfig()) console.log(`  config dir: ${configDir()}  (AGENTDECK_CONFIG_DIR — default roots are NOT added)`)
   console.log(`  dev UI: http://localhost:${DEV_UI_PORT}\n`)
   void startWatchers()
-})
-
-// Route /chat/<provider> WebSocket upgrades to each provider's noServer wss, so
-// multiple chat engines coexist on one server. Origin is checked here.
-server.on('upgrade', (req, socket, head) => {
-  if (!isAllowedOrigin(req.headers.origin, req.headers.host)) return socket.destroy()
-  const u = new URL(req.url, 'http://localhost')
-  const m = u.pathname.match(/^\/chat\/([a-z0-9-]+)$/)
-  const p = m && PROVIDERS[m[1]]
-  if (!p?.chatWss) return socket.destroy()
-  p.chatWss.handleUpgrade(req, socket, head, (ws) => p.chatWss.emit('connection', ws, req))
+  // format-drift probe: the newest transcripts of every tracked root, at start and hourly
+  scheduleProbes(PROVIDERS)
 })
 
 process.on('exit', () => stopAllTerminals())

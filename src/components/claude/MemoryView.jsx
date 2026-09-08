@@ -1,21 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import { claudeApi as api } from '../../api.js'
 import Markdown from '../shared/Markdown.jsx'
-
-// last two path segments of a cwd/slug, for the project picker labels
-function shortPath(cwd, slug) {
-  const p = cwd || slug || ''
-  const parts = p.split('/').filter(Boolean)
-  return parts.slice(-2).join('/') || p || '(unknown)'
-}
+import { shortPath } from '../../lib/paths.js'
+import { usePrefs } from '../../lib/prefs.js'
 
 // Claude stores memory PER PROJECT (projects/<slug>/memory/*.md). This view is
 // surfaced at folder(user) scope to match Codex's Memory view, so it lets you
 // pick a project and browse that project's memory. The underlying per-project
 // data model and `api.memory(root, slug)` call are unchanged — only the entry
 // point moved here from the session tab bar.
-export default function MemoryView({ root, projects = [] }) {
-  const [slug, setSlug] = useState(null)
+// `slug` pins the view to one project (the project-level Memory tab); without it
+// the view offers a project picker (Home).
+export default function MemoryView({ root, projects = [], slug: fixedSlug = null }) {
+  usePrefs() // re-render when Preferences › Paths changes (shortPath reads it)
+  const [slug, setSlug] = useState(fixedSlug)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)
   const [editing, setEditing] = useState(null) // file name in edit mode
@@ -26,11 +24,16 @@ export default function MemoryView({ root, projects = [] }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState(null)
 
-  // default to the first project once projects arrive (or when the root changes)
+  // pinned to a project, follow it; otherwise default to the first project once
+  // projects arrive (or when the root changes)
   useEffect(() => {
+    if (fixedSlug) {
+      setSlug(fixedSlug)
+      return
+    }
     if (projects.some((p) => p.slug === slug)) return
     setSlug(projects[0]?.slug || null)
-  }, [projects, slug])
+  }, [projects, slug, fixedSlug])
 
   const load = useCallback(() => {
     if (!root || !slug) {
@@ -146,21 +149,25 @@ export default function MemoryView({ root, projects = [] }) {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 space-y-5">
-      {/* project picker — memory is stored per project */}
+      {/* memory is stored per project — the picker only shows when no project is pinned */}
       <div className="flex items-center gap-2">
-        <span className="text-[11px] uppercase tracking-wide text-zinc-500 shrink-0">Project</span>
-        <select
-          value={slug || ''}
-          onChange={(e) => setSlug(e.target.value)}
-          className="flex-1 min-w-0 bg-ink-700 border border-zinc-700 rounded px-2 py-1.5 text-[12px] text-zinc-300"
-        >
-          {projects.length === 0 && <option value="">no projects</option>}
-          {projects.map((p) => (
-            <option key={p.slug} value={p.slug} title={p.cwd || p.slug}>
-              {shortPath(p.cwd, p.slug)}
-            </option>
-          ))}
-        </select>
+        <span className="text-[11px] uppercase tracking-wide text-zinc-500 shrink-0">{fixedSlug ? 'Project memory' : 'Project'}</span>
+        {fixedSlug ? (
+          <span className="flex-1 min-w-0 text-[12px] text-zinc-500 truncate">{`projects/…/memory/*.md · read by Claude at the start of every session in this project`}</span>
+        ) : (
+          <select
+            value={slug || ''}
+            onChange={(e) => setSlug(e.target.value)}
+            className="flex-1 min-w-0 bg-ink-700 border border-zinc-700 rounded px-2 py-1.5 text-[12px] text-zinc-300"
+          >
+            {projects.length === 0 && <option value="">no projects</option>}
+            {projects.map((p) => (
+              <option key={p.slug} value={p.slug} title={p.cwd || p.slug}>
+                {shortPath(p.cwd || p.slug)}
+              </option>
+            ))}
+          </select>
+        )}
         {slug &&
           (creating ? (
             <span className="flex items-center gap-1 shrink-0">

@@ -7,7 +7,7 @@ import rehypeHighlight from 'rehype-highlight'
 const REMARK_PLUGINS = [remarkGfm]
 const REHYPE_PLUGINS = [rehypeHighlight]
 
-// wrapper-less variant so callers (StreamingMarkdown) can compose several
+// wrapper-less variant so callers can compose several
 // memoized chunks inside ONE .md container — separate .md divs would zero out
 // the between-paragraph margins via .md > *:first/last-child rules.
 export const MarkdownBare = memo(function MarkdownBare({ children }) {
