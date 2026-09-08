@@ -46,6 +46,7 @@ import { SKILL_CONFIG } from './skills.js'
 import { openTool } from '../../shared/launch.js'
 import { getBrowse, getPickFolder } from '../../shared/browse.js'
 import { makeDispatch } from '../../shared/dispatch.js'
+import { forkLines } from './fork.js'
 import { bucketActivity } from '../../shared/activity.js'
 import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } from '../../shared/terminal.js'
 

@@ -9,13 +9,20 @@ import subagentAdapter from './subagentAdapter.js'
 import { BotIcon } from '../shared/icons.jsx'
 import { claudeApi as api } from '../../api.js'
 import { usePrefs } from '../../lib/prefs.js'
+import CopyButton from '../shared/CopyButton.jsx'
 import { fmtTime, fmtTokens, totalTokens } from '../../lib/format.js'
+
+// the text of a reply, for the copy button (thinking and tool calls left out)
+const assistantText = (ev) => ev.parts.filter((p) => p.kind === 'text').map((p) => p.text).join('\n\n')
 
 function UserMsg({ ev }) {
   return (
-    <div className="flex justify-end">
+    <div className="group flex flex-col items-end">
       <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-ink-500 px-4 py-2.5">
         <div className="md whitespace-pre-wrap break-words text-[15px] leading-7">{ev.text}</div>
+      </div>
+      <div className="mt-0.5 flex items-center gap-3 pr-1">
+        <CopyButton text={ev.text} title="Copy this prompt" />
       </div>
     </div>
   )
@@ -23,9 +30,9 @@ function UserMsg({ ev }) {
 
 // `threads` (Map tool_use id → resolved sub-agent, see buildThreadMap) is null
 // unless inline sub-agent threads are on and the agent index has loaded.
-function AssistantMsg({ ev, threads, ctx }) {
+function AssistantMsg({ ev, threads, ctx, onFork }) {
   return (
-    <div className="flex gap-3">
+    <div className="group flex gap-3">
       <div className="mt-1 shrink-0 w-7 h-7 rounded-full bg-ink-600 border border-zinc-600 flex items-center justify-center text-zinc-300">
         <BotIcon className="w-4 h-4" />
       </div>
@@ -70,6 +77,16 @@ function AssistantMsg({ ev, threads, ctx }) {
           )}
           {ev.ts && <span>{fmtTime(ev.ts)}</span>}
           {ev.isSidechain && <span className="text-violet-400">sidechain</span>}
+          {ev.parts.some((p) => p.kind === 'text') && <CopyButton text={() => assistantText(ev)} title="Copy this reply" />}
+          {onFork && (
+            <button
+              onClick={() => onFork(ev)}
+              title="Fork a new session from this reply — keeps the history up to here, opens the fork in its own tab; the original is untouched"
+              className="text-[11px] text-zinc-500 hover:text-sky-300 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+            >
+              ⑂ fork from here
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -107,8 +124,24 @@ function AttachmentMsg({ ev }) {
 // parent (depth 0) fetches the agent index once; a child transcript rendered
 // inline receives the same index one level deeper and shows headers only.
 // `compact` is the inline-child styling (tighter padding, smaller title).
-function Conversation({ data, subagentCtx = null, compact = false }) {
+function Conversation({ data, subagentCtx = null, compact = false, onFork = null }) {
   const { summary, timeline } = data
+  // "fork from here" cuts at turn boundaries, so only the LAST assistant bubble
+  // of each turn gets the button — a mid-turn (tool-call) bubble would fork
+  // identically and only muddle where the cut lands
+  const turnEnds = useMemo(() => {
+    const s = new Set()
+    let last = -1
+    timeline.forEach((ev, i) => {
+      if (ev.kind === 'assistant') last = i
+      if (ev.kind === 'user') {
+        if (last >= 0) s.add(last)
+        last = -1
+      }
+    })
+    if (last >= 0) s.add(last)
+    return s
+  }, [timeline])
   const rootRef = useRef(null)
   const { startIdx, visible, showEarlier, topRef, chunk } = useEarlier(timeline, rootRef, { memoKey: summary?.id })
 
@@ -150,7 +183,7 @@ function Conversation({ data, subagentCtx = null, compact = false }) {
         {visible.map((ev, i) => {
           const k = startIdx + i
           if (ev.kind === 'user') return <UserMsg key={k} ev={ev} />
-          if (ev.kind === 'assistant') return <AssistantMsg key={k} ev={ev} threads={threads} ctx={ctx} />
+          if (ev.kind === 'assistant') return <AssistantMsg key={k} ev={ev} threads={threads} ctx={ctx} onFork={onFork && turnEnds.has(k) ? onFork : undefined} />
           if (ev.kind === 'system') return <SystemMsg key={k} ev={ev} />
           if (ev.kind === 'attachment') return <AttachmentMsg key={k} ev={ev} />
           return null

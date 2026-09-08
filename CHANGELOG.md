@@ -7,6 +7,12 @@ All notable changes to AgentDeck are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **Copy** on every prompt and reply, and **fork from here** on the last reply
+  of a turn (Claude Code and Codex): the server copies the transcript up to the
+  next prompt into a new session id — the original is untouched — and the fork
+  opens in its own tab, where "Open terminal" resumes it. (Merged from main;
+  the SDK-composer "edit & resend" that shipped with it does not apply to the
+  terminal-only 2.0.)
 - **find-skills ships with the repo** (`skills/find-skills`, mirrored to
   `.claude/skills`, pinned by `skills-lock.json`) so any CLI can search the
   skills ecosystem during a hand-off.
