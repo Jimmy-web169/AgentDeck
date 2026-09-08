@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { DENSITIES, THEMES, setPref, usePrefs } from '../../lib/prefs.js'
+import { DENSITIES, PATH_DEPTHS, THEMES, setPref, usePrefs } from '../../lib/prefs.js'
+import InfoDot from './InfoDot.jsx'
 import { providerColorValue, providerDefaultColor, STATUS_KINDS, STATUS_DEFAULTS, statusColorValue } from '../../lib/providerColors.js'
 import AccentField from './AccentPicker.jsx'
 import { GearIcon } from './shellIcons.jsx'
@@ -7,10 +8,15 @@ import { GearIcon } from './shellIcons.jsx'
 // The gear in the tab strip: a small popover with the things a person is likely
 // to want their own way — theme, row density, which sidebar sections show, and
 // whether session lists carry the first prompt under each title.
-function Group({ title, children }) {
+// `info`: the one sentence a section needs, behind an (i) — the panel itself
+// stays labels and controls
+function Group({ title, info, children }) {
   return (
     <div className="mb-3 last:mb-0">
-      <div className="text-[10.5px] uppercase tracking-wider text-zinc-500 mb-1.5">{title}</div>
+      <div className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wider text-zinc-500 mb-1.5">
+        {title}
+        {info && <InfoDot text={info} align="left" />}
+      </div>
       {children}
     </div>
   )
@@ -142,14 +148,18 @@ export default function Preferences({ className = '', providers = [] }) {
             <Pills options={DENSITIES} value={prefs.density} onPick={(v) => setPref('density', v)} />
           </Group>
           {providers.length > 0 && (
-            <Group title="Colours">
+            <Group title="Colours" info="Overrides a provider's accent; the theme keeps the lightness. A workspace's colour is in its ⋯ menu.">
               <ProviderColors providers={providers} prefs={prefs} />
-              <div className="text-[11px] text-zinc-500 mt-0.5 mb-2">Each provider ships its own accent (its registry entry); pick anything here to override it — the theme keeps the lightness. A workspace's colour is in its ⋯ menu.</div>
-              <div className="text-[10.5px] uppercase tracking-wide text-zinc-600 mb-0.5">Status</div>
+              <div className="flex items-center gap-1.5 text-[10.5px] uppercase tracking-wide text-zinc-600 mt-2 mb-0.5">
+                Status
+                <InfoDot text="The pulsing dots on sessions and tabs — running terminal, transcript being written." align="left" />
+              </div>
               <StatusColors prefs={prefs} />
-              <div className="text-[11px] text-zinc-500 mt-0.5">The pulsing dots on sessions and tabs — change them if a provider accent looks too alike.</div>
             </Group>
           )}
+          <Group title="Paths" info="How many folders of a project path to show — sidebar, Ctrl+K, Home, Stats. Windows and macOS/Linux paths alike.">
+            <Pills options={PATH_DEPTHS} value={prefs.pathDepth} onPick={(v) => setPref('pathDepth', v)} />
+          </Group>
           <Group title="Sidebar">
             <Toggle label="Workspaces section" hint="Grouped projects and sessions leave the Projects list" value={prefs.showWorkspaces} onChange={(v) => setPref('showWorkspaces', v)} />
             <Toggle label="Workspace suggestions" hint="“Same folder in several places” under Workspaces" value={prefs.showSuggestions} onChange={(v) => setPref('showSuggestions', v)} />

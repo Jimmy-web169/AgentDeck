@@ -569,7 +569,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
           <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
             {tab === 'subagents' && <SubagentsView key={(active && active.id) || 'none'} data={subagents} version={active ? getSessionVersion(sessionVersions, 'claude', root, active.id) : 0} active={appActive} />}
             {tab === 'raw' && raw && <RawView records={raw.records} />}
-            {tab === 'stats' && active && openSlug && <Stats apiClient={api} root={root} stats={stats} focus={statsFocus} onOpenSession={(slug, s) => onOpenSession?.('claude', { root, slug, id: s.id, title: s.title })} />}
+            {tab === 'stats' && active && openSlug && <Stats apiClient={api} providerLabel="Claude Code" root={root} stats={stats} focus={statsFocus} onOpenSession={(slug, s) => onOpenSession?.('claude', { root, slug, id: s.id, title: s.title })} />}
             {tab === 'memory' && root && openSlug && <MemoryView key={`mem-${root}-${openSlug}`} root={root} slug={openSlug} />}
             {tab === 'config' && root && openSlug && <Resources key={`cfg-${root}-${openSlug}`} root={root} slug={openSlug} />}
           </ErrorBoundary>

@@ -55,6 +55,7 @@ import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } 
 
 const TERMINAL_CONFIG = {
   findBin: () => findOnPath(['codex'], [path.join(os.homedir(), '.local/bin/codex'), '/opt/homebrew/bin/codex', '/usr/local/bin/codex']),
+  id: 'codex',
   title: 'codex',
   envKey: 'CODEX_HOME',
   resumeArgs: (id) => ['resume', id],

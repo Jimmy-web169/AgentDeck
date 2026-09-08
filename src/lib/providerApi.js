@@ -14,5 +14,6 @@ export const useProviderId = () => useProviderApi().provider || 'codex'
 // here (not in src/providers/) so components never import the registry
 const LABEL = { claude: 'Claude Code', codex: 'Codex', antigravity: 'Antigravity' }
 const RESUME = { codex: 'codex resume', antigravity: 'agy --conversation' }
-export const useProviderLabel = () => LABEL[useProviderId()] || 'Codex'
+export const providerLabelOf = (id) => LABEL[id] || id || 'Codex'
+export const useProviderLabel = () => providerLabelOf(useProviderId())
 export const useProviderResume = () => RESUME[useProviderId()] || 'codex resume'

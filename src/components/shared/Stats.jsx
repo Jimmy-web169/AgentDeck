@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fmtTokens, totalTokens } from '../../lib/format.js'
+import { fmtRelative, fmtTokens, totalTokens } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
 import TokenTiles from './TokenTiles.jsx'
 
@@ -55,14 +55,14 @@ function BarList({ title, data, color }) {
 // reusable stats panel — used at folder / project / session level
 // `fields` (from GET /api/stats) says which token tiles are common to every
 // provider and which are this provider's own — common first, then specific
-function StatBlock({ tokens, sessions, userTurns, toolCalls, toolCounts, models, fields }) {
+function StatBlock({ tokens, sessions, userTurns, toolCalls, toolCounts, models, fields, providerLabel }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
         {sessions != null && <Tile label="sessions" value={sessions} />}
         <Tile label="user prompts" value={userTurns ?? 0} />
         <Tile label="tool calls" value={toolCalls ?? 0} />
-        <TokenTiles tokens={tokens} fields={fields} Tile={Tile} providerLabel="Claude Code" />
+        <TokenTiles tokens={tokens} fields={fields} Tile={Tile} providerLabel={providerLabel} />
       </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <BarList title="Tool usage" data={toolCounts} color="bg-emerald-500/70" />
@@ -83,10 +83,14 @@ function StatBlock({ tokens, sessions, userTurns, toolCalls, toolCounts, models,
   )
 }
 
-function DrillRow({ name, cwd, count, countLabel, toolCalls, total, max, onClick }) {
+function DrillRow({ name, cwd, count, countLabel, toolCalls, total, max, onClick, isSubagent, lastTs }) {
   return (
     <button onClick={onClick} className="w-full text-left px-3 py-2 hover:bg-ink-700/40 flex items-center gap-3 border-b border-zinc-800/60 last:border-0">
-      <span className="flex-1 min-w-0 text-[13px] text-zinc-200 truncate" title={cwd || name}>{name}</span>
+      <span className="flex-1 min-w-0 text-[13px] text-zinc-200 truncate" title={cwd || name}>
+        {isSubagent && <span className="text-violet-400 mr-1">⤷</span>}
+        {name}
+      </span>
+      {lastTs && <span className="shrink-0 text-[11px] text-zinc-600 hidden md:block">{fmtRelative(lastTs)}</span>}
       {count != null && <span className="shrink-0 text-[11px] text-zinc-500">{count} {countLabel}</span>}
       <span className="shrink-0 text-[11px] text-zinc-500 w-16 text-right">{toolCalls} tools</span>
       <span className="shrink-0 w-24 hidden sm:block">
@@ -98,7 +102,9 @@ function DrillRow({ name, cwd, count, countLabel, toolCalls, total, max, onClick
   )
 }
 
-export default function Stats({ stats, root, focus, onOpenSession, apiClient }) {
+// one component for every provider (Claude Code, Codex, Antigravity): the stats
+// API has the same shape everywhere; `providerLabel` names the provider-only tiles
+export default function Stats({ stats, root, focus, onOpenSession, apiClient, providerLabel = 'this provider' }) {
   const [path, setPath] = useState({ slug: null, sid: null })
   const [sessionsBySlug, setSessionsBySlug] = useState({})
 
@@ -158,14 +164,14 @@ export default function Stats({ stats, root, focus, onOpenSession, apiClient }) 
       {!path.slug ? (
         // FOLDER level
         <>
-          <StatBlock tokens={stats.tokens} sessions={stats.sessions} userTurns={stats.userTurns} toolCalls={stats.toolCalls} toolCounts={stats.toolCounts} models={Object.keys(stats.modelCounts || {})} fields={stats.fields} />
+          <StatBlock tokens={stats.tokens} sessions={stats.sessions} userTurns={stats.userTurns} toolCalls={stats.toolCalls} toolCounts={stats.toolCounts} models={Object.keys(stats.modelCounts || {})} fields={stats.fields} providerLabel={providerLabel} />
           <div>
             <div className="text-[12px] uppercase tracking-wide text-zinc-500 mb-2">By project ({projects.length}) — click for project stats</div>
             <div className="rounded-lg border border-zinc-800 overflow-hidden">
               {(() => {
                 const max = projects.reduce((m, p) => Math.max(m, sumTokens(p.tokens)), 0)
                 return projects.map((p) => (
-                  <DrillRow key={p.slug} name={shortName(p.cwd, p.slug)} cwd={p.cwd} count={p.sessions} countLabel="sess" toolCalls={p.toolCalls} total={sumTokens(p.tokens)} max={max} onClick={() => goProject(p.slug)} />
+                  <DrillRow key={p.slug} name={shortName(p.cwd, p.slug)} cwd={p.cwd} count={p.sessions} countLabel="sess" toolCalls={p.toolCalls} total={sumTokens(p.tokens)} max={max} lastTs={p.lastActivity} onClick={() => goProject(p.slug)} />
                 ))
               })()}
               {projects.length === 0 && <div className="px-3 py-3 text-[12px] text-zinc-600">no projects</div>}
@@ -176,7 +182,7 @@ export default function Stats({ stats, root, focus, onOpenSession, apiClient }) 
         // PROJECT level
         <>
           {proj ? (
-            <StatBlock tokens={proj.tokens} sessions={proj.sessions} userTurns={proj.userTurns} toolCalls={proj.toolCalls} toolCounts={proj.toolCounts} models={proj.models} fields={stats.fields} />
+            <StatBlock tokens={proj.tokens} sessions={proj.sessions} userTurns={proj.userTurns} toolCalls={proj.toolCalls} toolCounts={proj.toolCounts} models={proj.models} fields={stats.fields} providerLabel={providerLabel} />
           ) : (
             <div className="text-zinc-600 text-sm">project not found</div>
           )}
@@ -189,7 +195,7 @@ export default function Stats({ stats, root, focus, onOpenSession, apiClient }) 
                 (() => {
                   const max = sessions.reduce((m, s) => Math.max(m, sumTokens(s.tokens)), 0)
                   return sessions.map((s) => (
-                    <DrillRow key={s.id} name={s.title} count={null} toolCalls={s.toolCalls} total={sumTokens(s.tokens)} max={max} onClick={() => setPath({ slug: path.slug, sid: s.id })} />
+                    <DrillRow key={s.id} name={s.title || String(s.id).slice(0, 8)} count={null} toolCalls={s.toolCalls} total={sumTokens(s.tokens)} max={max} isSubagent={s.isSubagent} lastTs={s.lastTs} onClick={() => setPath({ slug: path.slug, sid: s.id })} />
                   ))
                 })()
               )}
@@ -201,7 +207,7 @@ export default function Stats({ stats, root, focus, onOpenSession, apiClient }) 
         // SESSION level
         <>
           {session ? (
-            <StatBlock tokens={session.tokens} userTurns={session.userTurns} toolCalls={session.toolCalls} toolCounts={session.toolCounts} models={session.models} fields={stats.fields} />
+            <StatBlock tokens={session.tokens} userTurns={session.userTurns} toolCalls={session.toolCalls} toolCounts={session.toolCounts} models={session.models} fields={stats.fields} providerLabel={providerLabel} />
           ) : (
             <div className="text-zinc-600 text-sm">session not found</div>
           )}

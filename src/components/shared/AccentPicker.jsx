@@ -107,10 +107,13 @@ export default function AccentField({ label, hint = null, value, defaultValue, o
     <div className="py-0.5">
       <button onClick={toggle} data-accent-chip className="w-full flex items-center gap-2 py-1 text-left group/chip" title={open ? 'Close' : 'Change colour'}>
         <span className="w-4 h-4 rounded-full shrink-0 ring-1 ring-ink-900 transition-shadow group-hover/chip:shadow-[0_0_8px_var(--glow)]" style={{ background: hexNow ? live : 'transparent', border: hexNow ? 'none' : '1px dashed rgb(var(--zinc-600))', '--glow': live }} />
-        {label && <span className="text-[12.5px] text-zinc-200 shrink-0">{label}</span>}
-        {hint && <span className="text-[10.5px] text-zinc-600 truncate">{hint}</span>}
-        <span className="text-[11px] font-mono text-zinc-500">{hexNow || empty}</span>
-        <span className="ml-auto text-[11px] text-zinc-500 group-hover/chip:text-zinc-200">{open ? 'done' : 'change'}</span>
+        {/* the hint sits under the label so it is never cut off by the hex + "change" on its right */}
+        <span className="min-w-0 flex-1">
+          {label && <span className="block text-[12.5px] text-zinc-200 leading-tight">{label}</span>}
+          {hint && <span className="block text-[10.5px] text-zinc-600 leading-tight">{hint}</span>}
+        </span>
+        <span className="text-[11px] font-mono text-zinc-500 shrink-0">{hexNow || empty}</span>
+        <span className="shrink-0 text-[11px] text-zinc-500 group-hover/chip:text-zinc-200">{open ? 'done' : 'change'}</span>
       </button>
       {open && (
         <div className="pl-6 pb-1">

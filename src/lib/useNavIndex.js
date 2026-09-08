@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { projectName, shortPath } from './paths.js'
+import { usePrefs } from './prefs.js'
 
 // Cross-provider, cross-root navigation index for the quick switcher, the
 // scope menus and Home.
@@ -21,7 +22,11 @@ async function getJson(url) {
 }
 
 export default function useNavIndex(providers, { enabled = true } = {}) {
-  const [projects, setProjects] = useState([])
+  const [rawProjects, setProjects] = useState([])
+  // `path` is display-only and follows Preferences › Paths, so it is derived here
+  // (not stored at fetch time) and every consumer re-renders when the depth changes
+  const { pathDepth } = usePrefs()
+  const projects = useMemo(() => rawProjects.map((p) => ({ ...p, path: shortPath(p.cwd || p.slug, pathDepth) })), [rawProjects, pathDepth])
   const [roots, setRoots] = useState({}) // providerId -> [{ id, label, dir, exists, … }]
   const [loading, setLoading] = useState(false)
   const loadedAt = useRef(0)
@@ -58,7 +63,6 @@ export default function useNavIndex(providers, { enabled = true } = {}) {
                           slug: proj.slug,
                           cwd: proj.cwd || null,
                           name: projectName(proj.cwd, proj.slug),
-                          path: shortPath(proj.cwd || proj.slug, 3),
                           sessionCount: proj.sessionCount ?? proj.sessions ?? 0,
                           lastActivity: Number(proj.lastActivity) || 0,
                         })
@@ -160,13 +164,34 @@ export default function useNavIndex(providers, { enabled = true } = {}) {
 
   // Live change → mark the touched session lists stale and let the project
   // index refresh soon (last-activity ordering, new projects).
-  const invalidate = useCallback((changes) => {
-    for (const c of changes || []) {
-      const hit = sessionCache.current.get(sessionsKey(c.provider, c.root, c.slug))
-      if (hit) hit.at = 0
-    }
-    loadedAt.current = Math.min(loadedAt.current, Date.now() - INDEX_TTL + 4000)
-  }, [])
+  const known = useRef(new Set())
+  useEffect(() => {
+    known.current = new Set(rawProjects.map((p) => sessionsKey(p.provider, p.root, p.slug)))
+  }, [rawProjects])
+  const soon = useRef(null)
+  const invalidate = useCallback(
+    (changes) => {
+      let unknown = false
+      for (const c of changes || []) {
+        const k = sessionsKey(c.provider, c.root, c.slug)
+        const hit = sessionCache.current.get(k)
+        if (hit) hit.at = 0
+        if (!c.slug || !known.current.has(k)) unknown = true
+      }
+      loadedAt.current = Math.min(loadedAt.current, Date.now() - INDEX_TTL + 4000)
+      // a write for a project the index has never listed (a brand-new conversation
+      // in a new folder, or one whose cwd is not resolved yet) must not wait for the
+      // 45 s tick — refetch shortly, coalescing the burst of writes a new session makes
+      if (unknown && !soon.current) {
+        soon.current = setTimeout(() => {
+          soon.current = null
+          refresh(true)
+        }, 1200)
+      }
+    },
+    [refresh]
+  )
+  useEffect(() => () => soon.current && clearTimeout(soon.current), [])
 
   // the current display label of a tracked folder (pins / workspaces store a
   // snapshot; the live one wins)

@@ -26,7 +26,16 @@ export const DENSITIES = [
 // statusColors: { terminal?: hex, writing?: hex } — the pulsing status dots (a session
 // with a running terminal / a transcript being written); absent = the built-in red / green.
 // showSuggestions: the "Suggested · same folder in several places" box under Workspaces.
-const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {}, customAccents: [], statusColors: {} }
+// pathDepth: how many trailing folders a project path shows (sidebar, Ctrl+K, Stats,
+// Home) — 1…4, or 0 for the whole path. Windows and POSIX paths alike (lib/paths.js).
+export const PATH_DEPTHS = [
+  { k: 1, label: '1', hint: 'folder name only — AgentDeck' },
+  { k: 2, label: '2', hint: 'parent/name — Jimmy/AgentDeck' },
+  { k: 3, label: '3', hint: 'three folders — Desktop/Jimmy/AgentDeck' },
+  { k: 4, label: '4', hint: 'four folders' },
+  { k: 0, label: 'Full', hint: 'the whole path' },
+]
+const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {}, customAccents: [], statusColors: {}, pathDepth: 2 }
 const MAX_SWATCHES = 24
 
 function load() {
@@ -39,6 +48,7 @@ function load() {
   } catch {}
   if (!THEMES.some((x) => x.k === prefs.theme)) prefs.theme = DEFAULTS.theme
   if (!DENSITIES.some((x) => x.k === prefs.density)) prefs.density = DEFAULTS.density
+  if (!PATH_DEPTHS.some((x) => x.k === prefs.pathDepth)) prefs.pathDepth = DEFAULTS.pathDepth
   // colours are stored as hex; legacy palette names from before still resolve
   const pc = prefs.providerColors && typeof prefs.providerColors === 'object' ? prefs.providerColors : {}
   prefs.providerColors = Object.fromEntries(

@@ -8,7 +8,7 @@ import useActiveSessions, { toManagerItems } from './lib/useActiveSessions.js'
 import { ActivityIcon } from './components/shared/icons.jsx'
 import { projectName } from './lib/paths.js'
 import { bumpSessionVersions, subscribeToPageResume } from './lib/liveSync.js'
-import { ProviderApiContext, useProviderLabel } from './lib/providerApi.js'
+import { ProviderApiContext, providerLabelOf, useProviderLabel } from './lib/providerApi.js'
 
 const LIVE_MS = 8000
 
@@ -443,7 +443,14 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
     }, [sessionData, tab])
 
     const sinceEvent = lastEvent ? Math.round((Date.now() - lastEvent) / 1000) : null
-    const disabledTab = (t) => (t.need === 'session' && !active) || (t.need === 'project' && !openSlug)
+    // Sub-agents needs a session that actually spawned some (childCount from the
+    // sessions list, hasSubagents when the provider marks it directly)
+    const hasSubagents = !!active && (active.childCount > 0 || !!active.hasSubagents)
+    const disabledTab = (t) => (t.need === 'session' && !active) || (t.need === 'subagents' && !hasSubagents) || (t.need === 'project' && !openSlug)
+    useEffect(() => {
+      if (tab === 'subagents' && active && !hasSubagents) changeTab('conversation')
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [tab, active?.id, hasSubagents])
 
     return (
       <ProviderApiContext.Provider value={api}>
@@ -523,7 +530,7 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
             <ErrorBoundary label="this view" resetKey={`view|${tab}`}>
               {tab === 'subagents' && active && <SubagentsView key={active.id} root={root} parent={active} versions={sessionVersions} active={appActive} onOpenSession={openSessionById} />}
               {tab === 'raw' && raw && <RawView records={raw.records} typeOf={rawTypeOf} />}
-              {tab === 'stats' && active && Stats && <Stats root={root} stats={stats} focus={statsFocus} onOpenSession={openSessionById} />}
+              {tab === 'stats' && active && Stats && <Stats apiClient={api} providerLabel={providerLabelOf(providerId)} root={root} stats={stats} focus={statsFocus} onOpenSession={(slug, s) => openSessionById(s.id)} />}
               {tab === 'memory' && root && openSlug && <MemoryView key={`mem-${root}-${openSlug}`} root={root} cwd={openSlug} />}
             </ErrorBoundary>
           </div>

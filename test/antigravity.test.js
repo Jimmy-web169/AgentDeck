@@ -156,8 +156,8 @@ test('sqlite: token usage sums per step from field 9 of steps.metadata (decoder 
 })
 
 test('sqlite: workspace URIs become local paths', () => {
-  if (process.platform === 'win32') assert.equal(uriToPath('file:///C:/Users/demo/code/orbit-api'), 'C:\\Users\\demo\\code\\orbit-api')
-  else assert.equal(uriToPath('file:///home/demo/code/orbit-api'), '/home/demo/code/orbit-api')
+  assert.equal(uriToPath('file:///C:/Users/demo/code/orbit-api'), 'C:\\Users\\demo\\code\\orbit-api', 'drive-letter URIs decode as Windows paths on every platform')
+  if (process.platform !== 'win32') assert.equal(uriToPath('file:///home/demo/code/orbit-api'), '/home/demo/code/orbit-api')
   assert.equal(uriToPath(null), null)
   assert.equal(uriToPath('/already/a/path'), '/already/a/path')
 })

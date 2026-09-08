@@ -47,6 +47,7 @@ import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } 
 
 const TERMINAL_CONFIG = {
   findBin: () => findOnPath(['agy'], [path.join(process.env.LOCALAPPDATA || '', 'agy', 'bin', 'agy.exe'), path.join(os.homedir(), '.local/bin/agy'), '/opt/homebrew/bin/agy', '/usr/local/bin/agy']),
+  id: 'antigravity',
   title: 'agy',
   envKey: 'AGENTDECK_PROVIDER_HOME', // agy has no documented home-dir variable; the tracked folder is still recorded on the tmux session
   resumeArgs: (id) => ['--conversation', id],

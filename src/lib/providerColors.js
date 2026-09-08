@@ -22,7 +22,7 @@ export const STATUS_KINDS = [
   { k: 'terminal', label: 'Running terminal', hint: 'terminal open' },
   { k: 'writing', label: 'Being written', hint: 'transcript changing now' },
 ]
-export const STATUS_DEFAULTS = { terminal: '#f87171', writing: '#34d399' }
+export const STATUS_DEFAULTS = { terminal: '#f87171', writing: '#facc15' } // red / yellow
 export function statusColorValue(kind) {
   return normalizeColor(getPrefs().statusColors?.[kind]) || STATUS_DEFAULTS[kind]
 }

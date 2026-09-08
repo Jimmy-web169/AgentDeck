@@ -107,11 +107,14 @@ export function deepFind(d, pred, depth = 0) {
   return null
 }
 
-// file:///C:/x/y or file://wsl.localhost/Ubuntu/home/me → a local path, else the URI itself
+// file:///C:/x/y or file://wsl.localhost/Ubuntu/home/me → a local path, else the URI itself.
+// A drive-letter URI is a Windows path whatever this process runs on (homes get copied
+// between machines), so it is decoded as one instead of becoming "/C:/x/y" on posix.
 export function uriToPath(uri) {
   if (typeof uri !== 'string' || !uri) return null
   try {
-    return uri.startsWith('file:') ? fileURLToPath(uri) : uri
+    if (!uri.startsWith('file:')) return uri
+    return fileURLToPath(uri, { windows: /^file:\/\/\/[A-Za-z]:\//.test(uri) ? true : undefined })
   } catch {
     return uri
   }

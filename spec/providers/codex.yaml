@@ -149,8 +149,15 @@ probe:
   sample: { glob: "sessions/*/*/*/rollout-*.jsonl", newest: 5, head: 200, tail: 200 }
   required: [timestamp, type, payload]
   enums:
-    type: [session_meta, turn_context, response_item, event_msg, compacted]
-    "payload.type": [message, reasoning, function_call, function_call_output, custom_tool_call, custom_tool_call_output, user_message, agent_message, agent_reasoning, token_count, thread_name_updated, task_started, task_complete, turn_aborted]
+    # after `compacted`: top-level record types codex-cli added later (first version each was seen in,
+    # 2026-09-08 probe on a real home) — the parser ignores them: world_state 0.144.2,
+    # inter_agent_communication_metadata 0.153.2, token_usage_record 0.153.2
+    type: [session_meta, turn_context, response_item, event_msg, compacted,
+           world_state, inter_agent_communication_metadata, token_usage_record]
+    # after `turn_aborted`: payload types added later — tool_search_call/_output (response_item,
+    # 0.118.0-alpha.2), thread_settings_applied (event_msg, 0.150.0-alpha.8), item_completed (event_msg, 0.150.1)
+    "payload.type": [message, reasoning, function_call, function_call_output, custom_tool_call, custom_tool_call_output, user_message, agent_message, agent_reasoning, token_count, thread_name_updated, task_started, task_complete, turn_aborted,
+                     tool_search_call, tool_search_output, thread_settings_applied, item_completed]
   types:
     "payload.info.total_token_usage.total_tokens": number
   version_field: payload.cli_version

@@ -4,6 +4,45 @@ All notable changes to AgentDeck are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
 [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Preferences › Paths**: how many trailing folders a project path shows (1–4 or
+  the whole path) everywhere a path is displayed — sidebar, Ctrl+K, Home, Stats,
+  Live. Windows paths keep their backslashes, POSIX paths their slashes.
+- Format probe descriptors carry the record types newer CLIs added, each with the
+  version it first appeared in: Claude Code `advisor_tool_result` (≥ 2.1.238) and
+  `history-suppression` (2.1.263); Codex `world_state` (0.144.2),
+  `inter_agent_communication_metadata` and `token_usage_record` (0.153.2),
+  `tool_search_call/_output` (0.118), `thread_settings_applied` (0.150.0),
+  `item_completed` (0.150.1).
+
+### Removed
+- Home › Stats' "This folder / All folders" switch: Stats follows the sidebar's
+  folder chip like every other Home page. The "full list: the ? in the tab strip"
+  note under Home › Activity's keyboard map is gone too.
+
+### Changed
+- One Stats view for every provider (the Claude one, with the sub-agent marker and
+  last-activity column the Codex table had); `components/codex/Stats.jsx` is gone.
+- Preferences reads as labels and controls: the two explanatory paragraphs under
+  Colours moved behind (i) dots; a colour row's hint sits under its label instead
+  of being cut off beside the hex.
+- The "being written" status dot defaults to yellow (was green, too close to the
+  Claude Code accent).
+- A write for a project the sidebar has never listed (a new conversation in a new
+  folder) refetches the index within about a second instead of waiting for the
+  45 s tick or a page switch.
+
+### Fixed
+- Antigravity terminals now light the running-terminal dot, show the right
+  provider tag in Live, and end when their tab closes: the tmux metadata stored
+  the CLI title (`agy`) where the client expects the provider id.
+- Codex and Antigravity: the Sub-agents tab is disabled until the session has
+  spawned one (as in Claude Code) instead of opening an empty view.
+- Antigravity: a Windows `file:///C:/…` workspace URI read on macOS/Linux (a
+  copied home) decodes to `C:\…` instead of `/C:/…`.
+
 ## [2.0.0] - 2026-09-07
 
 A navigation-first rewrite: browse like a browser, drive every agent through

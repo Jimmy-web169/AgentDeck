@@ -4,7 +4,7 @@ import Conversation from './components/codex/Conversation.jsx'
 import SubagentsView from './components/codex/SubagentsView.jsx'
 import TerminalPanel from './components/codex/TerminalPanel.jsx'
 import RateLimitsBar from './components/codex/RateLimitsBar.jsx'
-import Stats from './components/codex/Stats.jsx'
+import Stats from './components/shared/Stats.jsx'
 import ResourcesView from './components/antigravity/ResourcesView.jsx'
 import MemoryView from './components/antigravity/MemoryView.jsx'
 import subagentAdapter from './components/antigravity/subagentAdapter.js'
@@ -17,7 +17,7 @@ const AGY_RAW_TYPE = (rec) => rec?.type || rec?.source || 'other'
 // context) plus agy-specific read-only Config and Artifacts views.
 const SESSION_TABS = [
   { k: 'conversation', need: 'session', label: 'Conversation' },
-  { k: 'subagents', need: 'session', label: 'Sub-agents' },
+  { k: 'subagents', need: 'subagents', label: 'Sub-agents' },
   { k: 'raw', need: 'session', label: 'Raw' },
   { k: 'stats', need: 'session', label: 'Stats' },
   { k: 'memory', need: 'project', label: 'Artifacts' },

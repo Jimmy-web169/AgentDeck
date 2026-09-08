@@ -50,6 +50,7 @@ import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } 
 
 const TERMINAL_CONFIG = {
   findBin: () => findOnPath(['claude'], [path.join(os.homedir(), '.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude']),
+  id: 'claude',
   title: 'claude',
   envKey: 'CLAUDE_CONFIG_DIR',
   resumeArgs: (id) => ['--resume', id],

@@ -32,6 +32,8 @@ roots.codex.json
 roots.antigravity.json
 # format-drift probe store (per provider), written next to roots.*.json by a server run from the repo
 probe.*.json
+# AI hand-off briefs (server/shared/handoff.js), written under the config dir like probe.*.json
+handoffs/
 .claude/
 
 # local research notes, handoffs, scratch — never committed (see CLAUDE.md)

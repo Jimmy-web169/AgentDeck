@@ -159,7 +159,7 @@ export function startTerminal({ key, cwd, configDir, resumeId, promptArgs = null
     const metaB64 = Buffer.from(
       JSON.stringify({
         key,
-        provider: config.title,
+        provider: config.id || config.title, // the registry id — clients key their live sets on it
         root: meta?.root ?? null,
         slug: meta?.slug ?? null,
         id: meta?.id ?? null,
@@ -226,6 +226,8 @@ export function listTerminals() {
 // currently attached (e.g. after closing the browser or restarting the server).
 // Metadata is read back from each session's AGENTDECK_META env var. `attached`
 // reflects whether something (a ttyd or a real terminal) is viewing it now.
+const LEGACY_PROVIDER = { agy: 'antigravity' }
+
 export function listLiveTmux() {
   const tmux = findTmux()
   if (!tmux) return []
@@ -252,6 +254,8 @@ export function listLiveTmux() {
         .find((s) => s.startsWith('AGENTDECK_META='))
       if (line) meta = JSON.parse(Buffer.from(line.slice('AGENTDECK_META='.length), 'base64').toString('utf8'))
     } catch {}
+    // sessions started before the id was stored carry the CLI title instead
+    if (LEGACY_PROVIDER[meta.provider]) meta.provider = LEGACY_PROVIDER[meta.provider]
     out.push({ tmuxName: name, attached: attached !== '0', ...meta })
   }
   return out
