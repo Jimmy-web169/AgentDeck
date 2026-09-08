@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import { guardTranscriptSize } from '../../shared/transcriptGuard.js'
+import { withTotal } from '../../shared/tokens.js'
 
 /**
  * Parse a Claude Code session .jsonl into raw records.
@@ -174,7 +175,7 @@ function assistantEvent(rec, toolResults) {
         parts.push({ kind: 'thinking', text: b.thinking || b.text || '' })
       } else if (b.type === 'tool_use' || b.type === 'server_tool_use') {
         parts.push({
-          kind: 'tool_use',
+          kind: 'tool_call',
           id: b.id,
           name: b.name,
           server: b.type === 'server_tool_use',
@@ -278,6 +279,6 @@ export function summarize(records, id) {
     hasSidechain,
     models: [...models],
     toolCounts,
-    tokens: totals,
+    tokens: withTotal(totals), // `total` is the provider's job (server/shared/tokens.js)
   }
 }

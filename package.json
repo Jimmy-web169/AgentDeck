@@ -1,6 +1,6 @@
 {
   "name": "agentdeck",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "description": "A local, provider-pluggable dashboard for CLI coding agents (Claude Code, OpenAI Codex, and more) — one UI, switch providers live.",
   "type": "module",
   "scripts": {
@@ -13,16 +13,19 @@
     "web": "vite",
     "build": "vite build",
     "start": "node server/index.js",
-    "test": "node --test"
+    "test": "node --test",
+    "check:providers": "node scripts/check-providers.mjs",
+    "check:privacy": "node scripts/check-privacy.mjs",
+    "check:spec": "node scripts/check-spec.mjs",
+    "release:check": "npm test && npm run build && npm run check:providers && npm run check:privacy && npm run check:spec"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.161",
     "@lydell/node-pty": "^1.2.0-beta.12",
-    "@openai/codex-sdk": "^0.137.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "chokidar": "^5.0.0",
     "highlight.js": "^11.10.0",
+    "js-yaml": "^4.3.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
@@ -33,6 +36,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
+    "ajv": "^8.20.0",
     "autoprefixer": "^10.4.20",
     "concurrently": "^8.2.2",
     "postcss": "^8.4.41",

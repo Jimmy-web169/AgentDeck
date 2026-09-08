@@ -98,7 +98,7 @@ export function readPlugins(rootDir) {
   const cacheDir = path.join(rootDir, 'plugins', 'cache')
   const enabledMap = pluginEnabledMap(path.join(rootDir, 'config.toml'))
   const installed = []
-  const marketplaces = new Set()
+  const marketplaces = new Map() // name -> { name, repo } (the same shape claude returns)
   const ls = (d) => {
     try {
       return fs.readdirSync(d, { withFileTypes: true })
@@ -108,7 +108,7 @@ export function readPlugins(rootDir) {
   }
   for (const mk of ls(cacheDir)) {
     if (!mk.isDirectory()) continue
-    marketplaces.add(mk.name)
+    if (!marketplaces.has(mk.name)) marketplaces.set(mk.name, { name: mk.name, repo: null })
     for (const src of ls(path.join(cacheDir, mk.name))) {
       if (!src.isDirectory()) continue
       for (const hash of ls(path.join(cacheDir, mk.name, src.name))) {
@@ -140,5 +140,5 @@ export function readPlugins(rootDir) {
     }
   }
   installed.sort((a, b) => a.name.localeCompare(b.name))
-  return { installed, marketplaces: [...marketplaces] }
+  return { installed, marketplaces: [...marketplaces.values()] }
 }

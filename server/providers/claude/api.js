@@ -4,6 +4,7 @@ import os from 'node:os'
 import crypto from 'node:crypto'
 import {
   rootsWithMeta,
+  renameRoot,
   addRoot,
   removeRoot,
   resolveRoot,
@@ -14,9 +15,10 @@ import {
   expandHome,
 } from './paths.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
-import { forkLines } from './fork.js'
+import { addTokens, tokenFields, zeroTokens as zeroTokensShared } from '../../shared/tokens.js'
+import { child } from '../../shared/children.js'
 import { cachedRecords, cachedDerived, fingerprintOf, etagOf } from '../../shared/parseCache.js'
-import { withOversizeFallback, guardTranscriptSize } from '../../shared/transcriptGuard.js'
+import { withOversizeFallback } from '../../shared/transcriptGuard.js'
 
 // All transcript reads below go through the fingerprint cache: a stat per
 // request revalidates, so results are exactly as fresh as parsing every time.
@@ -35,18 +37,26 @@ const oversizeStub = (id, e) => ({ ...summarize([], id), title: `(transcript too
 import { discoverRuns, discoverPlainAgents } from './runs.js'
 import { inventory, readResource, writeResource, deleteResource } from './resources.js'
 import { safeTrash } from '../../shared/trash.js'
+import { probeStatus, runProbe, acceptProbe } from '../../shared/formatProbe.js'
+import { writeBrief, composeBrief, seedPrompt } from '../../shared/handoff.js'
+import { HOME as USER_HOME } from '../../shared/roots.js'
 import { withWatchersPaused } from '../../shared/watchGate.js'
 import { parseSkillsAdd, runSkillsAdd } from '../../shared/skills.js'
 import { SKILL_CONFIG } from './skills.js'
-import { openTool, pickFolderNative } from '../../shared/launch.js'
+import { openTool } from '../../shared/launch.js'
+import { getBrowse, getPickFolder } from '../../shared/browse.js'
 import { makeDispatch } from '../../shared/dispatch.js'
+import { forkLines } from './fork.js'
+import { bucketActivity } from '../../shared/activity.js'
 import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } from '../../shared/terminal.js'
 
 const TERMINAL_CONFIG = {
   findBin: () => findOnPath(['claude'], [path.join(os.homedir(), '.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude']),
+  id: 'claude',
   title: 'claude',
   envKey: 'CLAUDE_CONFIG_DIR',
   resumeArgs: (id) => ['--resume', id],
+  promptArgs: (p) => [p], // `claude "<prompt>"` — interactive, seeded (AI hand-off)
   checkOrigin: false,
 }
 
@@ -99,12 +109,30 @@ function projectInfo(rootDir, slug) {
 // --- read handlers -----------------------------------------------------------
 
 function getRoots() {
-  return { roots: rootsWithMeta(), default: rootsWithMeta()[0]?.id || null }
+  const roots = rootsWithMeta().map((r) => ({ ...r, probe: probeStatus('claude', r.id) }))
+  return { roots, default: roots[0]?.id || null }
+}
+
+// format-drift probe (server/shared/formatProbe.js): re-sample now / take the
+// current shape as the new baseline
+function postProbeRun(_q, body) {
+  const root = resolveRoot(body?.root)
+  return { root: root.id, probe: runProbe('claude', root) }
+}
+function postProbeAccept(_q, body) {
+  const root = resolveRoot(body?.root)
+  return { root: root.id, probe: acceptProbe('claude', root) }
 }
 
 function postRoots(_q, body) {
   if (!body?.path) throw httpErr(400, 'missing path')
   return addRoot(body.path, body.label)
+}
+
+// relabel a tracked folder (display only; empty label = back to the default)
+function postRootLabel(_q, body) {
+  if (!body?.id) throw httpErr(400, 'missing id')
+  return renameRoot(body.id, body.label)
 }
 
 function deleteRoots(q) {
@@ -152,37 +180,6 @@ function findSessionFile(rootDir, slug, id) {
   const found = sessionFiles(rootDir, slug).find((f) => f.id === id)
   if (!found) throw httpErr(404, 'session not found')
   return found.file
-}
-
-// Fork a session: copy its transcript into a NEW session id under the same
-// project, keeping everything strictly BEFORE the record whose uuid is `cut`
-// (a user prompt — resuming the fork replays the shared history and diverges
-// from there). No `cut` = full copy (branch from the end). The original file
-// is never touched; kept records get their sessionId rewritten so
-// `claude --resume <newId>` (CLI and Agent SDK alike) picks the fork up.
-function postFork(_q, body) {
-  const root = resolveRoot(body?.root)
-  const slug = body?.slug
-  const id = body?.id
-  if (!slug || !id) throw httpErr(400, 'missing slug/id')
-  const file = findSessionFile(root.dir, slug, id)
-  guardTranscriptSize(file, 'session')
-  const fp = fingerprintOf(file)
-  const newId = crypto.randomUUID()
-  let kept
-  try {
-    kept = forkLines(fs.readFileSync(file, 'utf8').split('\n'), body?.cut || null, newId)
-  } catch (e) {
-    throw httpErr(e.code === 'CUT_NOT_FOUND' ? 404 : 400, e.message)
-  }
-  // a trailing custom-title record (same shape /rename writes) labels the fork
-  // AND stamps a fresh lastTs, so it sorts as recent in the session list
-  const title = sessionSummary(file, id, fp).title
-  kept.push(JSON.stringify({ type: 'custom-title', customTitle: `${title} (fork)`, sessionId: newId, timestamp: new Date().toISOString() }))
-  const dst = path.join(root.dir, 'projects', slug, `${newId}.jsonl`)
-  assertInside(root.dir, dst)
-  fs.writeFileSync(dst, kept.join('\n') + '\n')
-  return { root: root.id, slug, id: newId, forkedFrom: id }
 }
 
 function getSession(q) {
@@ -243,12 +240,36 @@ function getSubagents(q) {
   const slug = q.get('slug')
   const id = q.get('id')
   if (!slug || !id) throw httpErr(400, 'missing slug/id')
+  const runs = discoverRuns(root.dir, slug, id)
+  const agents = discoverPlainAgents(root.dir, slug, id)
+  // `children` / `groups` is the provider-neutral shape (server/shared/children.js);
+  // `runs` / `agents` stay for the Sub-agents view, which is unchanged
+  const toChild = (a, group) =>
+    child({
+      id: a.id,
+      parentId: id,
+      kind: 'agent',
+      label: a.description || a.label || a.id,
+      type: a.agentType || null,
+      status: a.status,
+      firstTs: a.firstTs,
+      lastTs: a.lastTs,
+      toolCalls: a.toolCalls,
+      tokens: a.tokens || null,
+      model: a.model || null,
+      depth: a.spawnDepth,
+      group,
+      oversized: a.oversized,
+      extra: { toolUseId: a.toolUseId || null, description: a.description || null },
+    })
   return {
     root: root.id,
     slug,
     id,
-    runs: discoverRuns(root.dir, slug, id),
-    agents: discoverPlainAgents(root.dir, slug, id),
+    runs,
+    agents,
+    children: [...agents.map((a) => toChild(a, null)), ...runs.flatMap((r) => (r.agents || []).map((a) => toChild(a, r.runId)))],
+    groups: runs.map((r) => ({ id: r.runId, name: r.name || r.description || r.runId, status: r.runStatus || 'unknown', agentCount: r.agentCount ?? (r.agents || []).length, elapsedMs: r.elapsedMs ?? null, tokens: r.totals || null })),
   }
 }
 
@@ -277,13 +298,9 @@ function getSubagent(q) {
   return { root: root.id, run, agent, summary: { ...sessionSummary(file, agent, fp) }, timeline: sessionTimeline(file, fp), _etag: etagOf(fp) }
 }
 
-const zeroTokens = () => ({ input: 0, output: 0, cacheCreate: 0, cacheRead: 0 })
-function addTokens(into, t) {
-  into.input += t.input
-  into.output += t.output
-  into.cacheCreate += t.cacheCreate
-  into.cacheRead += t.cacheRead
-}
+// token fields: the common set every provider has, plus Claude's own cacheCreate
+const TOKEN_SPECIFIC = ['cacheCreate']
+const zeroTokens = () => zeroTokensShared(TOKEN_SPECIFIC)
 
 // root-level totals + a per-project rollup. Drill into a project's per-session
 // breakdown via GET /api/sessions?root=&slug= (already per-session summaries).
@@ -299,7 +316,7 @@ function getStats(q) {
   for (const slug of listProjectSlugs(root.dir)) {
     const files = sessionFiles(root.dir, slug)
     if (!files.length) continue
-    const proj = { slug, cwd: null, sessions: files.length, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: 0 }
+    const proj = { slug, cwd: null, sessions: files.length, subagentSessions: 0, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: 0 }
     for (const f of files) {
       // one stat per file, before its content is read (see parseCache.js)
       let fp = null
@@ -334,7 +351,10 @@ function getStats(q) {
     projects.push({ ...proj, models: [...proj.models] })
   }
   projects.sort((a, b) => b.lastActivity - a.lastActivity)
-  return { root: root.id, projectCount: projects.length, sessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects }
+  // `fields` tells the UI which token fields every provider shares (add these up
+  // across folders) and which are Claude's own
+  // sub-agent transcripts are sidecar files (projects/*/*/subagents/), not sessions
+  return { root: root.id, projectCount: projects.length, sessions, subagentSessions: 0, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
 }
 
 function getHistory(q) {
@@ -346,7 +366,7 @@ function getHistory(q) {
       if (!s) continue
       try {
         const o = JSON.parse(s)
-        out.push({ display: o.display, project: o.project, ts: o.timestamp || o.ts || null })
+        out.push({ display: o.display || '', project: o.project || null, sessionId: o.sessionId || null, ts: o.timestamp || o.ts || null })
       } catch {}
     }
   } catch {}
@@ -369,7 +389,8 @@ function getMemory(q) {
     }
   } catch {}
   files.sort((a, b) => a.name.localeCompare(b.name))
-  return { root: root.id, slug, index, files }
+  // scope/writable: the envelope every provider's memory shares (spec §4 item 4)
+  return { root: root.id, slug, scope: 'project', writable: true, index, files }
 }
 
 // Memory files are flat .md files under projects/<slug>/memory (getMemory reads
@@ -576,14 +597,25 @@ async function postTerminal(_q, body) {
   } else if (body.slug) {
     cwd = projectCwd(root.dir, body.slug) // new conversation under an existing project
     key = `${root.id}|new|${body.slug}`
+  } else if (body.brief) {
+    cwd = USER_HOME // a hand-off with no folder (Insights) runs from the home directory
+    key = `${root.id}|new|${cwd}`
   } else {
     throw httpErr(400, 'missing slug/id or cwd')
   }
   if (!cwd || !fs.existsSync(cwd)) cwd = root.dir
   // CLAUDE_CONFIG_DIR = the session's tracked root → uses that account's login (the credential fix)
+  // AI hand-off: the request + file + docs go into a brief file; the CLI starts
+  // seeded with a one-line prompt that points at it (server/shared/handoff.js)
+  let promptArgs = null
+  let briefFile = null
+  if (!resumeId && body.brief && typeof body.brief === 'object') {
+    briefFile = writeBrief(composeBrief({ ...body.brief, providerLabel: 'Claude Code', cwd }), { key })
+    promptArgs = TERMINAL_CONFIG.promptArgs(seedPrompt(briefFile))
+  }
   const meta = { root: root.id, slug: body.slug || null, id: resumeId, cwd, isNew: !resumeId, title: body.title || null }
-  const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, meta, config: TERMINAL_CONFIG })
-  return { ok: true, key, ...res }
+  const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, promptArgs, meta, config: TERMINAL_CONFIG })
+  return { ok: true, key, brief: briefFile, ...res }
 }
 
 function getTerminals() {
@@ -608,44 +640,8 @@ function getActiveSessions() {
 // localhost-only; lists directory NAMES only (no file contents). OS-friendly via
 // Node fs/path. Hidden dot-dirs are skipped in the listing (type a path to reach them).
 
-function getBrowse(q) {
-  const home = os.homedir()
-  let dir = expandHome((q.get('path') || '').trim()) || home
-  let resolved
-  try {
-    resolved = fs.realpathSync(dir)
-  } catch {
-    resolved = path.resolve(dir)
-  }
-  let stat
-  try {
-    stat = fs.statSync(resolved)
-  } catch {}
-  if (!stat || !stat.isDirectory()) throw httpErr(404, `Not a directory: ${dir}`)
-  let dirs = []
-  try {
-    dirs = fs
-      .readdirSync(resolved, { withFileTypes: true })
-      .filter((e) => {
-        try {
-          return (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith('.')
-        } catch {
-          return false
-        }
-      })
-      .map((e) => ({ name: e.name, path: path.join(resolved, e.name) }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  } catch {
-    // permission denied etc. — return an empty listing rather than failing
-  }
-  const parent = path.dirname(resolved)
-  return { path: resolved, parent: parent !== resolved ? parent : null, home, dirs }
-}
 
 // open the OS-native folder chooser (blocks until the user picks/cancels)
-async function getPickFolder() {
-  return await pickFolderNative()
-}
 
 // --- dispatcher --------------------------------------------------------------
 
@@ -653,13 +649,15 @@ async function getPickFolder() {
 // exposes rate_limits to a status line command (never to disk), so an optional
 // status line snippet writes <config_dir>/rate-limits.json, which we read here.
 // See README "Usage limits bar". Absent file → null (bar simply hides).
+// usage.ts is always ms (the status line writes unix seconds; codex/agy snapshots are ISO)
+const toMs = (v) => (typeof v === 'number' ? (v < 1e12 ? v * 1000 : v) : typeof v === 'string' ? Date.parse(v) || null : null)
 function getUsage(q) {
   const root = resolveRoot(q.get('root'))
   try {
     const d = JSON.parse(fs.readFileSync(path.join(root.dir, 'rate-limits.json'), 'utf8'))
-    return { root: root.id, rateLimits: d.rate_limits || null, contextWindow: d.context_window || null, sessionId: d.session_id || null, updatedAt: d.updated_at || null }
+    return { root: root.id, rateLimits: d.rate_limits || null, contextWindow: d.context_window || null, sessionId: d.session_id || null, ts: toMs(d.updated_at) }
   } catch {
-    return { root: root.id, rateLimits: null, contextWindow: null, sessionId: null, updatedAt: null }
+    return { root: root.id, rateLimits: null, contextWindow: null, sessionId: null, ts: null }
   }
 }
 
@@ -714,13 +712,16 @@ function getVersion(q) {
 
 const ROUTES = {
   'GET /api/roots': getRoots,
+  'POST /api/probe/run': postProbeRun,
+  'POST /api/probe/accept': postProbeAccept,
   'POST /api/roots': postRoots,
+  'POST /api/roots/label': postRootLabel,
+  'GET /api/activity': getActivity,
   'DELETE /api/roots': deleteRoots,
   'GET /api/projects': getProjects,
   'GET /api/sessions': getSessions,
   'GET /api/session': getSession,
   'DELETE /api/session': deleteSession,
-  'POST /api/fork': postFork,
   'GET /api/raw': getRaw,
   'GET /api/subagents': getSubagents,
   'GET /api/subagent': getSubagent,
@@ -748,3 +749,30 @@ const ROUTES = {
 }
 
 export const dispatch = makeDispatch(ROUTES)
+
+// --- activity ----------------------------------------------------------------
+// GET /api/activity?root=&days= — per-day / hour / weekday usage profile of one
+// tracked folder (see server/shared/activity.js for the attribution rules).
+function getActivity(q) {
+  const root = resolveRoot(q.get('root'))
+  const days = Number(q.get('days')) || 84
+  const list = []
+  for (const slug of listProjectSlugs(root.dir)) {
+    const files = sessionFiles(root.dir, slug)
+    if (!files.length) continue
+    let cwd = null
+    for (const f of files) {
+      let fp = null
+      try {
+        fp = fingerprintOf(f.file)
+      } catch {}
+      const s = withOversizeFallback(
+        () => sessionSummary(f.file, f.id, fp || undefined),
+        (e) => oversizeStub(f.id, e)
+      )
+      if (!cwd) cwd = readCwd(f.file)
+      list.push({ id: f.id, slug, cwd, title: s.title, firstTs: s.firstTs, lastTs: s.lastTs, userTurns: s.userTurns, toolCalls: s.toolCalls, tokens: s.tokens, models: s.models })
+    }
+  }
+  return { root: root.id, ...bucketActivity(list, { days }) }
+}

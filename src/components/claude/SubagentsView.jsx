@@ -195,6 +195,20 @@ export default function SubagentsView({ data, version = 0, active = true }) {
   const lastVersion = useRef(version)
   const lastFetchAt = useRef(0)
 
+  const openAgent = (agent, runId) => {
+    if (!data) return
+    // the initial fetch already reflects the current version — sync the ref so
+    // the effect doesn't immediately refetch what we just loaded
+    lastVersion.current = version
+    setTx({ agent, runId, loading: true })
+    api
+      .subagent(data.root, data.slug, data.id, runId, agent.id)
+      // functional guard: if the user opened a different agent (or closed the
+      // modal) before this resolved, don't clobber the newer state
+      .then((d) => setTx((prev) => (prev && prev.agent.id === agent.id && prev.runId === runId ? { agent, runId, data: d } : prev)))
+      .catch((e) => setTx((prev) => (prev && prev.agent.id === agent.id && prev.runId === runId ? { agent, runId, error: e.message } : prev)))
+  }
+
   // keep an open transcript modal fresh, the same way the main conversation
   // stays fresh: refetch when this session's SSE version bumps (subagent
   // writes map to their parent session — see registry.js toEvent), plus a
@@ -229,19 +243,6 @@ export default function SubagentsView({ data, version = 0, active = true }) {
   if (!data) return <div className="p-8 text-zinc-600">Loading sub-agents…</div>
   const runs = data.runs || []
   const plain = data.agents || []
-
-  const openAgent = (agent, runId) => {
-    // the initial fetch already reflects the current version — sync the ref so
-    // the effect doesn't immediately refetch what we just loaded
-    lastVersion.current = version
-    setTx({ agent, runId, loading: true })
-    api
-      .subagent(data.root, data.slug, data.id, runId, agent.id)
-      // functional guard: if the user opened a different agent (or closed the
-      // modal) before this resolved, don't clobber the newer state
-      .then((d) => setTx((prev) => (prev && prev.agent.id === agent.id && prev.runId === runId ? { agent, runId, data: d } : prev)))
-      .catch((e) => setTx((prev) => (prev && prev.agent.id === agent.id && prev.runId === runId ? { agent, runId, error: e.message } : prev)))
-  }
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">

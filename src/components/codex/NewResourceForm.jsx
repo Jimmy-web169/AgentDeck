@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { codexApi as api } from '../../api.js'
+import { useProviderApi } from '../../lib/providerApi.js'
 import useEscToClose from '../../lib/useEscToClose.js'
 
 const MODELS = ['gpt-5.5', 'gpt-5.4', 'gpt-5.3-codex', 'gpt-5.3-codex-spark', 'gpt-5.4-mini']
@@ -34,6 +34,7 @@ function Field({ label, hint, children }) {
 const inputCls = 'w-full bg-ink-700 border border-zinc-700 rounded px-2.5 py-1.5 text-[13px] text-zinc-100 placeholder-zinc-600'
 
 export default function NewResourceForm({ kind, scope, root, slug, initial, onClose, onSaved }) {
+  const api = useProviderApi()
   useEscToClose(onClose)
   const [f, setF] = useState(() => ({
     transport: 'stdio',

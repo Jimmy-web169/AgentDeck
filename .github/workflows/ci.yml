@@ -1,0 +1,35 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+# a newer push to the same branch supersedes the running job
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu covers the POSIX code paths (ttyd/tmux resolution), windows the
+        # native-Windows ones (webterm/node-pty, .cmd handling, PATH extension
+        # discovery), macos the arm64 node-pty prebuilt + BSD userland.
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      # the provider contract: descriptors valid, fixtures parse to their goldens
+      - run: npm run check:spec
+      # nothing personal in the tree (home paths, e-mails, key-looking strings)
+      - run: npm run check:privacy

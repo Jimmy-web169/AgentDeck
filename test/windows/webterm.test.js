@@ -36,13 +36,30 @@ const until = async (fn, ms = 5000) => {
   }
 }
 
-test('serves the page, shares one pty across clients, survives a client closing', async () => {
+// @lydell/node-pty is a native module; on a platform without its prebuilt,
+// webterm.js cannot start at all — skip rather than fail the whole run.
+const hasPty = await import('@lydell/node-pty').then(() => true, () => false)
+const skip = !hasPty && '@lydell/node-pty native module unavailable on this platform'
+
+// poll until webterm answers on `port` — a fixed sleep flakes on slow CI runners
+const pageOf = async (port, ms = 8000) => {
+  const t0 = Date.now()
+  for (;;) {
+    try {
+      return await fetch(`http://127.0.0.1:${port}/`).then((r) => r.text())
+    } catch (e) {
+      if (Date.now() - t0 > ms) throw e
+      await new Promise((r) => setTimeout(r, 100))
+    }
+  }
+}
+
+test('serves the page, shares one pty across clients, survives a client closing', { skip }, async () => {
   const proc = spawn(process.execPath, [WEBTERM, '-p', String(PORT), '-t', 'test', '--', ...CHILD], { stdio: 'ignore' })
   try {
     await until(() => proc.exitCode === null) // spawned
-    await new Promise((r) => setTimeout(r, 700)) // let it bind
 
-    const page = await fetch(`http://127.0.0.1:${PORT}/`).then((r) => r.text())
+    const page = await pageOf(PORT) // answers once it has bound
     assert.match(page, /<title>test<\/title>/)
     assert.match(page, /xterm/)
 
@@ -63,10 +80,10 @@ test('serves the page, shares one pty across clients, survives a client closing'
   }
 })
 
-test('exits non-zero when the port is taken', async () => {
+test('exits non-zero when the port is taken', { skip }, async () => {
   const first = spawn(process.execPath, [WEBTERM, '-p', String(PORT + 1), '-t', 'x', '--', ...CHILD], { stdio: 'ignore' })
   try {
-    await new Promise((r) => setTimeout(r, 700))
+    await pageOf(PORT + 1) // first has bound
     const second = spawn(process.execPath, [WEBTERM, '-p', String(PORT + 1), '-t', 'x', '--', ...CHILD], { stdio: 'ignore' })
     const code = await new Promise((r) => second.on('exit', r))
     assert.notEqual(code, 0)

@@ -29,4 +29,22 @@ testproj/
 # per-provider tracked roots (machine-specific absolute paths)
 roots.claude.json
 roots.codex.json
-.claude/
+roots.antigravity.json
+# format-drift probe store (per provider), written next to roots.*.json by a server run from the repo
+probe.*.json
+# AI hand-off briefs (server/shared/handoff.js), written under the config dir like probe.*.json
+handoffs/
+# .claude/ is local (settings.local.json, the maintainer's own skills) — except the
+# find-skills skill (canonical copy in skills/find-skills; this one is what Claude
+# Code loads) so any CLI can search the skills ecosystem during an AI hand-off;
+# skills-lock.json pins it
+.claude/*
+!.claude/skills/
+.claude/skills/*
+!.claude/skills/find-skills/
+
+# local research notes, handoffs, scratch — never committed (see CLAUDE.md)
+tmp/
+
+# maintainer working notes for Claude — local only, like .claude/ (see README for public docs)
+CLAUDE.md

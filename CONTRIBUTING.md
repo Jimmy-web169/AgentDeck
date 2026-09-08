@@ -19,19 +19,19 @@ npm run dev      # API server (:47841) + Vite UI (:47842), both hot-reload
 
 ```
 server/
-  index.js              HTTP/WS/SSE host; routes /api/<provider>/… and /chat/<provider>
+  index.js              HTTP/SSE host; routes /api/<provider>/…
   registry.js           the provider registry
   shared/               cross-provider code (roots, dispatch, terminal pool, skills, origin, launch)
-  providers/<id>/       a provider's data layer (paths, parser, resources, chat, …)
+  providers/<id>/       a provider's data layer (paths, parser, resources, …)
 src/
-  App.jsx               shell; the sidebar's provider dropdown toggles visibility (apps stay mounted)
+  App.jsx               shell: tab strip, Home, quick switcher; the active tab picks the app (apps stay mounted)
   api.js                provider-aware client
   providers/<id>.jsx    a provider's frontend config (docs, tabs, components, …)
   components/shared/     shared, parameterized components
   components/<id>/       a provider's specific components
 ```
 
-See `README.md` for the architecture and `DATA-MODEL.md` for on-disk shapes.
+See `README.md` for the architecture and `spec/DATA-MODEL.md` for on-disk shapes.
 
 ## Adding a provider
 
@@ -40,12 +40,18 @@ changes:
 
 1. **Backend** — add `server/providers/<id>/` implementing the provider
    interface (see `README.md` and the existing providers): `paths`, `parser`, `resources`, a route table +
-   `dispatch = makeDispatch(ROUTES)`, a `chatWss` (via `makeChatWss`), and
+   `dispatch = makeDispatch(ROUTES)`, and
    `TERMINAL_CONFIG` / `SKILL_CONFIG` for the shared pools. Register it in
    `server/registry.js`.
 2. **Frontend** — add `src/providers/<id>.jsx` (config object) and any
    provider-specific components under `src/components/<id>/`. Reuse the shared
    components where possible. Register it in `src/providers/index.js`.
+   An **id-addressed** provider (a session is opened by id and its project
+   derived, like Codex and Antigravity) gets its main area from
+   `makeIdApp(cfg)` in `src/IdApp.jsx` and can reuse the Codex Conversation /
+   Sub-agents / Terminal / Stats components as they are — they read the API
+   client from `ProviderApiContext`, which the factory provides. See
+   `src/AntigravityApp.jsx` for the smallest example.
 
 ## Guidelines
 

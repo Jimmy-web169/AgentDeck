@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { shortPath } from './paths.js'
 
 // Single source of truth for the unified "Live" view across the whole app: the
 // running tmux terminal sessions (real persistent background processes — the
@@ -37,7 +38,6 @@ export default function useActiveSessions(providers = [], { enabled = true, inte
 // Normalize tmux entries into the shared "manager item" shape the LiveSessionsPanel
 // / Dashboard render. Kept here so every caller agrees.
 export function toManagerItems({ tmux = [] }) {
-  const last2 = (p) => String(p || '').split('/').filter(Boolean).slice(-2).join('/')
   return tmux.map((t) => ({
     key: t.key,
     kind: 'tmux',
@@ -48,6 +48,6 @@ export function toManagerItems({ tmux = [] }) {
     cwd: t.cwd,
     tmuxName: t.tmuxName,
     attached: t.attached,
-    title: t.title || last2(t.cwd || t.slug) || (t.id ? String(t.id).slice(0, 8) : 'terminal'),
+    title: t.title || (t.cwd || t.slug ? shortPath(t.cwd || t.slug) : '') || (t.id ? String(t.id).slice(0, 8) : 'terminal'),
   }))
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { codexApi as api } from '../../api.js'
+import { useProviderApi, useProviderId, useProviderLabel } from '../../lib/providerApi.js'
+import HandoffDialog, { HandoffButton } from '../shared/HandoffDialog.jsx'
 import Markdown from '../shared/Markdown.jsx'
 import NewResourceForm from './NewResourceForm.jsx'
 import SkillImport from './SkillImport.jsx'
@@ -64,9 +65,13 @@ function PaneHead({ title, docs, children }) {
 }
 
 export default function ResourcesView({ root, scope = 'user', slug }) {
+  const api = useProviderApi()
+  const providerId = useProviderId()
+  const providerLabel = useProviderLabel()
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [sel, setSel] = useState(null) // { kind, id? }
+  const [handoff, setHandoff] = useState(false) // AI hand-off dialog for the current selection
   const [form, setForm] = useState(null) // { kind, initial }
   const [importing, setImporting] = useState(false)
   const [reload, setReload] = useState(0)
@@ -264,11 +269,26 @@ export default function ResourcesView({ root, scope = 'user', slug }) {
 
   const is = (kind, id) => sel?.kind === kind && sel?.id === id
 
+  // what the hand-off brief says about the current selection (kind, file, content, docs)
+  const handoffContext = () => {
+    const base = data.codexDir
+    if (sel?.kind === 'agentsMd') return { kind: 'AGENTS.md (instructions)', filePath: `${base}/AGENTS.md`, content: data.agentsMd?.content || '', docs: DOCS.agentsMd }
+    if (sel?.kind === 'config') return { kind: 'config.toml (settings, model, MCP servers)', filePath: `${base}/config.toml`, content: data.configToml || '', docs: DOCS.config }
+    if (sel?.kind === 'hooks') return { kind: 'lifecycle hooks', filePath: `${base}/hooks.json`, content: null, docs: DOCS.hook }
+    if (sel?.kind === 'mcp') return { kind: `MCP server "${sel.id}" in config.toml`, filePath: `${base}/config.toml`, content: data.configToml || '', docs: DOCS.mcp }
+    if (sel?.kind === 'skill') return { kind: `skill "${sel.id}"`, filePath: `${base}/skills/${sel.id}/SKILL.md`, content: data.skills.find((x) => x.name === sel.id)?.content || '', docs: DOCS.skill }
+    if (sel?.kind === 'agent') return { kind: `custom agent "${sel.id}"`, filePath: `${base}/agents/${data.agents.find((x) => x.name === sel.id)?.file || sel.id}`, content: null, docs: DOCS.agent }
+    if (sel?.kind === 'rule') return { kind: `rule "${sel.id}"`, filePath: `${base}/rules/${sel.id}`, content: data.rules.find((x) => x.name === sel.id)?.content || '', docs: DOCS.config }
+    return { kind: `${isProject ? 'project' : 'user'}-scope ${providerLabel} configuration`, filePath: base, content: null, docs: DOCS.config }
+  }
+
   return (
     <div className="h-full flex flex-col">
       <div className="px-4 py-2 border-b border-zinc-800 text-[12px] flex items-center gap-2 shrink-0">
         <span className={`px-1.5 py-0.5 rounded text-[10px] ${isProject ? 'bg-sky-500/15 text-sky-300' : 'bg-emerald-500/15 text-emerald-300'}`}>{isProject ? 'PROJECT scope' : 'USER scope'}</span>
         <span className="text-zinc-500 font-mono truncate">{data.codexDir}</span>
+        <span className="flex-1" />
+        <HandoffButton onClick={() => setHandoff(true)} label={`Ask ${providerLabel}`} />
       </div>
 
       <div className="flex flex-1 min-h-0">
@@ -325,6 +345,7 @@ export default function ResourcesView({ root, scope = 'user', slug }) {
       </div>
 
       {form && <NewResourceForm kind={form.kind} initial={form.initial} scope={scope} root={root} slug={slug} onClose={() => setForm(null)} onSaved={refetch} />}
+      {handoff && <HandoffDialog api={api} providerId={providerId} providerLabel={providerLabel} root={root} cwd={isProject ? slug : null} context={handoffContext()} onClose={() => setHandoff(false)} />}
       {importing && <SkillImport root={root} scope={scope} slug={slug} onClose={() => setImporting(false)} onImported={refetch} />}
     </div>
   )

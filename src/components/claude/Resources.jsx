@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { claudeApi as api } from '../../api.js'
+import HandoffDialog, { HandoffButton } from '../shared/HandoffDialog.jsx'
 import SkillImport from './SkillImport.jsx'
 import NewResourceForm from './NewResourceForm.jsx'
 
@@ -85,6 +86,7 @@ export default function Resources({ root, slug }) {
   const [tpl, setTpl] = useState(false) // current buffer is a starter template
   const [showImport, setShowImport] = useState(false)
   const [formKind, setFormKind] = useState(null) // guided "+ new" form open for this kind
+  const [handoff, setHandoff] = useState(false) // AI hand-off dialog for the current selection
 
   const reload = async () => {
     setErr(null)
@@ -210,7 +212,24 @@ export default function Resources({ root, slug }) {
           {isProject ? 'PROJECT scope' : 'FOLDER (user) scope'}
         </span>
         <span className="text-zinc-500 font-mono truncate">{inv.base}</span>
+        <span className="flex-1" />
+        <HandoffButton onClick={() => setHandoff(true)} label="Ask Claude Code" />
       </div>
+      {handoff && (
+        <HandoffDialog
+          api={api}
+          providerId="claude"
+          providerLabel="Claude Code"
+          root={root}
+          cwd={isProject ? inv.base : null}
+          context={
+            sel
+              ? { kind: SINGLE_KINDS.includes(sel.kind) ? sel.name : `${sel.kind} "${sel.name}"`, filePath: `${inv.base}/${SINGLE_KINDS.includes(sel.kind) ? sel.name : `${sel.kind}/${sel.name}`}`, content: content || '', docs: DOCS_BASE + (DOCS[sel.kind] || '/en/settings') }
+              : { kind: `${isProject ? 'project' : 'folder'}-scope Claude Code configuration`, filePath: inv.base, content: null, docs: DOCS_BASE + '/en/settings' }
+          }
+          onClose={() => setHandoff(false)}
+        />
+      )}
 
       <div className="flex flex-1 min-h-0">
         <div className="w-72 shrink-0 border-r border-zinc-800 overflow-y-auto">
