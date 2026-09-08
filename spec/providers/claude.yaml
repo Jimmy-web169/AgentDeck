@@ -157,6 +157,8 @@ probe:
     type: [user, assistant, system, summary, attachment, file-history-snapshot, queue-operation,
            ai-title, last-prompt, mode, permission-mode, cost-state, file-history-delta, frame-link,
            bridge-session, atis-latch, artifact-autoreact-ledger, artifact-comment-monitor,
+           # custom-title: the record `/rename` writes (the demo fixture emits it too)
+           custom-title,
            # history-suppression (2.1.263): written when a session is resumed under another account
            # (cause restored_owner_mismatch) — happens whenever the two homes swap transcripts
            history-suppression]

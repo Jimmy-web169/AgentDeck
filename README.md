@@ -69,7 +69,100 @@ Per provider, in one UI:
   tabs, or Ctrl+K; running terminals keep going while you switch.
 
 Provider-specific extras: Claude Code adds a memory view, plugins, and workflow
-runs; Codex adds sqlite-backed memory, plugins, and independent-rollout sub-agents.
+runs; Codex adds sqlite-backed memory, plugins, and independent-rollout sub-agents;
+Antigravity adds Artifacts (its brain/*.md) and a read-only Config view.
+
+## What's new in 2.0
+
+Nine upgrades, each with a screen from the demo root (Midnight theme; every
+name and path is fictional). The full list is in [CHANGELOG.md](CHANGELOG.md).
+
+### 1 · A third provider: Google Antigravity
+
+`agy` joins Claude Code and Codex as an experimental provider — the same
+Conversation, Sub-agents, Raw, Stats, Artifacts and Config screens, read from
+`~/.gemini/antigravity-cli/` (transcripts, plus the protobuf blobs in its
+SQLite for workspace, model and tokens). Adding it took one directory under
+`server/providers/` and one YAML descriptor, which is the point of the protocol
+layer below.
+
+<img src="demo/v2.0/session-antigravity.png" alt="An Antigravity session">
+
+### 2 · Browse like a browser
+
+A Chrome-style tab strip across providers *and* tracked folders. Every session
+is a tab with a deep link; tabs persist, reorder, and remember their view.
+Switch between three agents and a dozen projects the way you switch web pages.
+
+<img src="demo/v2.0/home-activity.png" alt="Home · Activity with tabs and the shared sidebar">
+
+### 3 · Workspaces and pins
+
+One sidebar for everything: colour-coded folder chips, **workspaces** that group
+the same repo from several providers and folders (suggested automatically when a
+folder shows up in more than one place), and **pins** for what you are on right
+now. Pinning or grouping *moves* a row, so nothing is listed twice.
+
+<img src="demo/v2.0/sidebar-workspaces-pinned.png" alt="A cross-provider workspace and pinned rows">
+
+### 4 · Midnight
+
+A new cool-slate theme next to Graphite (the default) and Paper. Themes are
+token overrides, so provider and workspace accents keep their lightness in each.
+
+### 5 · Preferences
+
+Theme, density, provider and status colours (any hex, hue/saturation sliders,
+your own swatches), how deep project paths display, how long Home's lists are,
+which sidebar sections show — every group with an (i) that explains it in one
+sentence.
+
+<img src="demo/v2.0/preferences-open.png" alt="Preferences with a colour tray open">
+
+### 6 · Shortcuts and a quick switcher
+
+⌘/Ctrl+K fuzzy-jumps to any project or session in any provider or folder;
+→ browses a project's sessions by title and first prompt; Enter opens, ⌘/Ctrl+Enter
+opens in a new tab. Alt+T / Alt+W / Alt+[ ] / Alt+1…9 drive the tabs. The full
+list is behind the **?** in the tab strip, with the modifier named for your OS.
+
+<img src="demo/v2.0/quick-switcher-open.png" alt="The quick switcher">
+
+### 7 · Insights
+
+How *you* work with agents over the last 30 days and 12 weeks: active days,
+streaks, hour-of-day and weekday rhythm, session length and prompts per
+session, and the projects that have gone quiet. Tokens and tool counts stay in
+Stats; Insights is about habits.
+
+<img src="demo/v2.0/insights.png" alt="Insights">
+
+### 8 · AI features
+
+**Ask the agent** — from any Config view (or Insights), say what you want in your
+own words. AgentDeck opens the provider's own terminal with a brief: your
+request, the file and its content, the official docs for that kind of setting,
+and this CLI's building blocks (instructions, commands, rules, output styles,
+workflows, skills, sub-agents, hooks, MCP servers, plugins). The brief tells the
+CLI to **interview you first** — explain each block, ask one question at a time,
+search the skills ecosystem with the bundled `find-skills` skill — then show a
+plan, then edit. AgentDeck never calls a model or edits a file itself. Insights
+hands its digest over the same way for a read of your habits.
+
+<img src="demo/v2.0/config-handoff.png" alt="Ask the agent: the hand-off dialog">
+
+### 9 · A provider protocol, with drift detection
+
+`spec/` holds the contract every provider implements — one vocabulary for
+sessions, sub-agents (`children[]`), tool calls, tokens, memory, MCP servers,
+history and stats — plus a YAML descriptor per CLI and a conformance gate
+(`npm run check:spec`, fixtures with golden outputs). A **format probe** reads
+each tracked folder's newest records on every start and compares them with the
+descriptor: a new record type, a missing required field or a changed type shows
+up as a badge on the folder chip the same day the CLI ships it, with the details
+in the Folders dialog.
+
+<img src="demo/v2.0/folders-dialog.png" alt="Tracked folders with the format probe">
 
 ## From v1 to v2
 
@@ -78,26 +171,16 @@ a **navigation-first workbench**. The short version:
 
 | | v1.0 — monitor and continue | v2.0 — browse like a browser |
 |---|---|---|
-| Shape | one provider at a time; session list left, transcript right | Chrome-style tabs across providers *and* tracked folders, one persistent sidebar, Ctrl+K |
+| Providers | Claude Code, Codex | + Google Antigravity (`agy`), through one provider contract |
+| Shape | one provider at a time; session list left, transcript right | Chrome-style tabs across providers *and* tracked folders, one persistent sidebar, ⌘/Ctrl+K |
 | Home | — | Activity, Stats, Insights, History, Plugins, Resources, per tracked folder |
-| Sub-agents | a modal per agent | the modal, plus the thread inline under the tool call that spawned it |
+| Sub-agents | a modal per agent | the thread inline under the tool call that spawned it, plus the Sub-agents tab |
 | Organising | — | pins, workspaces grouped by project with their own colour, provider accents, three themes |
+| AI | — | Ask the agent (config, interview-first) and an Insights digest hand-off; `find-skills` bundled |
 | Continue | embedded terminal or SDK chat | terminal only (tmux-backed, attach from any shell) |
 | Data | your real `~/.claude` / `~/.codex` | the same, plus a synthetic demo root and `AGENTDECK_CONFIG_DIR` isolation |
-| Provider layer | code only | `spec/`: contract, on-disk data model, JSON Schema, YAML descriptors |
+| Provider layer | code only | `spec/`: contract, on-disk data model, JSON Schema, YAML descriptors, format probe |
 | Release | by hand | `npm run release:check`, a three-OS CI matrix, a privacy scan, demo + release skills |
-
-**What v2.0 adds** (the full list is in [CHANGELOG.md](CHANGELOG.md)):
-
-- Tabs that persist, reorder and deep-link; Alt+W / Alt+1…9 / Alt+[ ] to drive them.
-- Ctrl+K: fuzzy search over every project and session of every provider and folder.
-- Home with Activity (live terminals, latest sessions, pins, recent projects) and Insights (how *you* work: rhythm, streaks, session shape, neglected projects).
-- One shared sidebar: colour-coded folder chips as the only scope picker, workspaces, pinned rows, projects — pinning or grouping *moves* a row, so nothing is listed twice.
-- Workspaces across providers and folders, listed per project, each with its own icon and colour; suggestions when the same folder shows up in several places (can be switched off).
-- Inline sub-agent threads under the tool call that spawned them (Claude `Agent`/`Task`, Codex `spawn_agent`).
-- Preferences: three themes, two densities, provider and workspace colours picked freely (hue and saturation sliders, the system colour dialog, a hex, your own saved swatches), sidebar sections on/off.
-- A memory tab per project for both providers; the "+" folder dialog; the terminal as the only way to continue a session.
-- The provider protocol layer in `spec/`, `make update` before `make all`, and the release gate.
 
 ## Demo
 
@@ -108,7 +191,11 @@ captured headlessly by `scripts/demo/shoot.mjs` and recorded by
 `scripts/demo/record.mjs` — so nobody's real transcripts appear in the repo. The
 material is refreshed by the `demo` skill as part of every release.
 
-### v2.0 — browse like a browser
+### v2.0 — the tour
+
+Home → ⌘K → a Claude Code session with an inline sub-agent → Stats → Insights →
+an Antigravity session → Config › Ask the agent → the Folders dialog → a
+workspace → Preferences. About a minute.
 
 ![AgentDeck 2.0 tour](demo/v2.0/tour.gif)
 
@@ -116,20 +203,12 @@ material is refreshed by the `demo` skill as part of every release.
 
 <table>
   <tr>
-    <td width="50%"><img src="demo/v2.0/home-activity.png" alt="Home · Activity"><br><sub><b>Home · Activity</b> — running terminals, the latest sessions across every provider and folder, pinned items, recent projects and the keyboard map.</sub></td>
-    <td width="50%"><img src="demo/v2.0/quick-switcher-open.png" alt="Ctrl+K quick switcher"><br><sub><b>Ctrl+K</b> — fuzzy-jump to any project or session in any provider; Enter opens it, Ctrl+Enter opens it in a new tab.</sub></td>
+    <td width="50%"><img src="demo/v2.0/session-conversation.png" alt="A Claude Code session with an inline sub-agent thread"><br><sub><b>Conversation</b> — every tool call with its input and output; a sub-agent expands inline under the call that spawned it.</sub></td>
+    <td width="50%"><img src="demo/v2.0/session-codex.png" alt="An OpenAI Codex session"><br><sub><b>Same screens for Codex</b> — shell / apply_patch calls, reasoning, rate-limit and context meters.</sub></td>
   </tr>
   <tr>
-    <td><img src="demo/v2.0/sidebar-workspaces-pinned.png" alt="One sidebar: folder chips, a cross-provider workspace grouped by project, pinned rows"><br><sub><b>One sidebar</b> — colour-coded folder chips, a workspace holding the same repo under Claude Code and Codex (listed per project), pinned projects and sessions.</sub></td>
-    <td><img src="demo/v2.0/session-conversation.png" alt="A Claude Code session with an inline sub-agent thread"><br><sub><b>Conversation</b> — every tool call with its input and output; a sub-agent expands inline under the call that spawned it.</sub></td>
-  </tr>
-  <tr>
-    <td><img src="demo/v2.0/session-codex.png" alt="An OpenAI Codex session"><br><sub><b>Same screens for Codex</b> — shell / apply_patch calls, reasoning, rate-limit and context meters.</sub></td>
-    <td><img src="demo/v2.0/insights.png" alt="Insights"><br><sub><b>Insights</b> — your own rhythm: hour of day, weekday, streaks, session shape, neglected projects.</sub></td>
-  </tr>
-  <tr>
-    <td><img src="demo/v2.0/stats.png" alt="Stats"><br><sub><b>Stats</b> — tokens, tools and models per tracked folder, drillable to project and session.</sub></td>
-    <td><img src="demo/v2.0/preferences-open.png" alt="Preferences"><br><sub><b>Preferences</b> — theme, density, provider colours, which sidebar sections show.</sub></td>
+    <td><img src="demo/v2.0/stats.png" alt="Stats"><br><sub><b>Stats</b> — one view for every provider: sessions, prompts, tool calls, the token fields all providers share first and the provider's own after, drillable to project and session.</sub></td>
+    <td><img src="demo/v2.0/workspace-menu.png" alt="A workspace menu"><br><sub><b>Workspace menu</b> — rename, pick an icon and a colour (the colour tints the glyph only), delete.</sub></td>
   </tr>
 </table>
 

@@ -14,7 +14,7 @@
 //
 // Usage:
 //   node scripts/demo/record.mjs [--base http://localhost:47861] [--release v2.0] [--out <dir>] [--fixture tmp/demo-root]
-//        [--theme graphite] [--w 1440] [--h 900] [--gif-width 1200] [--fps 12] [--dither bayer:bayer_scale=5|none]
+//        [--theme midnight] [--w 1440] [--h 900] [--gif-width 1200] [--fps 12] [--dither bayer:bayer_scale=5|none]
 //        [--browser exe] [--keep-frames] [--no-mp4]
 //
 // Needs ffmpeg on PATH. Output: <out>/tour.gif and <out>/tour.mp4 (out defaults to demo/<release>/).
@@ -34,7 +34,7 @@ const BASE = (A.base || 'http://localhost:47861').replace(/\/+$/, '')
 const RELEASE = A.release || currentRelease()
 const OUT = path.resolve(A.out || path.join(REPO, 'demo', RELEASE))
 const FIXTURE = path.resolve(A.fixture || path.join(REPO, 'tmp', 'demo-root'))
-const THEME = A.theme || 'graphite'
+const THEME = A.theme || 'midnight'
 if (!THEME_KEYS[THEME]) fail(`unknown theme "${THEME}" — one of ${Object.keys(THEME_KEYS).join(', ')}`)
 const W = Number(A.w || 1440)
 const H = Number(A.h || 900)
@@ -117,10 +117,11 @@ class Tour {
 // open a session, unfold a sub-agent thread, scroll, come back Home for Stats
 // and Insights, open the workspace in the sidebar, pick a colour. ~35 s.
 async function tour(t, fx, cdp) {
-  const byText = (tag, text) => `[...document.querySelectorAll(${JSON.stringify(tag)})].find((b) => (b.textContent || '').trim() === ${JSON.stringify(text)})`
+  // only VISIBLE matches: every provider app stays mounted, so a hidden app's "Config" would be found first
+  const byText = (tag, text) => `[...document.querySelectorAll(${JSON.stringify(tag)})].find((b) => b.offsetParent !== null && (b.textContent || '').trim() === ${JSON.stringify(text)})`
   await t.wait(`${booted} && ${hasText('LATEST SESSIONS')}`)
   await t.cursor()
-  await sleep(1600)
+  await sleep(1200)
 
   // Ctrl+K, type, pick the first hit
   await t.moveTo(W * 0.5, H * 0.45, 500)
@@ -131,7 +132,7 @@ async function tour(t, fx, cdp) {
   await sleep(900)
   await t.key('Enter', 'Enter')
   await t.wait(`/\\d+ prompts?/.test(${T})`, 8000)
-  await sleep(1400)
+  await sleep(1000)
 
   // the seeded tab of the session that has sub-agents: load the whole
   // conversation, open the first inline thread, scroll it into view
@@ -148,21 +149,64 @@ async function tour(t, fx, cdp) {
       await sleep(1600)
     }
   }
-  await t.wheel(W * 0.6, H * 0.6, 260, 5, 240)
-  await sleep(900)
+  await t.wheel(W * 0.6, H * 0.6, 260, 4, 200)
+  await sleep(600)
 
   // back Home: Stats, then Insights
   await t.click(`document.querySelector('button[title="Home"]')`, { after: 900 })
   await t.wait(`${hasText('LATEST SESSIONS')}`, 5000)
   await sleep(600)
   await t.click(byText('button', 'Stats'), { after: 1200 })
-  await t.wait(hasText('tokens'), 5000)
+  await t.wait(hasText('tokens'), 10000)
   await sleep(1200)
   await t.click(byText('button', 'Insights'), { after: 1200 })
   await t.wait(hasText('Your last 30 days'), 6000)
   await sleep(900)
   await t.wheel(W * 0.6, H * 0.6, 300, 4, 260)
   await sleep(900)
+
+  // an Antigravity session (its seeded tab): the third provider, same screens
+  if (fx.agyStar) {
+    const agyTab = `${fx.agyStar.project} · ${(fx.agyStar.title || '').slice(0, 18)}`
+    // the agy session shares its title with the codex one in this fixture — its tab was seeded last
+    await t.click(`[...document.querySelectorAll('[title]')].filter((el) => (el.getAttribute('title') || '').startsWith(${JSON.stringify(agyTab)})).pop() || null`, { after: 1200 })
+    await t.wait(`/\\d+ prompts?/.test(${T})`, 8000)
+    await sleep(1200)
+    await t.wheel(W * 0.6, H * 0.6, 200, 3, 200)
+    await sleep(600)
+  }
+
+  // Config → Ask the agent: the hand-off dialog (on the Claude session, whose
+  // project config lives in the fixture home; the fictional cwd has no files on disk)
+  if (fx.claudeStar) {
+    // reach it through the switcher (its seeded tab may have been reused by now)
+    await cdp.eval(`window.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyK', key: 'k', ctrlKey: true, bubbles: true, cancelable: true })); true`)
+    await t.wait(`!!document.querySelector('input[placeholder*="Jump to"]')`, 4000)
+    await sleep(400)
+    await t.type((fx.claudeStar.title || '').slice(0, 12))
+    await sleep(800)
+    await t.key('Enter', 'Enter')
+    await t.wait(`/\\d+ prompts?/.test(${T}) && ${hasText((fx.claudeStar.title || '').slice(0, 12))}`, 8000)
+    await sleep(800)
+    await t.click(byText('button', 'Config'), { after: 1200 })
+    await t.wait(`/scope/i.test(${T})`, 6000)
+    await t.click(`[...document.querySelectorAll('button')].find((x) => x.offsetParent !== null && /^✦?\\s*Ask /.test((x.textContent || '').trim()))`, { after: 900 })
+    if (await t.wait(`!!document.querySelector('textarea')`, 4000)) {
+      await t.type('Set this project up for me')
+      await sleep(1400)
+      await t.key('Escape', 'Escape')
+      await sleep(500)
+    }
+  }
+
+  // the tracked folders dialog: provider cards, the format probe per folder
+  await t.click(`document.querySelector('button[title="Track another folder / edit labels"]')`, { after: 900 })
+  await t.wait(`/format (ok|changed|drift)/i.test(${T})`, 5000)
+  await sleep(1600)
+  await t.key('Escape', 'Escape')
+  await sleep(600)
+  await t.click(`document.querySelector('button[title="Home"]')`, { after: 900 })
+  await t.wait(`${hasText('LATEST SESSIONS')}`, 5000)
 
   // the workspace in the sidebar: expand it, see the projects grouped inside
   const wsBtn = `(() => { const s = document.querySelector('span[title=${JSON.stringify(fx.shared?.name || '')}]'); return s && s.closest('button') })()`

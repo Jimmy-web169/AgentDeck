@@ -11,7 +11,7 @@ import { spawnSync } from 'node:child_process'
 const PROVIDERS = [
   { id: 'claude', label: 'Claude Code', bin: 'claude', version: ['--version'], update: ['update'] },
   { id: 'codex', label: 'Codex', bin: 'codex', version: ['--version'], update: ['update'] },
-  // { id: 'antigravity', label: 'Antigravity', bin: 'agy', version: ['--version'], update: ['update'] },
+  { id: 'antigravity', label: 'Antigravity', bin: 'agy', version: ['--version'], update: ['update'] },
 ]
 
 const strict = process.argv.includes('--strict')
