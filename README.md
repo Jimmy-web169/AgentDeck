@@ -55,8 +55,10 @@ Per provider, in one UI:
   sessions from any provider or folder under a named, colour-coded workspace,
   shown as one session list with source tags; the sidebar suggests one when
   the same folder shows up in several places. Pinning or grouping *moves* a
-  row into that section, so nothing is listed twice. Providers get their own
-  accent too (Preferences › Colours).
+  row into that section, so nothing is listed twice. A project's ⋯ menu also
+  starts a **new conversation in the same folder with another account or
+  provider** — no folder picker, and a workspace adopts the project the other
+  CLI creates. Providers get their own accent too (Preferences › Colours).
 - **Live updates** — the UI lights up the moment an agent writes to disk
   (file-watching + Server-Sent Events).
 - **Tabs** — a Chrome-style tab strip across providers and tracked folders:
