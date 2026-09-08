@@ -42,7 +42,7 @@ function Pager({ page, pages, onPage }) {
   if (pages <= 1) return null
   const btn = "w-6 h-6 rounded flex items-center justify-center text-zinc-500 hover:text-zinc-100 hover:bg-ink-700 disabled:opacity-30 disabled:hover:bg-transparent"
   return (
-    <span className="flex items-center gap-0.5 text-[11px] text-zinc-500">
+    <span className="flex items-center gap-0.5 text-[11px] text-zinc-500 whitespace-nowrap shrink-0">
       <button onClick={() => onPage(page - 1)} disabled={page <= 0} className={btn} title="Previous page">‹</button>
       <span className="tabular-nums">{page + 1}/{pages}</span>
       <button onClick={() => onPage(page + 1)} disabled={page >= pages - 1} className={btn} title="Next page">›</button>
@@ -94,9 +94,9 @@ function RecentProjects({ providers, index, onOpen }) {
       title="Recent projects"
       count={shown.length}
       right={
-        <span className="flex items-center gap-0.5 rounded-md bg-ink-800 border border-zinc-800 p-0.5">
-          {pill('source', 'By source', 'One row per provider and tracked folder')}
-          {pill('folder', 'By folder', 'One row per working folder — every provider and tracked folder that has sessions there, like the workspace suggestions')}
+        <span className="flex items-center gap-0.5 rounded-md bg-ink-800 border border-zinc-800 p-0.5 whitespace-nowrap">
+          {pill('source', 'Source', 'One row per provider and tracked folder')}
+          {pill('folder', 'Folder', 'One row per working folder — every provider and tracked folder that has sessions there, like the workspace suggestions')}
         </span>
       }
       pager={<Pager page={page} pages={pages} onPage={setPageN} />}
@@ -147,9 +147,9 @@ function RecentProjects({ providers, index, onOpen }) {
 function Section({ title, count, right, pager, children, className = '' }) {
   return (
     <section className={className}>
-      <div className="flex items-center gap-2 mb-2.5">
-        <span className="text-[11px] uppercase tracking-wide text-zinc-500">{title}</span>
-        {count != null && <span className="text-[11px] text-zinc-600">· {count}</span>}
+      <div className="flex items-center gap-2 mb-2.5 min-w-0">
+        <span className="text-[11px] uppercase tracking-wide text-zinc-500 whitespace-nowrap">{title}</span>
+        {count != null && <span className="text-[11px] text-zinc-600 whitespace-nowrap shrink-0">· {count}</span>}
         <span className="flex-1" />
         {right}
         {pager}
