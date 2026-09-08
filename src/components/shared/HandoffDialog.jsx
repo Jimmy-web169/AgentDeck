@@ -1,5 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import useEscToClose from '../../lib/useEscToClose.js'
+import { PROVIDER_LIST } from '../../providers/index.js'
+
+// the provider's docs home and its config kinds (from the registry's docsMap),
+// so the brief can list what this CLI can be configured with
+const KIND_LABELS = {
+  agents: 'sub-agents', agent: 'sub-agents', subagents: 'sub-agents', skills: 'skills', skill: 'skills', commands: 'custom commands / prompts', workflows: 'workflows', rules: 'rules / project memory',
+  'output-styles': 'output styles', claudeMd: 'CLAUDE.md instructions', agentsMd: 'AGENTS.md instructions', mcpJson: 'MCP servers', mcp: 'MCP servers', hook: 'hooks', hooks: 'hooks', plugin: 'plugins',
+  settingsJson: 'settings', settingsLocalJson: 'local settings', config: 'config file', permissions: 'permissions',
+}
+export function providerDocs(providerId) {
+  const p = PROVIDER_LIST.find((x) => x.id === providerId)
+  if (!p) return { docsIndex: null, kinds: [] }
+  const seen = new Set()
+  const kinds = []
+  for (const [k, url] of Object.entries(p.docsMap || {})) {
+    const name = KIND_LABELS[k]
+    if (!name || seen.has(name)) continue
+    seen.add(name)
+    kinds.push({ name, docs: /^https?:/.test(url) ? url : `${p.docsBase}${url}` })
+  }
+  return { docsIndex: p.docsBase || null, kinds }
+}
 
 // AI hand-off: AgentDeck never calls a model. You say what you want; AgentDeck
 // packs it with what it knows — which file, its current content, the official
@@ -10,13 +32,16 @@ import useEscToClose from '../../lib/useEscToClose.js'
 // `context` describes the thing at hand: { kind, filePath, content, docs }.
 // `api` is the provider's client (POST /api/terminal accepts `brief`).
 
-export function composeBriefPreview({ need, providerLabel, kind, filePath, content, docs, cwd }) {
+export function composeBriefPreview({ need, providerLabel, kind, filePath, content, docs, cwd, docsIndex = null, kinds = [] }) {
   const lines = [`# AgentDeck hand-off → ${providerLabel}`, '', '## What I want', '', need.trim() || '(write what you want above)', '', '## Where']
   if (kind) lines.push(`- Kind: ${kind}`)
   if (filePath) lines.push(`- File: ${filePath}`)
   if (cwd) lines.push(`- Working folder: ${cwd}`)
   if (docs) lines.push(`- Official docs (read first): ${docs}`)
-  lines.push('', '## How to work', '', '1. Read the docs page above before changing anything.', '2. Change only the file named above.', '3. Show the diff and explain every field in plain words.', '4. If the request is ambiguous, ask first.')
+  if (docsIndex) lines.push(`- Docs index: ${docsIndex}`)
+  lines.push('', '## How to work', '', '1. Read the docs first.', '2. Ask, don’t edit: explain each building block that applies and ask whether I want it, one question at a time.', '3. Search the skills ecosystem (find-skills) before writing a skill by hand.', '4. Show the plan, wait for a yes.', '5. Change only what the plan names; show the diff; explain every field.')
+  if (kinds.length) lines.push('', `## ${providerLabel}'s building blocks`, '', ...kinds.map((k) => `- ${k.name}`))
+  lines.push('', '(the real brief spells these out in full)', '4. If the request is ambiguous, ask first.')
   if (content) lines.push('', `## Current content of ${filePath || 'the file'}`, '', '```', content.length > 2000 ? content.slice(0, 2000) + '\n… (' + (content.length - 2000) + ' more characters in the real brief)' : content, '```')
   return lines.join('\n')
 }
@@ -31,9 +56,10 @@ export default function HandoffDialog({ api, providerId, providerLabel, root, cw
   const [err, setErr] = useState(null)
   useEffect(() => setNeed(context.need || ''), [context.need])
 
+  const { docsIndex, kinds } = useMemo(() => providerDocs(providerId), [providerId])
   const brief = useMemo(
-    () => composeBriefPreview({ need, providerLabel, kind: context.kind, filePath: context.filePath, content: includeContent ? context.content : null, docs: context.docs, cwd }),
-    [need, providerLabel, context, includeContent, cwd]
+    () => composeBriefPreview({ need, providerLabel, kind: context.kind, filePath: context.filePath, content: includeContent ? context.content : null, docs: context.docs, cwd, docsIndex, kinds }),
+    [need, providerLabel, context, includeContent, cwd, docsIndex, kinds]
   )
 
   const go = async () => {
@@ -41,7 +67,7 @@ export default function HandoffDialog({ api, providerId, providerLabel, root, cw
     setBusy(true)
     setErr(null)
     try {
-      const body = { root, title: `✦ ${need.trim().slice(0, 48)}`, brief: { need: need.trim(), kind: context.kind || null, filePath: context.filePath || null, content: includeContent ? context.content || null : null, docs: context.docs || null } }
+      const body = { root, title: `✦ ${need.trim().slice(0, 48)}`, brief: { need: need.trim(), kind: context.kind || null, filePath: context.filePath || null, content: includeContent ? context.content || null : null, docs: context.docs || null, docsIndex, kinds } }
       if (cwd) body.cwd = cwd
       else if (slug) body.slug = slug
       const res = await api.terminal(body)
@@ -76,7 +102,7 @@ export default function HandoffDialog({ api, providerId, providerLabel, root, cw
                   onChange={(e) => setNeed(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && (e.ctrlKey || e.metaKey) && go()}
                   rows={4}
-                  placeholder={placeholder || 'e.g. “Run prettier on every file after an Edit” or “Add the GitHub MCP server, read-only”'}
+                  placeholder={placeholder || 'Say what you want in your own words — e.g. “set this project up for me”, “format code after every edit”, “let it read our GitHub issues”. The agent asks about the details.'}
                   className="mt-1 w-full bg-ink-900 border border-zinc-700 rounded px-3 py-2 text-[13px] text-zinc-100 placeholder-zinc-600 resize-y"
                 />
               </label>
@@ -94,7 +120,8 @@ export default function HandoffDialog({ api, providerId, providerLabel, root, cw
                       </label>
                     </li>
                   )}
-                  <li>how to work: docs first, only this file, explain every field, ask if unsure</li>
+                  <li>this CLI’s building blocks ({kinds.length}) with their docs, so it can ask you which ones you want</li>
+                  <li>how to work: read the docs, interview you first (one question at a time), search find-skills before writing a skill, show the plan, then the diff</li>
                 </ul>
               </div>
               <button onClick={() => setShowBrief((s) => !s)} className="text-[11px] text-zinc-500 hover:text-zinc-200">{showBrief ? 'hide the brief' : 'preview the brief'}</button>
