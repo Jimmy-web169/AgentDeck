@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import useEscToClose from '../../lib/useEscToClose.js'
+import { MOD_WORD } from './ShortcutHints.jsx'
 import { PROVIDER_LIST } from '../../providers/index.js'
 
 // the provider's docs home and its config kinds (from the registry's docsMap),
@@ -137,7 +138,7 @@ export default function HandoffDialog({ api, providerId, providerLabel, root, cw
           )}
         </div>
         <div className="px-4 py-3 border-t border-zinc-800 shrink-0 flex items-center gap-2">
-          <span className="text-[11px] text-zinc-600">Ctrl+Enter to send</span>
+          <span className="text-[11px] text-zinc-600">{MOD_WORD}+Enter to send</span>
           <span className="flex-1" />
           <button onClick={onClose} className="text-[12px] px-3 py-1.5 rounded text-zinc-400 hover:text-zinc-200">{done ? 'Close' : 'Cancel'}</button>
           {!done && (

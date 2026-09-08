@@ -9,7 +9,7 @@ import useActiveSessions, { toManagerItems } from '../../lib/useActiveSessions.j
 import { PinIcon, SearchIcon, TerminalIcon } from './shellIcons.jsx'
 import InsightsPage from './InsightsPage.jsx'
 import { usePrefs } from '../../lib/prefs.js'
-import { ShortcutChips } from './ShortcutHints.jsx'
+import { MOD_WORD } from './ShortcutHints.jsx'
 
 // Home pages — the main area when a tab points at Home. The page switch is in
 // this header (these pages are about the whole deck, not a session, so they
@@ -68,7 +68,7 @@ function SessionRow({ s, providers, live, termKeys, onOpen, showPrompt = true })
         onMouseDown={(e) => e.button === 1 && e.preventDefault()}
         onAuxClick={(e) => e.button === 1 && onOpen(s.provider, pinT, { newTab: true })}
         className="min-w-0 flex-1 text-left"
-        title="Open here · Ctrl+click or middle-click opens in a new tab"
+        title={`Open here · ${MOD_WORD}+click or middle-click opens in a new tab`}
       >
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-[13px] text-zinc-200 truncate">{s.title}</span>
@@ -155,10 +155,6 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
 
   return (
     <div className="max-w-6xl mx-auto px-6 py-5">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-5 px-3 py-2 rounded-lg border border-zinc-800 bg-ink-900/60">
-        <span className="text-[10.5px] uppercase tracking-wide text-zinc-500">Keyboard</span>
-        <ShortcutChips />
-      </div>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-7">
         <Section title="Live now" count={`${shownLive.length} running terminal${shownLive.length === 1 ? '' : 's'}`}>
@@ -288,7 +284,7 @@ export default function HomeView({ providers = [], visible = true, target, scope
               onClick={(e) => (e.ctrlKey || e.metaKey ? onOpenHome?.({ view: v.k }, { newTab: true }) : onNavigate?.({ view: v.k, focus: null }))}
               onMouseDown={(e) => e.button === 1 && e.preventDefault()}
               onAuxClick={(e) => e.button === 1 && onOpenHome?.({ view: v.k }, { newTab: true })}
-              title={`${v.label} · Ctrl+click opens in a new tab`}
+              title={`${v.label} · ${MOD_WORD}+click opens in a new tab`}
               className={`h-7 px-3 rounded text-[12.5px] transition-colors ${view === v.k ? 'bg-ink-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-100 hover:bg-ink-700'}`}
             >
               {v.label}
@@ -297,11 +293,6 @@ export default function HomeView({ providers = [], visible = true, target, scope
         </div>
         {/* the folder is chosen once, in the sidebar's chips — the pages follow that scope */}
         <span className="flex-1" />
-        <button onClick={onSearch} title="Search projects & sessions  (Ctrl+K)" className="flex items-center gap-2 h-8 px-3 rounded-md bg-ink-800 border border-zinc-700 text-[12px] text-zinc-300 hover:text-zinc-100 hover:bg-ink-700">
-          <SearchIcon className="w-3.5 h-3.5" />
-          Jump to…
-          <kbd className="text-[10px] px-1 py-px rounded bg-ink-700 text-zinc-500 border border-zinc-800">Ctrl K</kbd>
-        </button>
       </div>
 
       {view === 'activity' && (

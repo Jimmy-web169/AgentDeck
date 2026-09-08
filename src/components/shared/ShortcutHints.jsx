@@ -1,26 +1,32 @@
 import { Fragment } from 'react'
 
+// the modifier the shell listens for is Ctrl on Windows/Linux and ⌘ on macOS
+// (handlers accept ctrlKey || metaKey); every label in the UI reads this
+export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '')
+export const MOD = IS_MAC ? '⌘' : 'Ctrl'
+export const MOD_WORD = IS_MAC ? 'Cmd' : 'Ctrl'
+
 // One list of the shell's keyboard shortcuts, rendered two ways: a full list
 // (the "?" popover in the tab strip) and a compact chip row (empty states,
 // the Dashboard). Keep this the single source of truth when a key changes.
 export const SHORTCUTS = [
-  { keys: ['Ctrl', 'K'], label: 'Search projects & sessions' },
+  { keys: [MOD, 'K'], label: 'Search projects & sessions' },
   { keys: ['Alt', 'T'], label: 'New tab' },
   { keys: ['Alt', 'W'], label: 'Close tab' },
   { keys: ['Alt', '['], alt: ['Alt', ']'], label: 'Previous / next tab' },
   { keys: ['Alt', '1…9'], label: 'Jump to tab (9 = last)' },
-  { keys: ['Ctrl', 'click'], label: 'Open a session in a new tab (or middle-click)' },
-  { keys: ['Ctrl', 'B'], label: 'Show / hide the sidebar' },
+  { keys: [MOD, 'click'], label: 'Open a session in a new tab (or middle-click)' },
+  { keys: [MOD, 'B'], label: 'Show / hide the sidebar' },
   { keys: ['→'], alt: ['←'], label: 'In search: into / out of a project' },
 ]
 
 const CHIPS = [
-  [['Ctrl', 'K'], 'search'],
+  [[MOD, 'K'], 'search'],
   [['Alt', 'T'], 'new tab'],
   [['Alt', 'W'], 'close tab'],
   [['Alt', '['], 'prev tab'],
   [['Alt', ']'], 'next tab'],
-  [['Ctrl', 'click'], 'open in new tab'],
+  [[MOD, 'click'], 'open in new tab'],
 ]
 
 export function Kbd({ children }) {
