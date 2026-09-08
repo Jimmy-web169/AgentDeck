@@ -36,6 +36,8 @@ All notable changes to AgentDeck are recorded here. The format follows
   the hand-written one, so the golden covers the generator's shape too.
 
 ### Removed
+- Four v1 demo files the README stopped referencing (the 4 MB v1 mp4 among
+  them); v1 keeps its GIF and three screenshots.
 - Home's "Jump to…" button (the tab strip's Search already is ⌘/Ctrl+K) and the
   Keyboard row on Activity — the "?" in the tab strip is the one place for
   shortcuts.
@@ -81,6 +83,9 @@ All notable changes to AgentDeck are recorded here. The format follows
   45 s tick or a page switch.
 
 ### Fixed
+- CI: the shared-route test builds its own config dir, so a runner without a
+  `~/.claude` no longer fails it; the workflow also runs `check:spec` and
+  `check:privacy` on all three OSes.
 - Stats tiles no longer overflow on billion-token folders: totals read 1.06B
   instead of 1056.42M, and a tile value truncates with the full number on hover.
 - An (i) tooltip near the window edge (Preferences sits at the far right) is

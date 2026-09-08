@@ -29,3 +29,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      # the provider contract: descriptors valid, fixtures parse to their goldens
+      - run: npm run check:spec
+      # nothing personal in the tree (home paths, e-mails, key-looking strings)
+      - run: npm run check:privacy
