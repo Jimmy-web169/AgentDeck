@@ -44,6 +44,11 @@ All notable changes to AgentDeck are recorded here. The format follows
   note under Home › Activity's keyboard map is gone too.
 
 ### Changed
+- Graphite is the default theme (Midnight stays the demo theme).
+- `make update` also runs `agy update`.
+- Demo: Midnight, twelve shots (Antigravity session, Config › Ask the agent, the
+  Folders dialog added) and a one-minute tour; README leads with the nine 2.0
+  upgrades.
 - Shortcut labels follow the platform: ⌘ on macOS, Ctrl elsewhere (the handlers
   always accepted both).
 - Provider APIs agree on their vocabulary (spec §4): every `stats` carries

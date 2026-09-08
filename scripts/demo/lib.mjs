@@ -233,7 +233,7 @@ export function seedsFor(fx, themeKey, level) {
     agentdeck_sidebar_sections: { workspaces: true, pinned: true, projects: true },
   }
   if (level === 'base') return seeds
-  const { target, longest, claudeStar, codexStar, shared, otherProject, projectTarget, recent } = fx
+  const { target, longest, claudeStar, codexStar, agyStar, shared, otherProject, projectTarget, recent } = fx
   // pins: one session (the long pairing session) + one whole project
   const pins = []
   if (longest) pins.push({ ...target(longest), at: now - 3600e3 })
@@ -251,6 +251,7 @@ export function seedsFor(fx, themeKey, level) {
   const tabs = [{ key: 'demo-home', target: { provider: null, view: 'activity', focus: null } }]
   if (claudeStar) tabs.push({ key: 'demo-claude', target: { ...target(claudeStar), view: 'conversation' } })
   if (codexStar) tabs.push({ key: 'demo-codex', target: { ...target(codexStar), view: 'conversation' } })
+  if (agyStar) tabs.push({ key: 'demo-agy', target: { ...target(agyStar), view: 'conversation' } })
   seeds.agentdeck_tabs = { tabs, activeKey: 'demo-home' }
   return seeds
 }

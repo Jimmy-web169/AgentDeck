@@ -12,7 +12,7 @@
 //
 // Output goes to demo/<release>/<shot>.png (release = vMAJOR.MINOR from
 // package.json, e.g. demo/v2.0/; --release overrides). One theme by default
-// (graphite); with several --themes the file names get a -<theme> suffix. The
+// (midnight); with several --themes the file names get a -<theme> suffix. The
 // browser profile is a throw-away temp dir; localStorage is seeded per shot
 // (theme, prefs, pins, a workspace, recent sessions, tabs) from the fixture
 // manifest, so the sidebar looks lived-in and only ever names fictional
@@ -20,7 +20,7 @@
 //
 // Usage:
 //   node scripts/demo/shoot.mjs [--base http://localhost:47861] [--release v2.0] [--out <dir>] [--fixture tmp/demo-root]
-//        [--themes graphite] [--shots home-activity,insights,…] [--w 1440] [--h 900] [--scale 1]
+//        [--themes midnight] [--shots home-activity,insights,…] [--w 1440] [--h 900] [--scale 1]
 //        [--seed base|full] [--browser <path-to-chrome-or-edge>] [--keep-profile] [--list]
 //   --seed overrides every shot's storage seeding: base = theme/prefs only, full = + pins,
 //   workspace, recent, tabs (the default is per shot, see SHOTS)
@@ -41,7 +41,7 @@ const FIXTURE = path.resolve(A.fixture || path.join(REPO, 'tmp', 'demo-root'))
 const W = Number(A.w || 1440)
 const H = Number(A.h || 900)
 const SCALE = Number(A.scale || 1)
-const THEMES = (A.themes || 'graphite').split(',').map((s) => s.trim()).filter(Boolean)
+const THEMES = (A.themes || 'midnight').split(',').map((s) => s.trim()).filter(Boolean)
 for (const t of THEMES) if (!THEME_KEYS[t]) fail(`unknown theme "${t}" — one of ${Object.keys(THEME_KEYS).join(', ')}`)
 
 // ---- the shot list ----------------------------------------------------------------
@@ -174,6 +174,42 @@ const SHOTS = [
       await sleep(400)
     },
     about: 'Preferences popover with a provider colour tray open',
+  },
+  {
+    name: 'config-handoff',
+    hash: (fx) => (fx.claudeStar ? sessionHash(fx.target(fx.claudeStar)) : '#/'),
+    seed: 'full',
+    h: Math.max(H, 1000),
+    ready: (fx) => sessionOpen((fx.claudeStar?.title || '').slice(0, 24)),
+    act: async (cdp) => {
+      // Config tab → "✦ Ask Claude Code" → the dialog with a request typed, the brief previewed
+      await cdp.eval(`(() => { const b = [...document.querySelectorAll('button')].find((x) => (x.textContent || '').trim() === 'Config'); if (b) b.click(); return !!b })()`)
+      await cdp.waitFor(`/scope/i.test(${T})`, { timeout: 5000 })
+      await cdp.eval(`(() => { const b = [...document.querySelectorAll('button')].find((x) => /^✦?\\s*Ask /.test((x.textContent || '').trim())); if (b) b.click(); return !!b })()`)
+      await cdp.waitFor(`!!document.querySelector('textarea')`, { timeout: 4000 })
+      await cdp.send('Input.insertText', { text: 'Set this project up for me: format after every edit, and let the agent read our GitHub issues.' })
+      await sleep(300)
+      await cdp.eval(`(() => { const b = [...document.querySelectorAll('button')].find((x) => /preview the brief/.test(x.textContent || '')); if (b) b.click(); return !!b })()`)
+      await cdp.waitFor(`/building blocks/i.test(${T})`, { timeout: 3000 })
+      await sleep(400)
+    },
+    about: 'Config › Ask the agent — the hand-off brief interviews first and lists the CLI\'s building blocks with their docs',
+  },
+  {
+    name: 'folders-dialog',
+    hash: '#/',
+    seed: 'full',
+    h: H,
+    ready: () => all(booted, hasText('LATEST SESSIONS')),
+    act: async (cdp) => {
+      await cdp.eval(`(() => { const b = document.querySelector('button[title="Track another folder / edit labels"]'); if (b) b.click(); return !!b })()`)
+      await cdp.waitFor(`/format (ok|changed|drift)/i.test(${T})`, { timeout: 5000 })
+      // the dialog prints each folder's absolute path — the fixture lives under this
+      // checkout, so show the fictional home instead of the maintainer's path
+      await cdp.eval(`(() => { const re = /.*[\\/]demo-root[\\/]/; const walk = (n) => { for (const c of n.childNodes) { if (c.nodeType === 3 && re.test(c.nodeValue)) c.nodeValue = c.nodeValue.replace(re, '/home/demo/'); else walk(c) } }; walk(document.body); return true })()`)
+      await sleep(300)
+    },
+    about: 'Tracked folders — provider cards and the format probe per folder (a CLI that changes its files gets a badge)',
   },
   {
     name: 'workspace-menu',

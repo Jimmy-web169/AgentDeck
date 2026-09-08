@@ -5,10 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script>
       // set before first paint so there's no flash of the wrong theme / density;
-      // no stored preference = Midnight (the :root tokens)
+      // no stored preference = Graphite
       try {
         var t = localStorage.getItem('agentdeck_theme');
-        if (t === 'light' || t === 'graphite') document.documentElement.dataset.theme = t;
+        // Graphite is the default; Midnight is the bare :root palette, so it needs no attribute
+        document.documentElement.dataset.theme = t === 'light' || t === 'midnight' ? t : 'graphite';
         var p = JSON.parse(localStorage.getItem('agentdeck_prefs') || '{}');
         if (p && p.density === 'compact') document.documentElement.dataset.density = 'compact';
       } catch (e) { /* storage disabled (SecurityError) -> defaults */ }

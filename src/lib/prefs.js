@@ -9,8 +9,8 @@ const KEY = 'agentdeck_prefs'
 const THEME_KEY = 'agentdeck_theme'
 
 export const THEMES = [
-  { k: 'midnight', label: 'Midnight', hint: 'cool slate, the default' },
-  { k: 'graphite', label: 'Graphite', hint: 'neutral dark' },
+  { k: 'midnight', label: 'Midnight', hint: 'cool slate' },
+  { k: 'graphite', label: 'Graphite', hint: 'neutral dark, the default' },
   { k: 'light', label: 'Paper', hint: 'warm light' },
 ]
 export const DENSITIES = [
@@ -48,7 +48,7 @@ export const HOME_SESSIONS = [
 ]
 // recentProjectsBy: Home › Activity › Recent projects as one row per provider ×
 // tracked folder ('source') or one row per working folder across all of them ('folder').
-const DEFAULTS = { theme: 'midnight', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {}, customAccents: [], statusColors: {}, pathDepth: 2, recentProjectsBy: 'source', homeSessions: 10, homeProjects: 5 }
+const DEFAULTS = { theme: 'graphite', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {}, customAccents: [], statusColors: {}, pathDepth: 2, recentProjectsBy: 'source', homeSessions: 10, homeProjects: 5 }
 const MAX_SWATCHES = 24
 
 function load() {

@@ -9,7 +9,7 @@ help: ## list targets
 	@echo "AgentDeck:"
 	@echo "  make init     first-time setup: npm deps + ttyd + check codex (OS-friendly)"
 	@echo "  make all      update provider CLIs, then backend + frontend (hot reload) -> http://localhost:47842"
-	@echo "  make update   update every tracked provider CLI (claude update, codex update); AGENTDECK_SKIP_UPDATE=1 to skip"
+	@echo "  make update   update every tracked provider CLI (claude / codex / agy update); AGENTDECK_SKIP_UPDATE=1 to skip"
 	@echo "  make be       backend (API) only              -> http://localhost:$(PORT)"
 	@echo "  make fe       frontend (Vite) only            -> http://localhost:47842"
 	@echo "  make build    build frontend into dist/"
