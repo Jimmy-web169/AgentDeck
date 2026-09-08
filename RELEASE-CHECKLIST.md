@@ -38,7 +38,8 @@ Runs `npm test` → `npm run build` → `npm run check:providers` → `npm run c
 ## 3. OS matrix
 
 - [ ] GitHub Actions `ci` is green for the release commit on ubuntu-latest,
-      windows-latest and macos-latest (`npm ci`, `npm test`, `npm run build`).
+      windows-latest and macos-latest (`npm ci`, `npm test`, `npm run build`,
+      `npm run check:spec`, `npm run check:privacy`).
 - [ ] Hands-on smoke on at least one POSIX box and one Windows box:
       `make init` (macOS/WSL) or `npm run init:win` (Windows), start the app,
       open a terminal tab for each provider, pop it out, attach the tmux
