@@ -13,14 +13,17 @@ export default function InfoDot({ text, align = 'right', className = '' }) {
   const [pos, setPos] = useState(null) // null = closed; {top,left,right} = open
   const btnRef = useRef(null)
 
+  // the bubble is 16rem wide; whichever edge it hangs from, it is clamped to
+  // the viewport so a dot near the window edge (Preferences sits at the far
+  // right) never has its text cut off
   const open = () => {
     const r = btnRef.current?.getBoundingClientRect()
     if (!r) return
-    setPos(
-      align === 'left'
-        ? { top: r.bottom + 6, left: r.left }
-        : { top: r.bottom + 6, right: window.innerWidth - r.right }
-    )
+    const W = 256
+    const M = 8
+    const top = r.bottom + 6
+    if (align === 'left') setPos({ top, left: Math.max(M, Math.min(r.left, window.innerWidth - W - M)) })
+    else setPos({ top, right: Math.max(M, Math.min(window.innerWidth - r.right, window.innerWidth - W - M)) })
   }
   const close = () => setPos(null)
 
