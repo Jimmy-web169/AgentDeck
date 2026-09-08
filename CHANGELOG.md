@@ -83,6 +83,8 @@ All notable changes to AgentDeck are recorded here. The format follows
   45 s tick or a page switch.
 
 ### Fixed
+- CI: `actions/checkout` and `setup-node` at v5 (the v4 releases run on the
+  deprecated Node 20).
 - CI: the shared-route test builds its own config dir, so a runner without a
   `~/.claude` no longer fails it; the workflow also runs `check:spec` and
   `check:privacy` on all three OSes.
