@@ -3,6 +3,7 @@ import { createApi } from '../../api.js'
 import HandoffDialog, { HandoffButton } from './HandoffDialog.jsx'
 import { fmtRelative } from '../../lib/format.js'
 import { shortPath, projectName } from '../../lib/paths.js'
+import { usePrefs } from '../../lib/prefs.js'
 
 // Home › Insights — a personal read of how you work with your coding agents in
 // one tracked folder: a plain-English digest of the last 30 days with a persona
@@ -187,7 +188,7 @@ function narrative({ active30, sessions30, totals, streak, busiest, rhythm, sd, 
         if (i) s3.push(T(' and '))
         s3.push(b)
       })
-      if (sd.longest?.minutes != null) s3.push(T('; the longest was '), K(fmtDurCap(sd.longest.minutes)), T(' in '), K(shortPath(sd.longest.cwd || sd.longest.slug, 2)), T(sd.longest.date ? ` on ${sd.longest.date}` : ''))
+      if (sd.longest?.minutes != null) s3.push(T('; the longest was '), K(fmtDurCap(sd.longest.minutes)), T(' in '), K(shortPath(sd.longest.cwd || sd.longest.slug)), T(sd.longest.date ? ` on ${sd.longest.date}` : ''))
       s3.push(T('.'))
       out.push(s3)
     }
@@ -239,7 +240,7 @@ function digestMd(v, { providerLabel, rootLabel, range }) {
     '| week of | sessions | prompts | active days | projects |',
     '| --- | ---: | ---: | ---: | ---: |',
     ...v.weekly.map((w) => `| ${w.weekStart} | ${w.sessions} | ${w.prompts} | ${w.activeDays} | ${w.projects ?? '—'} |`),
-    ...(v.neglected?.length ? ['', '## Needs attention', ...v.neglected.map((p) => `- ${shortPath(p.cwd || p.slug, 2)} — idle ${plural(p.daysAgo, 'day')} · ${plural(p.sessions, 'session')}`)] : []),
+    ...(v.neglected?.length ? ['', '## Needs attention', ...v.neglected.map((p) => `- ${shortPath(p.cwd || p.slug)} — idle ${plural(p.daysAgo, 'day')} · ${plural(p.sessions, 'session')}`)] : []),
     '',
     `_A session counts on the day of its last activity. Rhythm, peaks and session shape use the full ${HEAT_WEEKS}-week window._`,
   ]
@@ -376,6 +377,7 @@ const toggleBtn = 'h-6 px-2 rounded-md border border-zinc-800 text-[11.5px] text
 
 // ---------- page ----------
 export default function InsightsPage({ provider, root, rootLabel = '', providerLabel = '', onOpen }) {
+  usePrefs() // re-render when Preferences › Paths changes (shortPath reads it)
   const [data, setData] = useState(null)
   const [handoff, setHandoff] = useState(false) // AI hand-off dialog with the digest
   const [err, setErr] = useState(null)
@@ -556,7 +558,7 @@ export default function InsightsPage({ provider, root, rootLabel = '', providerL
                   {sd.longest.title ? <span className="text-zinc-400"> · {sd.longest.title}</span> : null}
                   <span className="text-zinc-600">
                     {' '}
-                    · {shortPath(sd.longest.cwd || sd.longest.slug, 2)}
+                    · {shortPath(sd.longest.cwd || sd.longest.slug)}
                     {sd.longest.date ? ` · ${sd.longest.date}` : ''}
                   </span>
                 </div>
@@ -580,7 +582,7 @@ export default function InsightsPage({ provider, root, rootLabel = '', providerL
         ) : (
           <div className="-mx-2">
             {v.neglected.map((p) => {
-              const name = shortPath(p.cwd || p.slug, 2)
+              const name = shortPath(p.cwd || p.slug)
               const idle = p.daysAgo != null ? `idle ${plural(p.daysAgo, 'day')}` : p.lastTs ? `last ${fmtRelative(p.lastTs)}` : 'idle'
               const inner = (
                 <>

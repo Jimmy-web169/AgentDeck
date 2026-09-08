@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { claudeApi as api } from '../../api.js'
 import Markdown from '../shared/Markdown.jsx'
 import { shortPath } from '../../lib/paths.js'
+import { usePrefs } from '../../lib/prefs.js'
 
 // Claude stores memory PER PROJECT (projects/<slug>/memory/*.md). This view is
 // surfaced at folder(user) scope to match Codex's Memory view, so it lets you
@@ -11,6 +12,7 @@ import { shortPath } from '../../lib/paths.js'
 // `slug` pins the view to one project (the project-level Memory tab); without it
 // the view offers a project picker (Home).
 export default function MemoryView({ root, projects = [], slug: fixedSlug = null }) {
+  usePrefs() // re-render when Preferences › Paths changes (shortPath reads it)
   const [slug, setSlug] = useState(fixedSlug)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(false)

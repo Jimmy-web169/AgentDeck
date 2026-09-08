@@ -72,22 +72,38 @@ export const PROVIDERS = {
     dispatch: agyDispatch,
     loadRoots: agyLoadRoots,
     watch: {
-      watchDir: (rootDir) => agyBrainDir(rootDir),
+      // the transcript lives under brain/<id>/, but the facts that place a
+      // conversation in a project — its workspace URI in conversations/<id>.db and
+      // cache/last_conversations.json — are written beside it. Watching only brain/
+      // meant a fresh conversation's first events carried no cwd and it sat in
+      // "(no workspace)" until something else touched the index.
+      watchDir: (rootDir) => rootDir,
+      ignored: (rootDir, absPath) => AGY_UNWATCHED.has(path.relative(rootDir, absPath).split(path.sep)[0]),
       toEvent: (rootId, rootDir, absPath) => {
-        // brain/<id>/.system_generated/logs/transcript*.jsonl (and steps/, messages/) → that conversation
-        const rel = path.relative(agyBrainDir(rootDir), absPath)
+        const rel = path.relative(rootDir, absPath)
         if (!rel || rel.startsWith('..')) return null
-        const id = rel.split(path.sep)[0]
-        if (!agyIsSessionId(id)) return null
+        const [top, second = ''] = rel.split(path.sep)
+        let id = null
+        if (top === 'brain') id = second
+        else if (top === 'conversations') id = second.replace(/\.db(-wal|-shm|-journal)?$/, '')
+        else if (top === 'annotations') id = second.replace(/\.pbtxt$/, '')
+        else if (top === 'cache' && second === 'last_conversations.json') id = null
+        else return null
+        if (id !== null && !agyIsSessionId(id)) return null
         agyInvalidateIndex(rootDir)
         let slug = null
-        try {
-          slug = agyCwdForId(rootDir, id)
-        } catch {}
+        if (id) {
+          try {
+            slug = agyCwdForId(rootDir, id)
+          } catch {}
+        }
         return { provider: 'antigravity', root: rootId, id, slug }
       },
     },
   },
 }
+
+// top-level dirs of an Antigravity home that never describe a conversation
+const AGY_UNWATCHED = new Set(['bin', 'builtin', 'crashes', 'implicit', 'knowledge', 'log', 'mcp', 'presence', 'updater', 'skills'])
 
 export const providerIds = () => Object.keys(PROVIDERS)

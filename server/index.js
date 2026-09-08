@@ -65,7 +65,9 @@ async function startWatchers() {
       const dir = p.watch.watchDir(root.dir)
       if (!fs.existsSync(dir)) continue
       try {
-        const w = chokidar.watch(dir, { ignoreInitial: true, persistent: true, ignorePermissionErrors: true })
+        const opts = { ignoreInitial: true, persistent: true, ignorePermissionErrors: true }
+        if (p.watch.ignored) opts.ignored = (absPath) => p.watch.ignored(root.dir, absPath)
+        const w = chokidar.watch(dir, opts)
         const onEvt = (absPath) => {
           const ev = p.watch.toEvent(root.id, root.dir, absPath)
           if (ev) queue(ev)

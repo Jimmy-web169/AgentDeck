@@ -146,6 +146,9 @@ export default function App() {
   // ---- cross-provider index (sidebar, quick switcher, Home), live dots, terminals ----
   const index = useNavIndex(PROVIDER_LIST)
   const live = useLiveKeys({ onChange: index.invalidate })
+  // open "New conversation" tabs — the sidebar shows each as a ghost row under its
+  // project until the first record lands and the tab becomes a real session
+  const drafts = useMemo(() => state.tabs.map((t) => t.target).filter((t) => t?.provider && t.draft), [state.tabs])
   const activeSessions = useActiveSessions(PROVIDER_LIST)
   // sessions / drafts with a terminal running right now (red dots)
   const termKeys = useMemo(() => {
@@ -509,6 +512,7 @@ export default function App() {
                 onManageFolders={() => setFoldersOpen(true)}
                 onOpenTarget={(t, opts) => openTarget({ ...t }, opts)}
                 onNewProject={newProject}
+                drafts={drafts}
                 onDeleteSession={deleteSession}
                 onDeleteSessions={deleteSessions}
               />

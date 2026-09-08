@@ -10,6 +10,8 @@
 // config) the tab was on, so switching back lands where you left. Tabs persist
 // in localStorage.
 
+import { shortPath } from './paths.js'
+
 export const TABS_KEY = 'agentdeck_tabs'
 export const RECENT_KEY = 'agentdeck_recent'
 const RECENT_MAX = 40
@@ -48,7 +50,8 @@ export function tabLabel(target, providers = []) {
   if (!target?.provider) return { primary: homeViewLabel(target?.view), secondary: '' }
   const providerLabel = providers.find((p) => p.id === target.provider)?.label || target.provider
   const project = target.project || ''
-  if (target.draft) return { primary: project || target.title || providerLabel, secondary: target.title || 'New conversation' }
+  // a draft has no session yet: the project name on top, the folder it will land in below
+  if (target.draft) return { primary: project || target.title || providerLabel, secondary: target.cwd || target.slug ? `new · ${shortPath(target.cwd || target.slug)}` : target.title || 'New conversation' }
   if (target.id) return project ? { primary: project, secondary: target.title || '' } : { primary: target.title || target.id.slice(0, 8), secondary: '' }
   if (target.slug || target.cwd) return { primary: project || target.slug, secondary: '' }
   return { primary: providerLabel, secondary: target.rootLabel || '' }

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { shortPath } from '../../lib/paths.js'
 import { useProviderApi, useProviderResume } from '../../lib/providerApi.js'
 import OpenAppButtons from '../shared/OpenAppButtons.jsx'
 import ResizeHandle from '../shared/ResizeHandle.jsx'
@@ -120,7 +121,7 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
     return (
       <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex items-center gap-3">
         <button onClick={start} disabled={loading} className="shrink-0 text-[13px] px-3 py-1.5 rounded bg-sky-500/20 text-sky-200 hover:bg-sky-500/30 disabled:opacity-50">
-          {loading ? 'starting…' : isNew ? '▸ Open terminal here (new conversation)' : '▸ Continue in a terminal'}
+          {loading ? 'starting…' : isNew ? `▸ Open terminal in ${shortPath(cwd || slug)} (new conversation)` : '▸ Continue in a terminal'}
         </button>
         <OpenAppButtons onOpenTool={onOpenTool} />
         {err ? (

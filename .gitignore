@@ -35,6 +35,7 @@ probe.*.json
 # AI hand-off briefs (server/shared/handoff.js), written under the config dir like probe.*.json
 handoffs/
 .claude/
+skills-lock.json
 
 # local research notes, handoffs, scratch — never committed (see CLAUDE.md)
 tmp/

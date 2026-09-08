@@ -82,6 +82,23 @@ const sessionTarget = (src, s) => ({ ...src, id: s.id, title: s.title })
 const projectItem = (src) => ({ kind: 'project', ...src })
 const sessionItem = (src, s) => ({ kind: 'session', ...src, id: s.id, title: s.title })
 
+// a "New conversation" tab that has not written anything yet: a muted row under
+// the project it will land in, so the reader sees where the work goes before the
+// first record exists. Clicking it focuses that tab.
+const draftsOf = (drafts, src) => (drafts || []).filter((d) => d.provider === src.provider && d.root === src.root && ((d.slug && d.slug === src.slug) || (d.cwd && d.cwd === src.cwd)))
+function DraftLine({ ctx, d, indent = 'pl-7' }) {
+  const active = ctx.activeTarget?.draft && ctx.activeTarget.provider === d.provider && ctx.activeTarget.root === d.root && (ctx.activeTarget.slug || ctx.activeTarget.cwd) === (d.slug || d.cwd)
+  return (
+    <button onClick={() => ctx.onOpenTarget(d)} title={`New conversation in ${d.cwd || d.slug} — nothing written yet`} className={`w-full text-left ${indent} pr-2 sb-row flex items-center gap-2 hover:bg-ink-700/50 ${active ? 'bg-sky-500/10 border-l-2 border-sky-500' : ''}`}>
+      <span className="w-1.5 h-1.5 rounded-full shrink-0 border border-dashed border-zinc-500" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-[12.5px] text-zinc-400 italic truncate">New conversation</span>
+        <span className="block sb-meta text-[10.5px] text-zinc-600 truncate">not written yet</span>
+      </span>
+    </button>
+  )
+}
+
 // one session row, shared by every section ------------------------------
 function SessionLine({ ctx, src, s, indent = 'pl-7', showSource = false, menuKey, extraItems = [], selectable = false }) {
   const { providers, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, menuFor, setMenuFor, workspaces } = ctx
@@ -184,10 +201,12 @@ function ProjectSessions({ ctx, src, indent = 'pl-9', keyPrefix }) {
   const hidden = full.length - notPinned.length
   const lst = hideGrouped ? notPinned.filter((s) => !workspaceHolding({ kind: 'session', provider: src.provider, root: src.root, slug: src.slug, id: s.id }, workspaces)) : notPinned
   const grouped = notPinned.length - lst.length
-  if (!full.length) return <div className={`${indent} pr-2 py-1.5 text-[11.5px] text-zinc-600`}>no sessions yet</div>
+  const ghosts = draftsOf(ctx.drafts, src)
+  if (!full.length && !ghosts.length) return <div className={`${indent} pr-2 py-1.5 text-[11.5px] text-zinc-600`}>no sessions yet</div>
   const shown = all ? lst : lst.slice(0, INLINE_SESSIONS)
   return (
     <>
+      {ghosts.map((d, i) => <DraftLine key={`draft-${i}`} ctx={ctx} d={d} indent={indent} />)}
       {shown.map((s) => <SessionLine key={s.id} ctx={ctx} src={src} s={s} indent={indent} menuKey={`${keyPrefix}|${s.id}`} />)}
       {lst.length > INLINE_SESSIONS && (
         <button onClick={() => toggleKey(`${keyPrefix}|all`)} className={`${indent} pr-2 py-1 text-[11px] text-sky-400 hover:text-sky-300`}>
@@ -223,6 +242,7 @@ export default function AppSidebar({
   onNewProject,
   onDeleteSession,
   onDeleteSessions,
+  drafts = [],
 }) {
   const [filter, setFilter] = useState('')
   const [openSlug, setOpenSlug] = useState(null) // expanded project in the folder list
@@ -457,7 +477,7 @@ export default function AppSidebar({
     if (ok) deleteWorkspace(w.id)
   }
 
-  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, askTrash, menuFor, setMenuFor, workspaces, openKeys, toggleKey, hidePinned, hideGrouped }
+  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, askTrash, menuFor, setMenuFor, workspaces, openKeys, toggleKey, hidePinned, hideGrouped, drafts, activeTarget }
 
   const filtered = projects.filter((p) => {
     if (hidePinned && isPinned({ provider, root, slug: p.slug })) return false
@@ -702,6 +722,20 @@ export default function AppSidebar({
         <div className="pb-2">
           <SectionHeader title="Projects" count={filtered.length} open={sections.projects || !!filter} onToggle={() => toggleSection('projects')} />
           {(sections.projects || !!filter) &&
+            drafts
+              .filter((d) => d.provider === provider && d.root === root && !projects.some((p) => (d.slug && d.slug === p.slug) || (d.cwd && d.cwd === p.cwd)))
+              .map((d, i) => (
+                <div key={`draft-proj-${i}`} className="border-b border-zinc-800/60">
+                  <div className="flex items-center gap-1.5 pl-3 pr-2 sb-row-lg" title={`${d.cwd || d.slug} — a new project: it is listed for real once its first conversation is written`}>
+                    <span className="text-zinc-600 text-xs w-3 shrink-0">▾</span>
+                    <FolderIcon className="w-3.5 h-3.5 text-zinc-600 shrink-0" />
+                    <span className="text-[13px] font-medium text-zinc-400 italic truncate flex-1">{shortPath(d.cwd || d.slug)}</span>
+                    <span className="text-[10.5px] text-zinc-600 shrink-0">new</span>
+                  </div>
+                  <DraftLine ctx={ctx} d={d} />
+                </div>
+              ))}
+          {(sections.projects || !!filter) &&
             filtered.map((p) => {
               const isOpen = p.slug === openSlug
               const src = srcL({ ...p, provider, root, rootLabel })
@@ -757,8 +791,9 @@ export default function AppSidebar({
                           )}
                         </div>
                       )}
+                      {draftsOf(drafts, src).map((d, i) => <DraftLine key={`draft-${i}`} ctx={ctx} d={d} />)}
                       {sessions === null && <div className="px-7 py-2 text-[12px] text-zinc-600">loading…</div>}
-                      {sessions && sessions.length === 0 && <div className="px-7 py-2 text-[12px] text-zinc-600">no sessions yet</div>}
+                      {sessions && sessions.length === 0 && !draftsOf(drafts, src).length && <div className="px-7 py-2 text-[12px] text-zinc-600">no sessions yet</div>}
                       {list.map((s) => <SessionLine ctx={ctx} key={s.id} src={src} s={s} menuKey={`${mk}|${s.id}`} selectable={selectMode} />)}
                       {hiddenPinned > 0 && (
                         <div className="pl-7 pr-2 py-1 text-[11px] text-zinc-600 flex items-center gap-1" title="Pinned sessions are listed in the Pinned section above">

@@ -6,7 +6,7 @@ import InfoDot from './components/shared/InfoDot.jsx'
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx'
 import useActiveSessions, { toManagerItems } from './lib/useActiveSessions.js'
 import { ActivityIcon } from './components/shared/icons.jsx'
-import { projectName } from './lib/paths.js'
+import { projectName, shortPath } from './lib/paths.js'
 import { bumpSessionVersions, subscribeToPageResume } from './lib/liveSync.js'
 import { ProviderApiContext, providerLabelOf, useProviderLabel } from './lib/providerApi.js'
 
@@ -314,7 +314,7 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
         setSessionData(null)
         setTermDraft(
           pendingOpen.slug
-            ? { root: pendingOpen.root, slug: pendingOpen.slug, title: pendingOpen.title || 'New conversation' }
+            ? { root: pendingOpen.root, slug: pendingOpen.slug, cwd: pendingOpen.cwd || pendingOpen.slug, title: pendingOpen.title || 'New conversation' }
             : { root: pendingOpen.root, cwd: pendingOpen.cwd, title: pendingOpen.title || 'New project' }
         )
         setTab('conversation')
@@ -497,7 +497,11 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
           <div className={tab === 'conversation' ? 'flex-1 min-h-0 flex flex-col' : 'hidden'}>
             <div ref={mainRef} onScroll={onMainScroll} className="flex-1 overflow-y-auto">
                 {termDraft ? (
-                  <div className="h-full flex items-center justify-center text-zinc-600 text-sm text-center px-4">New conversation — interact in the terminal below.</div>
+                  <div className="h-full flex flex-col items-center justify-center gap-1.5 text-center px-4">
+                    <div className="text-zinc-400 text-sm">New conversation</div>
+                    <div className="text-[12px] font-mono text-zinc-500" title={termDraft.cwd || termDraft.slug}>{shortPath(termDraft.cwd || termDraft.slug, 0)}</div>
+                    <div className="text-[11.5px] text-zinc-600 mt-1">Nothing is written yet — open the terminal below to start; the session appears in the sidebar with its first record.</div>
+                  </div>
                 ) : sessionData ? (
                   <Conversation key={active?.id} data={sessionData} onOpenSession={openSessionById} subagentCtx={subagentCtx} />
                 ) : (

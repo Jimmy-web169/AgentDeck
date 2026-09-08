@@ -39,16 +39,14 @@ function Pills({ options, value, onPick }) {
   )
 }
 
+// `hint` is the one-line explanation — shown on hover, not printed under the label
 function Toggle({ label, hint, value, onChange }) {
   return (
-    <button onClick={() => onChange(!value)} className="w-full flex items-center gap-3 py-1 text-left group">
+    <button onClick={() => onChange(!value)} title={hint || undefined} className="w-full flex items-center gap-3 py-1 text-left group">
       <span className={`relative w-8 h-[18px] rounded-full transition-colors shrink-0 ${value ? 'bg-sky-500/70' : 'bg-zinc-700'}`}>
         <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${value ? 'translate-x-[16px]' : 'translate-x-[2px]'}`} />
       </span>
-      <span className="min-w-0">
-        <span className="block text-[12.5px] text-zinc-200">{label}</span>
-        {hint && <span className="block text-[11px] text-zinc-500">{hint}</span>}
-      </span>
+      <span className="min-w-0 text-[12.5px] text-zinc-200">{label}</span>
     </button>
   )
 }
