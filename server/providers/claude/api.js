@@ -43,7 +43,8 @@ import { HOME as USER_HOME } from '../../shared/roots.js'
 import { withWatchersPaused } from '../../shared/watchGate.js'
 import { parseSkillsAdd, runSkillsAdd } from '../../shared/skills.js'
 import { SKILL_CONFIG } from './skills.js'
-import { openTool, pickFolderNative } from '../../shared/launch.js'
+import { openTool } from '../../shared/launch.js'
+import { getBrowse, getPickFolder } from '../../shared/browse.js'
 import { makeDispatch } from '../../shared/dispatch.js'
 import { bucketActivity } from '../../shared/activity.js'
 import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } from '../../shared/terminal.js'
@@ -314,7 +315,7 @@ function getStats(q) {
   for (const slug of listProjectSlugs(root.dir)) {
     const files = sessionFiles(root.dir, slug)
     if (!files.length) continue
-    const proj = { slug, cwd: null, sessions: files.length, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: 0 }
+    const proj = { slug, cwd: null, sessions: files.length, subagentSessions: 0, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: 0 }
     for (const f of files) {
       // one stat per file, before its content is read (see parseCache.js)
       let fp = null
@@ -351,7 +352,8 @@ function getStats(q) {
   projects.sort((a, b) => b.lastActivity - a.lastActivity)
   // `fields` tells the UI which token fields every provider shares (add these up
   // across folders) and which are Claude's own
-  return { root: root.id, projectCount: projects.length, sessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
+  // sub-agent transcripts are sidecar files (projects/*/*/subagents/), not sessions
+  return { root: root.id, projectCount: projects.length, sessions, subagentSessions: 0, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
 }
 
 function getHistory(q) {
@@ -363,7 +365,7 @@ function getHistory(q) {
       if (!s) continue
       try {
         const o = JSON.parse(s)
-        out.push({ display: o.display, project: o.project, ts: o.timestamp || o.ts || null })
+        out.push({ display: o.display || '', project: o.project || null, sessionId: o.sessionId || null, ts: o.timestamp || o.ts || null })
       } catch {}
     }
   } catch {}
@@ -386,7 +388,8 @@ function getMemory(q) {
     }
   } catch {}
   files.sort((a, b) => a.name.localeCompare(b.name))
-  return { root: root.id, slug, index, files }
+  // scope/writable: the envelope every provider's memory shares (spec §4 item 4)
+  return { root: root.id, slug, scope: 'project', writable: true, index, files }
 }
 
 // Memory files are flat .md files under projects/<slug>/memory (getMemory reads
@@ -636,44 +639,8 @@ function getActiveSessions() {
 // localhost-only; lists directory NAMES only (no file contents). OS-friendly via
 // Node fs/path. Hidden dot-dirs are skipped in the listing (type a path to reach them).
 
-function getBrowse(q) {
-  const home = os.homedir()
-  let dir = expandHome((q.get('path') || '').trim()) || home
-  let resolved
-  try {
-    resolved = fs.realpathSync(dir)
-  } catch {
-    resolved = path.resolve(dir)
-  }
-  let stat
-  try {
-    stat = fs.statSync(resolved)
-  } catch {}
-  if (!stat || !stat.isDirectory()) throw httpErr(404, `Not a directory: ${dir}`)
-  let dirs = []
-  try {
-    dirs = fs
-      .readdirSync(resolved, { withFileTypes: true })
-      .filter((e) => {
-        try {
-          return (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith('.')
-        } catch {
-          return false
-        }
-      })
-      .map((e) => ({ name: e.name, path: path.join(resolved, e.name) }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  } catch {
-    // permission denied etc. — return an empty listing rather than failing
-  }
-  const parent = path.dirname(resolved)
-  return { path: resolved, parent: parent !== resolved ? parent : null, home, dirs }
-}
 
 // open the OS-native folder chooser (blocks until the user picks/cancels)
-async function getPickFolder() {
-  return await pickFolderNative()
-}
 
 // --- dispatcher --------------------------------------------------------------
 
@@ -681,13 +648,15 @@ async function getPickFolder() {
 // exposes rate_limits to a status line command (never to disk), so an optional
 // status line snippet writes <config_dir>/rate-limits.json, which we read here.
 // See README "Usage limits bar". Absent file → null (bar simply hides).
+// usage.ts is always ms (the status line writes unix seconds; codex/agy snapshots are ISO)
+const toMs = (v) => (typeof v === 'number' ? (v < 1e12 ? v * 1000 : v) : typeof v === 'string' ? Date.parse(v) || null : null)
 function getUsage(q) {
   const root = resolveRoot(q.get('root'))
   try {
     const d = JSON.parse(fs.readFileSync(path.join(root.dir, 'rate-limits.json'), 'utf8'))
-    return { root: root.id, rateLimits: d.rate_limits || null, contextWindow: d.context_window || null, sessionId: d.session_id || null, updatedAt: d.updated_at || null }
+    return { root: root.id, rateLimits: d.rate_limits || null, contextWindow: d.context_window || null, sessionId: d.session_id || null, ts: toMs(d.updated_at) }
   } catch {
-    return { root: root.id, rateLimits: null, contextWindow: null, sessionId: null, updatedAt: null }
+    return { root: root.id, rateLimits: null, contextWindow: null, sessionId: null, ts: null }
   }
 }
 

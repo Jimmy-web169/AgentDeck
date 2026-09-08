@@ -41,7 +41,7 @@ function Dialog({ onClose, providers, index }) {
   // press would close both layers.
   useEscToClose(onClose, !confirmEl)
   const cfg = providers.find((p) => p.id === prov)
-  const rows = providers.flatMap((p) => (index.roots[p.id] || []).map((r) => ({ ...r, provider: p.id, statusField: p.rootStatusField || 'hasProjects' })))
+  const rows = providers.flatMap((p) => (index.roots[p.id] || []).map((r) => ({ ...r, provider: p.id, statusField: p.rootStatusField || 'hasSessions' })))
 
   const run = async (fn) => {
     setBusy(true)

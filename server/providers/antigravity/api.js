@@ -37,7 +37,8 @@ import { writeBrief, composeBrief, seedPrompt } from '../../shared/handoff.js'
 import { HOME as USER_HOME } from '../../shared/roots.js'
 import { makeDispatch } from '../../shared/dispatch.js'
 import { bucketActivity } from '../../shared/activity.js'
-import { openTool, pickFolderNative } from '../../shared/launch.js'
+import { openTool } from '../../shared/launch.js'
+import { getBrowse, getPickFolder } from '../../shared/browse.js'
 import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } from '../../shared/terminal.js'
 
 // Google Antigravity CLI (`agy`) — id-addressed like Codex: a session is a
@@ -238,11 +239,20 @@ function getStats(q) {
   const modelCounts = {}
   const tokens = zeroTokens()
   const projects = []
+  let subagentSessions = 0
   for (const proj of listProjects(root.dir)) {
-    const acc = { slug: proj.slug, cwd: proj.cwd, sessions: proj.sessionCount, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: proj.lastActivity }
+    // `sessions` = top-level conversations, `subagentSessions` = spawned children;
+    // turns and tokens add up over both (same population as codex)
+    const acc = { slug: proj.slug, cwd: proj.cwd, sessions: 0, subagentSessions: 0, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: proj.lastActivity }
     for (const e of sessionFiles(root.dir, proj.slug)) {
       const s = sessionSummary(root.dir, e, fpOf(e.file))
-      sessions++
+      if (e.isSubagent) {
+        subagentSessions++
+        acc.subagentSessions++
+      } else {
+        sessions++
+        acc.sessions++
+      }
       userTurns += s.userTurns
       toolCalls += s.toolCalls
       acc.userTurns += s.userTurns
@@ -261,7 +271,7 @@ function getStats(q) {
     projects.push({ ...acc, models: [...acc.models] })
   }
   projects.sort((a, b) => b.lastActivity - a.lastActivity)
-  return { root: root.id, projectCount: projects.length, sessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
+  return { root: root.id, projectCount: projects.length, sessions, subagentSessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
 }
 
 function getActivity(q) {
@@ -287,7 +297,9 @@ function getHistory(q) {
       if (!s) continue
       try {
         const o = JSON.parse(s)
-        out.push({ display: o.display || '', project: o.workspace || null, ts: o.timestamp || null })
+        // ms on disk; tolerate an ISO string (older fixtures) so ts is always ms
+        const ts = typeof o.timestamp === 'string' ? Date.parse(o.timestamp) || null : o.timestamp || null
+        out.push({ display: o.display || '', project: o.workspace || null, sessionId: o.conversationId || null, ts })
       } catch {}
     }
   } catch {}
@@ -328,7 +340,8 @@ async function getVersion() {
 }
 
 // normalised to the shape RateLimitsBar already reads: { primary (5h), secondary (weekly) }
-async function getUsage() {
+async function getUsage(q) {
+  const root = resolveRoot(q.get('root'))
   const snap = await memoized('usage', 5 * 60 * 1000, async () => {
     const out = await runAgy(['-p', '/usage', '--output-format', 'json'])
     if (!out) return null
@@ -345,7 +358,7 @@ async function getUsage() {
     const main = byGroup.find((g) => /gemini/i.test(g.name)) || byGroup[0] || null
     return { rateLimits: main ? { primary: main.primary, secondary: main.secondary } : null, groups: byGroup, ts: new Date().toISOString() }
   })
-  return { rateLimits: snap?.rateLimits || null, ts: snap?.ts || null, sessionId: null, groups: snap?.groups || [] }
+  return { root: root.id, rateLimits: snap?.rateLimits || null, contextWindow: null, sessionId: null, ts: snap?.ts ? Date.parse(snap.ts) || null : null, groups: snap?.groups || [] }
 }
 
 // --- memory (artifacts), plugins, resources ---------------------------------------------
@@ -377,7 +390,7 @@ function getMemory(q) {
     }
   } catch {}
   memories.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')))
-  return { root: root.id, source: memories.length ? 'artifacts' : 'empty', memories, readOnly: true }
+  return { root: root.id, scope: 'artifacts', writable: false, source: memories.length ? 'artifacts' : 'empty', memories }
 }
 
 function getPlugins(q) {
@@ -453,38 +466,6 @@ const deleteTerminal = async (q) => stopTerminal(q.get('key'))
 const getLiveTerminals = () => ({ terminals: listLiveTmux() })
 const getActiveSessions = () => ({ tmux: listLiveTmux(), sdk: [] })
 
-function getBrowse(q) {
-  const home = os.homedir()
-  const dir = expandHome((q.get('path') || '').trim()) || home
-  let resolved
-  try {
-    resolved = fs.realpathSync(dir)
-  } catch {
-    resolved = path.resolve(dir)
-  }
-  let stat
-  try {
-    stat = fs.statSync(resolved)
-  } catch {}
-  if (!stat || !stat.isDirectory()) throw httpErr(404, `Not a directory: ${dir}`)
-  let dirs = []
-  try {
-    dirs = fs
-      .readdirSync(resolved, { withFileTypes: true })
-      .filter((e) => {
-        try {
-          return (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith('.')
-        } catch {
-          return false
-        }
-      })
-      .map((e) => ({ name: e.name, path: path.join(resolved, e.name) }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  } catch {}
-  const parent = path.dirname(resolved)
-  return { path: resolved, parent: parent !== resolved ? parent : null, home, dirs }
-}
-const getPickFolder = async () => pickFolderNative()
 
 // --- dispatcher --------------------------------------------------------------
 

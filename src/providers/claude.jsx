@@ -36,7 +36,7 @@ export default {
   },
   ns: 'cm',
   thinkingLabel: 'thinking',
-  rootStatusField: 'hasProjects',
+  rootStatusField: 'hasSessions',
   apiAddr: 'slug+id',
   // Session/project-scoped views — shown in the main tab bar when a session is open.
   sessionTabs: [

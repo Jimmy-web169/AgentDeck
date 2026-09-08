@@ -11,6 +11,7 @@ import {
   listProjects,
   sessionFiles,
   sessionFileById,
+  NO_CWD,
   childrenOf,
   cwdForId,
   expandHome,
@@ -50,7 +51,8 @@ import { SKILL_CONFIG } from './skills.js'
 import { readMemories, readPlugins } from './codex-data.js'
 import { makeDispatch } from '../../shared/dispatch.js'
 import { bucketActivity } from '../../shared/activity.js'
-import { openTool, pickFolderNative } from '../../shared/launch.js'
+import { openTool } from '../../shared/launch.js'
+import { getBrowse, getPickFolder } from '../../shared/browse.js'
 import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } from '../../shared/terminal.js'
 
 const TERMINAL_CONFIG = {
@@ -290,14 +292,29 @@ function getStats(q) {
   const modelCounts = {}
   const tokens = zeroTokens()
   const projects = []
+  let subagentSessions = 0
   for (const proj of listProjects(root.dir)) {
-    const acc = { slug: proj.slug, cwd: proj.cwd, sessions: proj.sessionCount, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: proj.lastActivity }
+    // one population everywhere: `sessions` counts top-level rollouts (what the
+    // sidebar lists), `subagentSessions` the spawned children; turns and tokens
+    // add up over both, so the root numbers equal the sum of the projects
+    const acc = { slug: proj.slug, cwd: proj.cwd, sessions: 0, subagentSessions: 0, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: proj.lastActivity }
     for (const f of sessionFiles(root.dir, proj.slug)) {
+      // one stat per file, before its content is read (see parseCache.js)
+      let fp = null
+      try {
+        fp = fingerprintOf(f.file)
+      } catch {}
       const s = withOversizeFallback(
-        () => sessionSummary(f.file, f.id),
+        () => sessionSummary(f.file, f.id, fp || undefined),
         (e) => oversizeStub(f.id, e) // counts as a session, contributes zeros
       )
-      sessions++
+      if (f.isSubagent) {
+        subagentSessions++
+        acc.subagentSessions++
+      } else {
+        sessions++
+        acc.sessions++
+      }
       userTurns += s.userTurns
       toolCalls += s.toolCalls
       acc.userTurns += s.userTurns
@@ -318,13 +335,21 @@ function getStats(q) {
   projects.sort((a, b) => b.lastActivity - a.lastActivity)
   // `fields` tells the UI which token fields every provider shares (add these up
   // across folders) and which are Codex's own
-  return { root: root.id, projectCount: projects.length, sessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
+  return { root: root.id, projectCount: projects.length, sessions, subagentSessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
 }
 
 // --- history -----------------------------------------------------------------
 
 function getHistory(q) {
   const root = resolveRoot(q.get('root'))
+  const projectOfId = (id) => {
+    try {
+      const cwd = sessionFileById(root.dir, id)?.cwd
+      return cwd && cwd !== NO_CWD ? cwd : null
+    } catch {
+      return null
+    }
+  }
   const out = []
   try {
     for (const line of fs.readFileSync(path.join(root.dir, 'history.jsonl'), 'utf8').split('\n')) {
@@ -332,8 +357,10 @@ function getHistory(q) {
       if (!s) continue
       try {
         const o = JSON.parse(s)
-        // ts is unix seconds → ms for the UI's time formatter
-        out.push({ display: o.text || '', sessionId: o.session_id || null, ts: o.ts ? o.ts * 1000 : null })
+        // ts is unix seconds → ms for the UI's time formatter; the cwd comes from
+        // the rollout index when the thread is known (history.jsonl has none)
+        const sid = o.session_id || null
+        out.push({ display: o.text || '', project: (sid && projectOfId(sid)) || null, sessionId: sid, ts: o.ts ? o.ts * 1000 : null })
       } catch {}
     }
   } catch {}
@@ -394,7 +421,7 @@ function deleteResourceHandler(q) {
 function getUsage(q) {
   const root = resolveRoot(q.get('root'))
   const snap = latestRateLimits(root.dir) // { rateLimits, ts, sessionId } | null
-  return { rateLimits: snap?.rateLimits || null, ts: snap?.ts || null, sessionId: snap?.sessionId || null }
+  return { root: root.id, rateLimits: snap?.rateLimits || null, contextWindow: null, sessionId: snap?.sessionId || null, ts: snap?.ts ? (typeof snap.ts === 'number' ? snap.ts : Date.parse(snap.ts) || null) : null }
 }
 
 // The Codex CLI version observed in the most recent tracked session.
@@ -406,7 +433,8 @@ function getVersion(q) {
 // Codex per-conversation memories (read-only, from memories_1.sqlite).
 function getMemory(q) {
   const root = resolveRoot(q.get('root'))
-  return { root: root.id, ...readMemories(root.dir) }
+  // thread memories Codex writes itself — read-only here (spec §4 item 4)
+  return { root: root.id, scope: 'thread', writable: false, ...readMemories(root.dir) }
 }
 
 // Installed Codex plugins (from plugins/cache + config.toml enabled-state).
@@ -505,43 +533,7 @@ function getActiveSessions() {
 // --- filesystem folder browser (for "new project at a path" picker) ----------
 // localhost-only; lists directory NAMES only (no file contents).
 
-function getBrowse(q) {
-  const home = os.homedir()
-  let dir = expandHome((q.get('path') || '').trim()) || home
-  let resolved
-  try {
-    resolved = fs.realpathSync(dir)
-  } catch {
-    resolved = path.resolve(dir)
-  }
-  let stat
-  try {
-    stat = fs.statSync(resolved)
-  } catch {}
-  if (!stat || !stat.isDirectory()) throw httpErr(404, `Not a directory: ${dir}`)
-  let dirs = []
-  try {
-    dirs = fs
-      .readdirSync(resolved, { withFileTypes: true })
-      .filter((e) => {
-        try {
-          return (e.isDirectory() || e.isSymbolicLink()) && !e.name.startsWith('.')
-        } catch {
-          return false
-        }
-      })
-      .map((e) => ({ name: e.name, path: path.join(resolved, e.name) }))
-      .sort((a, b) => a.name.localeCompare(b.name))
-  } catch {
-    // permission denied etc. — return an empty listing rather than failing
-  }
-  const parent = path.dirname(resolved)
-  return { path: resolved, parent: parent !== resolved ? parent : null, home, dirs }
-}
 
-async function getPickFolder() {
-  return await pickFolderNative()
-}
 
 // --- dispatcher --------------------------------------------------------------
 
@@ -590,8 +582,12 @@ function getActivity(q) {
   const list = []
   for (const proj of listProjects(root.dir)) {
     for (const f of sessionFiles(root.dir, proj.slug)) {
+      let fp = null
+      try {
+        fp = fingerprintOf(f.file) // one stat per file, same discipline as claude
+      } catch {}
       const s = withOversizeFallback(
-        () => sessionSummary(f.file, f.id),
+        () => sessionSummary(f.file, f.id, fp || undefined),
         (e) => oversizeStub(f.id, e)
       )
       list.push({ id: f.id, slug: proj.slug, cwd: proj.cwd, title: s.title, firstTs: s.firstTs, lastTs: s.lastTs, userTurns: s.userTurns, toolCalls: s.toolCalls, tokens: s.tokens, models: s.models })

@@ -163,7 +163,7 @@ function agySession(rng, ctx, entry, sid, startMs) {
     const prompt = i === 0 || i >= tasks.length ? task.prompt : `${rng.pick(['Next, ', 'Now ', 'Also: '])}${task.prompt[0].toLowerCase()}${task.prompt.slice(1)}`
     if (i === 0) title = task.title || snippet(prompt)
     push(t, 'USER_EXPLICIT', 'USER_INPUT', { content: wrapUser(prompt, t, i === 0) })
-    history.push({ display: prompt, timestamp: iso(t), workspace: cwd })
+    history.push({ display: prompt, timestamp: t, workspace: cwd }) // agy writes ms, like claude
     t += rng.int(3, 8) * 1000
     // agy emits one PLANNER_RESPONSE per batch of tool calls, each answered by a GENERIC step
     const steps = task.steps || []
@@ -948,7 +948,7 @@ export function generateFixture({ out = path.join(REPO, 'tmp', 'demo-root'), sce
   codexHistory.sort((a, b) => a.ts - b.ts)
   writeJsonl(path.join(claudeHome, 'history.jsonl'), claudeHistory)
   writeJsonl(path.join(codexHome, 'history.jsonl'), codexHistory)
-  agyHistory.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+  agyHistory.sort((a, b) => a.timestamp - b.timestamp)
   writeJsonl(path.join(agyHome, 'history.jsonl'), agyHistory)
   writeText(path.join(agyHome, 'cache', 'last_conversations.json'), JSON.stringify(Object.fromEntries(Object.entries(agyLast).map(([cwd, v]) => [cwd, v.id])), null, 2) + '\n')
   agyHomeExtras(agyHome, Object.keys(agyLast))

@@ -25,6 +25,14 @@ All notable changes to AgentDeck are recorded here. The format follows
   note under Home › Activity's keyboard map is gone too.
 
 ### Changed
+- Provider APIs agree on their vocabulary (spec §4): every `stats` carries
+  `sessions` (top-level) and `subagentSessions` so the folder total equals the
+  sum of its projects; `history[]` is `{ display, project, sessionId, ts }` for
+  all three (Codex resolves the project from its rollout index); `usage` is
+  `{ root, rateLimits, contextWindow, sessionId, ts }`; roots say `hasSessions`;
+  `plugins.marketplaces` is `[{ name, repo }]`; `memory` payloads carry `scope`
+  and `writable`. `browse` / `pick-folder` are one shared implementation, and
+  Codex stats/activity take one fingerprint per file like Claude Code.
 - A "New conversation" draft says where it is: the tab shows the folder under the
   project name, the empty pane names the path, the terminal button says which
   folder it opens in, and the sidebar lists a muted "not written yet" row under

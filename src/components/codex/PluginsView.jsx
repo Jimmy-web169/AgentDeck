@@ -35,7 +35,7 @@ export default function PluginsView({ root }) {
         <div className="flex flex-wrap items-center gap-1.5 mb-4">
           <span className="text-[11px] text-zinc-500">marketplaces:</span>
           {marketplaces.map((mk) => (
-            <span key={mk} className="text-[11px] font-mono px-2 py-0.5 rounded bg-ink-700 border border-zinc-700 text-zinc-300">{mk}</span>
+            <span key={mk.name} title={mk.repo || undefined} className="text-[11px] font-mono px-2 py-0.5 rounded bg-ink-700 border border-zinc-700 text-zinc-300">{mk.name}</span>
           ))}
         </div>
       )}

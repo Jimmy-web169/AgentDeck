@@ -110,25 +110,23 @@ shell; keep it that way.
 1. ~~Three total-token formulas disagree~~ **done 2026-09-07** — `server/shared/tokens.js`: the provider computes `tokens.total`; clients only fall back to the sum. Was: (`lib/format.js`, `shared/Stats.jsx`,
    `shared/activity.js`) whenever `total` is present or `reasoning` ≠ 0, i.e. always
    for codex. Fix: providers emit `tokens.total`; one helper reads only that.
-2. **Codex `getStats` mixes populations**: per-project `sessions` excludes
+2. ~~Codex `getStats` mixes populations~~ **done 2026-09-08** — every provider's stats carry `sessions` (top-level) and `subagentSessions` (spawned children) per project and at the root; turns and tokens add up over both, so root = Σ projects (`test/provider-shapes.test.js`). Was: per-project `sessions` excludes
    sub-agents, the token/turn loop includes them, so root `sessions` ≠ Σ projects.
    Fix: emit `sessions` and `subagentSessions` separately, same population everywhere.
-3. **Two Stats components** — *partly done 2026-09-07*: both now render the token tiles through `shared/TokenTiles.jsx` from `GET /api/stats` `fields` (common first, then provider-specific); the remaining differences below still stand. Was: (`shared/Stats.jsx` vs `codex/Stats.jsx`): "user
+3. ~~Two Stats components~~ **done 2026-09-08** — `shared/Stats.jsx` serves every provider (`providerLabel` prop); `codex/Stats.jsx` is gone. Was — *partly done 2026-09-07*: both now render the token tiles through `shared/TokenTiles.jsx` from `GET /api/stats` `fields` (common first, then provider-specific); the remaining differences below still stand. Was: (`shared/Stats.jsx` vs `codex/Stats.jsx`): "user
    prompts"/"Prompts", "cache read"/"Cached input", "Tool usage"/"Tools used", model
    chips (counts dropped) vs bars, `cacheCreate` tile always 0 for codex, reasoning
    only for codex, `assistantTurns` shown only by codex, session id/time range only
    by codex. Fix: one Stats component driven by the `Stats` shape above; hide
    zero-valued tiles instead of provider-specific tiles.
-4. `GET /api/memory` means two different things (writable project notes vs
-   read-only thread memories). Fix: `Memory` component above with `scope` + `writable`.
-5. `history.project` (claude) vs `history.sessionId` (codex), ISO vs ms `ts`;
+4. ~~`GET /api/memory` means two different things~~ **done 2026-09-08** — every provider's payload carries `scope` (`project` | `thread` | `artifacts`) and `writable`; the per-provider bodies (`index`/`files`, `memories`) stay. Was: writable project notes vs
+   read-only thread memories. Fix: `Memory` component above with `scope` + `writable`.
+5. ~~history / usage / roots / plugins vocabulary~~ **done 2026-09-08** — `history[]` = `{ display, project, sessionId, ts }` (ms) on every provider (codex resolves `project` from its rollout index); `usage` = `{ root, rateLimits, contextWindow, sessionId, ts }`; roots carry `hasSessions`; `plugins.marketplaces` = `[{ name, repo }]`. Was: `history.project` (claude) vs `history.sessionId` (codex), ISO vs ms `ts`;
    `usage.updatedAt` vs `ts`; `roots.hasProjects` vs `hasSessions`;
    `plugins.marketplaces` objects vs strings.
-6. `GET /api/browse` and `pick-folder` are byte-identical copies → move to shared.
-7. Codex `getStats`/`getActivity` skip the fingerprint that claude threads through,
-   so cross-provider refreshes see different freshness.
-8. The cross-folder aggregated view the user wants (all tracked folders of all
-   providers on one Stats page) is blocked only by items 1–3.
+6. ~~`GET /api/browse` and `pick-folder` are byte-identical copies~~ **done 2026-09-08** — `server/shared/browse.js`.
+7. ~~Codex `getStats`/`getActivity` skip the fingerprint~~ **done 2026-09-08** — one `fingerprintOf` per file before the read, as claude does.
+8. ~~The cross-folder aggregated view~~ **dropped 2026-09-08** — built as "All folders" on Home › Stats, then removed at the maintainer's request: Stats follows the sidebar's folder chip like every other Home page.
 
 ## 5. Format-drift detection
 
@@ -185,8 +183,8 @@ Precedence when the same name appears twice: local > project > user > plugin.
 3. **decided 2026-09-07**: show the common fields first, then the provider's own, and the backend must say which is which (`fields` on `/api/stats`). Was: should the UI ever show provider-specific tiles (reasoning, cache create) or only
    non-zero fields of the common `Tokens`?
 4. **decided 2026-09-08**: no — a new optional key is `changed` (dialog + log only); `drift` = missing required key (< 50% of sampled records), unknown enum value, type change (chip badge). Was: is a new optional key worth a badge?
-5. Memory: expose codex thread memories under the same project tab (read-only) — yes?
-6. Antigravity: its transcripts carry no `cwd`; do we accept a "no project" bucket?
+5. **decided 2026-09-08**: yes — codex thread memories live under the same project Memory tab, marked read-only (`writable: false` in the payload). Was: expose codex thread memories under the same project tab (read-only) — yes?
+6. **decided 2026-09-08**: yes — conversations without a `cwd` sit in a "(no workspace)" bucket (`NO_CWD` in the provider's paths.js); a later probe may recover the cwd. Was: Antigravity's transcripts carry no `cwd`; do we accept a "no project" bucket?
 
 ## 7b. AI hand-off (implemented 2026-09-08)
 

@@ -24,7 +24,7 @@ function autodetectSeed() {
   }
   return out
 }
-const _roots = makeRoots({ configPath: CONFIG_PATH, autodetectSeed, defaultRoots, dataProbe: (dir) => ({ hasProjects: hasProjects(dir) }) })
+const _roots = makeRoots({ configPath: CONFIG_PATH, autodetectSeed, defaultRoots, dataProbe: (dir) => ({ hasSessions: hasProjects(dir) }) })
 export const { loadRoots, rootsWithMeta, addRoot, renameRoot, removeRoot, resolveRoot } = _roots
 export { assertInside, HOME, expandHome, dirExists }
 
