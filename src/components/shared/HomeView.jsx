@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fmtRelative } from '../../lib/format.js'
-import { shortPath } from '../../lib/paths.js'
+import { baseName, shortPath } from '../../lib/paths.js'
+import { normCwd } from '../../lib/workspaces.js'
+import { setPref } from '../../lib/prefs.js'
 import { HOME_VIEWS, homeViewLabel, normalizeView } from '../../lib/tabs.js'
 import { providerColor, providerLabel, statusDot, statusText } from '../../lib/providerColors.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
@@ -31,6 +33,101 @@ function ProviderBadge({ providers, id }) {
       <span className={`w-1.5 h-1.5 rounded-full ${c.dot}`} />
       {providerLabel(providers, id)}
     </span>
+  )
+}
+
+const RECENT_LIMIT = 8
+
+// Recent projects, two ways: one row per provider × tracked folder ('source',
+// what the index lists), or one row per working folder with every source that
+// has sessions there ('folder' — the same grouping as the workspace suggestions).
+// The count in the header is the number of rows on screen, never the index total.
+function groupByFolder(projects) {
+  const byCwd = new Map()
+  for (const p of projects) {
+    const k = p.cwd ? normCwd(p.cwd) : `slug:${p.provider}|${p.root}|${p.slug}`
+    if (!byCwd.has(k)) byCwd.set(k, { key: k, cwd: p.cwd || null, name: p.cwd ? baseName(p.cwd) : p.name, sources: [], sessionCount: 0, lastActivity: 0 })
+    const g = byCwd.get(k)
+    g.sources.push(p)
+    g.sessionCount += p.sessionCount || 0
+    if ((p.lastActivity || 0) > g.lastActivity) g.lastActivity = p.lastActivity || 0
+  }
+  const out = [...byCwd.values()]
+  for (const g of out) g.sources.sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0))
+  // two folders with the same name (…/project/AgentDeck, …/maintain/AgentDeck) show a parent
+  const byName = new Map()
+  for (const g of out) byName.set(g.name, (byName.get(g.name) || 0) + 1)
+  for (const g of out) if (byName.get(g.name) > 1 && g.cwd) g.name = shortPath(g.cwd, 2)
+  return out.sort((a, b) => b.lastActivity - a.lastActivity)
+}
+
+function RecentProjects({ providers, index, onOpen }) {
+  const { recentProjectsBy: by } = usePrefs()
+  const [all, setAll] = useState(false)
+  const rows = useMemo(() => (by === 'folder' ? groupByFolder(index.projects) : index.projects), [by, index.projects])
+  const shown = all ? rows : rows.slice(0, RECENT_LIMIT)
+  const open = (p, e) => onOpen(p.provider, { root: p.root, rootLabel: p.rootLabel, slug: p.slug, cwd: p.cwd, project: p.name }, { newTab: e.ctrlKey || e.metaKey })
+  const pill = (k, label, title) => (
+    <button onClick={() => setPref('recentProjectsBy', k)} title={title} className={`h-6 px-2 rounded text-[11px] transition-colors ${by === k ? 'bg-ink-600 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200 hover:bg-ink-700'}`}>
+      {label}
+    </button>
+  )
+  return (
+    <Section
+      title="Recent projects"
+      count={shown.length}
+      right={
+        <span className="flex items-center gap-0.5 rounded-md bg-ink-800 border border-zinc-800 p-0.5">
+          {pill('source', 'By source', 'One row per provider and tracked folder')}
+          {pill('folder', 'By folder', 'One row per working folder — every provider and tracked folder that has sessions there, like the workspace suggestions')}
+        </span>
+      }
+    >
+      {rows.length === 0 ? (
+        <Empty>{index.loading ? 'Loading…' : 'No projects yet.'}</Empty>
+      ) : (
+        <Panel>
+          {by === 'folder'
+            ? shown.map((g) => (
+                <div key={g.key} className="flex items-center gap-2.5 px-3 py-2 hover:bg-ink-800 border-b border-zinc-800/60 last:border-0">
+                  <button onClick={(e) => open(g.sources[0], e)} className="min-w-0 flex-1 text-left" title={g.cwd || g.name}>
+                    <span className="block text-[12.5px] text-zinc-200 truncate">{g.name}</span>
+                    <span className="block text-[10.5px] text-zinc-600 truncate">{g.cwd ? shortPath(g.cwd) : g.sources[0].rootLabel} · {g.sessionCount} session{g.sessionCount === 1 ? '' : 's'}</span>
+                  </button>
+                  <span className="shrink-0 flex items-center gap-1" title={g.sources.map((s) => `${providerLabel(providers, s.provider)} · ${s.rootLabel} · ${s.sessionCount}`).join('\n')}>
+                    {g.sources.map((s) => (
+                      <button key={`${s.provider}:${s.root}`} onClick={(e) => open(s, e)} title={`${providerLabel(providers, s.provider)} · ${s.rootLabel} · ${s.sessionCount} session${s.sessionCount === 1 ? '' : 's'}`} className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-ink-700">
+                        <span className={`w-1.5 h-1.5 rounded-full ${providerColor(providers, s.provider).dot}`} />
+                        <span className="text-[10.5px] text-zinc-500">{s.sessionCount}</span>
+                      </button>
+                    ))}
+                  </span>
+                  <span className="shrink-0 text-[10.5px] text-zinc-600 w-14 text-right">{fmtRelative(g.lastActivity)}</span>
+                </div>
+              ))
+            : shown.map((p) => (
+                <button
+                  key={`${p.provider}:${p.root}:${p.slug}`}
+                  onClick={(e) => open(p, e)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-ink-800 border-b border-zinc-800/60 last:border-0"
+                  title={p.cwd || p.slug}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${providerColor(providers, p.provider).dot}`} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-[12.5px] text-zinc-200 truncate">{p.name}</span>
+                    <span className="block text-[10.5px] text-zinc-600 truncate">{p.rootLabel} · {p.sessionCount} session{p.sessionCount === 1 ? '' : 's'}</span>
+                  </span>
+                  <span className="shrink-0 text-[10.5px] text-zinc-600">{fmtRelative(p.lastActivity)}</span>
+                </button>
+              ))}
+          {rows.length > RECENT_LIMIT && (
+            <button onClick={() => setAll((a) => !a)} className="w-full px-3 py-1.5 text-left text-[11px] text-sky-400 hover:text-sky-300">
+              {all ? `show the latest ${RECENT_LIMIT}` : `show all ${rows.length}`}
+            </button>
+          )}
+        </Panel>
+      )}
+    </Section>
   )
 }
 
@@ -229,29 +326,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
           )}
         </Section>
 
-        <Section title="Recent projects" count={index.projects.length}>
-          {index.projects.length === 0 ? (
-            <Empty>{index.loading ? 'Loading…' : 'No projects yet.'}</Empty>
-          ) : (
-            <Panel>
-              {index.projects.slice(0, 8).map((p) => (
-                <button
-                  key={`${p.provider}:${p.root}:${p.slug}`}
-                  onClick={(e) => onOpen(p.provider, { root: p.root, rootLabel: p.rootLabel, slug: p.slug, cwd: p.cwd, project: p.name }, { newTab: e.ctrlKey || e.metaKey })}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left hover:bg-ink-800 border-b border-zinc-800/60 last:border-0"
-                  title={p.cwd || p.slug}
-                >
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${providerColor(providers, p.provider).dot}`} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-[12.5px] text-zinc-200 truncate">{p.name}</span>
-                    <span className="block text-[10.5px] text-zinc-600 truncate">{p.rootLabel} · {p.sessionCount} session{p.sessionCount === 1 ? '' : 's'}</span>
-                  </span>
-                  <span className="shrink-0 text-[10.5px] text-zinc-600">{fmtRelative(p.lastActivity)}</span>
-                </button>
-              ))}
-            </Panel>
-          )}
-        </Section>
+        <RecentProjects providers={providers} index={index} onOpen={onOpen} />
 
         <div className="flex flex-wrap items-center gap-1.5 text-[10.5px] text-zinc-600">
           <span className="uppercase tracking-wide">tracked</span>
