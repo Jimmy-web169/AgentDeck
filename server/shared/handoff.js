@@ -32,17 +32,34 @@ export function writeBrief(text, { key = '' } = {}) {
 }
 
 // the one line the CLI is started with — short, and it tells the agent where to read
-export const seedPrompt = (file) => `Read the hand-off brief at ${file} and do exactly what it asks. It links the official documentation for the setting involved — read that first, change only what the brief names, and explain each field you touch in plain words.`
+export const seedPrompt = (file) => `Read the hand-off brief at ${file} and follow its "How to work" section: read the linked docs first, then interview me about what to set up before editing anything, and explain each field you touch in plain words.`
 
 // Compose the brief. `context` is what the UI knew: provider label, the kind of
 // thing being changed, its path, current content, docs URL, working folder.
-export function composeBrief({ need, providerLabel, kind, filePath, content, docs, cwd }) {
+// `docsIndex` is the provider's docs home; `kinds` [{ name, docs }] the config
+// kinds this provider has — the brief lists them so the CLI can interview the
+// user about each instead of assuming they know the vocabulary.
+export function composeBrief({ need, providerLabel, kind, filePath, content, docs, cwd, docsIndex = null, kinds = null }) {
   const lines = [`# AgentDeck hand-off → ${providerLabel}`, '', '## What I want', '', String(need || '').trim() || '(no request written — ask me what I want first)', '', '## Where']
   if (kind) lines.push(`- Kind: ${kind}`)
   if (filePath) lines.push(`- File: ${filePath}`)
   if (cwd) lines.push(`- Working folder: ${cwd}`)
   if (docs) lines.push(`- Official docs (read first): ${docs}`)
-  lines.push('', '## How to work', '', '1. Read the docs page above before changing anything; the field names and their meaning come from there, not from memory.', '2. Change only the file named above (or say which file it belongs in, if not this one) and keep the rest untouched.', '3. Show the diff and explain every field you added or changed in plain words — what it does and why it is the right one for the request.', '4. If the request is ambiguous, ask before editing.')
+  if (docsIndex) lines.push(`- Docs index: ${docsIndex}`)
+  lines.push(
+    '',
+    '## How to work',
+    '',
+    '1. Read the docs index and the page for the setting involved before touching anything; field names and their meaning come from there, not from memory.',
+    '2. Start by asking, not editing. What I wrote above is an intent, not necessarily a finished config change. Work out which of this CLI\'s building blocks serve it (see the list below) and, for each one that applies, tell me in one plain sentence what it is and ask whether I want it. One question at a time; skip the kinds that clearly do not apply. I may not know the difference between a command, a rule, an output style, a workflow, a skill, a hook and an MCP server — that is your job to explain.',
+    '3. When a capability probably exists as an installable skill, search before writing one: use the find-skills skill in this project (.agents/skills/find-skills, also .claude/skills/find-skills) or `npx skills find <query>`, and propose what you found.',
+    '4. When my answers are in, show the plan — which files, what each will contain — and wait for a yes.',
+    '5. Then change only what the plan names, show the diff, and explain every field you added or changed in plain words.'
+  )
+  if (kinds && kinds.length) {
+    lines.push('', `## ${providerLabel}'s building blocks (with their docs)`, '')
+    for (const k of kinds) lines.push(`- ${k.name}${k.docs ? ` — ${k.docs}` : ''}`)
+  }
   if (content != null && String(content).length) {
     const body = String(content)
     lines.push('', `## Current content of ${filePath || 'the file'}`, '', '```', body.length > 60000 ? body.slice(0, 60000) + '\n… (truncated)' : body, '```')

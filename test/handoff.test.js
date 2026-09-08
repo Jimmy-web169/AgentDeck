@@ -26,7 +26,17 @@ test('composeBrief: request, where, how to work, docs first, current content fen
   assert.match(md, /- Official docs \(read first\): https:\/\/developers\.openai\.com\/codex\/hooks/)
   assert.match(md, /- Working folder: \/home\/demo\/code\/orbit-api/)
   assert.match(md, /## Current content of \/home\/demo\/\.codex\/config\.toml\n\n```\n\[hooks\]\n\n```/)
-  assert.ok(md.indexOf('read the docs page above') > 0 || /Read the docs page above/.test(md), 'docs-first instruction')
+  assert.match(md, /Read the docs index and the page for the setting involved/, 'docs-first instruction')
+  assert.match(md, /Start by asking, not editing/, 'interview before editing')
+  assert.match(md, /find-skills/, 'search the skills ecosystem first')
+})
+
+test('composeBrief: docs index and the provider\x27s building blocks are listed for the interview', () => {
+  const md = composeBrief({ need: 'set this project up for me', providerLabel: 'Codex', cwd: '/home/demo/code/orbit-api', docsIndex: 'https://developers.openai.com/codex', kinds: [{ name: 'skills', docs: 'https://developers.openai.com/codex/skills' }, { name: 'MCP servers', docs: null }] })
+  assert.match(md, /- Docs index: https:\/\/developers\.openai\.com\/codex/)
+  assert.match(md, /## Codex\x27s building blocks \(with their docs\)\n\n- skills — https:\/\/developers\.openai\.com\/codex\/skills\n- MCP servers\n/)
+  const bare = composeBrief({ need: 'x', providerLabel: 'Claude Code' })
+  assert.ok(!/building blocks \(with/.test(bare), 'no list when the caller passes no kinds')
 })
 
 test('composeBrief: an empty request is flagged instead of silently sent; huge content is truncated', () => {

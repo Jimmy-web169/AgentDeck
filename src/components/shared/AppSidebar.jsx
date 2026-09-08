@@ -494,9 +494,6 @@ export default function AppSidebar({
       <div className="p-3 border-b border-zinc-800 space-y-2.5">
         <FolderChips scopes={index.scopes} providers={providers} value={scope} onPick={onScope} onManage={onManageFolders} />
         <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter projects…" className="w-full bg-ink-700 border border-zinc-700 rounded-md px-2.5 py-1.5 text-[13px] text-zinc-200 placeholder-zinc-600 focus:border-zinc-500 outline-none" />
-        <button onClick={newProjectFlow} disabled={picking || !api} className="w-full text-left text-[12px] text-emerald-300/80 hover:text-emerald-200 disabled:opacity-60" title="Pick a folder (opens Finder/Explorer) and start a new conversation there">
-          {picking ? '+ opening folder chooser…' : '+ New project (choose a folder)'}
-        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -720,7 +717,17 @@ export default function AppSidebar({
 
         {/* ---- Projects of the current folder ---- */}
         <div className="pb-2">
-          <SectionHeader title="Projects" count={filtered.length} open={sections.projects || !!filter} onToggle={() => toggleSection('projects')} />
+          <SectionHeader
+            title="Projects"
+            count={filtered.length}
+            open={sections.projects || !!filter}
+            onToggle={() => toggleSection('projects')}
+            right={
+              <button onClick={newProjectFlow} disabled={picking || !api} title="New project: pick a folder (opens Finder/Explorer) and start a conversation in it" className="text-[11px] px-1.5 py-0.5 rounded text-emerald-300/80 hover:text-emerald-200 hover:bg-ink-700 disabled:opacity-60">
+                {picking ? 'choosing…' : '+ new'}
+              </button>
+            }
+          />
           {(sections.projects || !!filter) &&
             drafts
               .filter((d) => d.provider === provider && d.root === root && !projects.some((p) => (d.slug && d.slug === p.slug) || (d.cwd && d.cwd === p.cwd)))
@@ -765,6 +772,7 @@ export default function AppSidebar({
                       open={menuFor === mk}
                       onClose={() => setMenuFor(null)}
                       items={[
+                        { label: 'New conversation here', onClick: () => onOpenTarget({ provider, root, rootLabel, slug: p.slug, cwd: p.cwd, project: p.name, draft: true, title: 'New conversation', newConversation: true }) },
                         onDeleteSessions && { label: 'Select sessions to trash…', disabled: !p.sessionCount, onClick: () => { setOpenSlug(p.slug); setSelectMode(true) } },
                       ].filter(Boolean)}
                       workspaceItem={projectItem(src)}
