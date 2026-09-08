@@ -5,7 +5,7 @@ import { usePrefs } from '../../lib/prefs.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { ActivityIcon } from './icons.jsx'
 import { CloseIcon, PanelLeftIcon, PlusIcon, SearchIcon } from './shellIcons.jsx'
-import { ShortcutList } from './ShortcutHints.jsx'
+import { MOD, MOD_WORD, ShortcutList } from './ShortcutHints.jsx'
 import Preferences from './Preferences.jsx'
 
 // Chrome-style tab strip. Purely presentational: the shell owns the tab list.
@@ -193,15 +193,15 @@ export default function TabStrip({
 
       <button
         onClick={onSearch}
-        title="Search projects & sessions  (Ctrl+K)"
+        title={`Search projects & sessions  (${MOD_WORD}+K)`}
         className="shrink-0 self-center mx-2 h-6 flex items-center gap-2 pl-2.5 pr-1.5 rounded-full bg-ink-800 border border-zinc-800 text-zinc-500 hover:text-zinc-200 hover:border-zinc-700 text-[11.5px]"
       >
         <SearchIcon className="w-3.5 h-3.5" />
         <span className="hidden md:inline">Search…</span>
-        <kbd className="hidden md:inline text-[10px] px-1 py-px rounded bg-ink-700 text-zinc-500 border border-zinc-800">Ctrl K</kbd>
+        <kbd className="hidden md:inline text-[10px] px-1 py-px rounded bg-ink-700 text-zinc-500 border border-zinc-800">{MOD} K</kbd>
       </button>
       {onToggleSidebar && (
-        <button onClick={onToggleSidebar} title={`${sidebarCollapsed ? 'Show' : 'Hide'} sidebar  (Ctrl+B)`} className={`shrink-0 self-center mr-1 w-7 h-7 rounded-md flex items-center justify-center hover:bg-ink-700 ${sidebarCollapsed ? 'text-zinc-300 bg-ink-800' : 'text-zinc-500 hover:text-zinc-100'}`}>
+        <button onClick={onToggleSidebar} title={`${sidebarCollapsed ? 'Show' : 'Hide'} sidebar  (${MOD_WORD}+B)`} className={`shrink-0 self-center mr-1 w-7 h-7 rounded-md flex items-center justify-center hover:bg-ink-700 ${sidebarCollapsed ? 'text-zinc-300 bg-ink-800' : 'text-zinc-500 hover:text-zinc-100'}`}>
           <PanelLeftIcon />
         </button>
       )}
@@ -225,7 +225,7 @@ export default function TabStrip({
             </button>
           </div>
           <ShortcutList />
-          <div className="mt-3 text-[11px] text-zinc-600">Ctrl+T / Ctrl+W / Ctrl+Tab belong to the browser, so tab keys use Alt.</div>
+          <div className="mt-3 text-[11px] text-zinc-600">{MOD_WORD}+T / {MOD_WORD}+W / {MOD_WORD}+Tab belong to the browser, so tab keys use Alt.</div>
         </div>
       )}
 

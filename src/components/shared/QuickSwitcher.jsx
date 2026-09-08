@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { MOD } from './ShortcutHints.jsx'
 import { highlightChunks, matchFields } from '../../lib/fuzzy.js'
 import { fmtRelative } from '../../lib/format.js'
 import { targetKey } from '../../lib/tabs.js'
@@ -436,7 +437,7 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, onP
           <span><kbd className="text-zinc-500">↵</kbd> open</span>
           {!level && <span><kbd className="text-zinc-500">→</kbd> into project</span>}
           {level && <span><kbd className="text-zinc-500">←</kbd> back</span>}
-          <span><kbd className="text-zinc-500">ctrl ↵</kbd> new tab</span>
+          <span><kbd className="text-zinc-500">{MOD} ↵</kbd> new tab</span>
           <span><kbd className="text-zinc-500">esc</kbd> {level ? 'back' : 'close'}</span>
           <span className="flex-1" />
           {index.loading && <span>indexing…</span>}

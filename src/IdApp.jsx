@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { MOD_WORD } from './components/shared/ShortcutHints.jsx'
 import RawView from './components/shared/RawView.jsx'
 import { ShortcutChips } from './components/shared/ShortcutHints.jsx'
 import LiveSessionsPanel from './components/shared/LiveSessionsPanel.jsx'
@@ -565,7 +566,7 @@ function Empty({ active }) {
     <div className="h-full flex items-center justify-center text-center text-zinc-600">
       <div>
         <div className="flex justify-center mb-3 text-zinc-700"><ActivityIcon className="w-10 h-10" /></div>
-        <div className="text-sm">{active ? 'Loading session…' : 'Pick a project on the left, or press Ctrl+K to jump anywhere.'}</div>
+        <div className="text-sm">{active ? 'Loading session…' : 'Pick a project on the left, or press ' + MOD_WORD + '+K to jump anywhere.'}</div>
         <div className="text-[12px] mt-1 text-zinc-700">Live updates stream in as {label} writes to disk.</div>
         {!active && <ShortcutChips className="justify-center mt-5 max-w-lg mx-auto" />}
       </div>

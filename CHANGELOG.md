@@ -30,11 +30,16 @@ All notable changes to AgentDeck are recorded here. The format follows
   the hand-written one, so the golden covers the generator's shape too.
 
 ### Removed
+- Home's "Jump to…" button (the tab strip's Search already is ⌘/Ctrl+K) and the
+  Keyboard row on Activity — the "?" in the tab strip is the one place for
+  shortcuts.
 - Home › Stats' "This folder / All folders" switch: Stats follows the sidebar's
   folder chip like every other Home page. The "full list: the ? in the tab strip"
   note under Home › Activity's keyboard map is gone too.
 
 ### Changed
+- Shortcut labels follow the platform: ⌘ on macOS, Ctrl elsewhere (the handlers
+  always accepted both).
 - Provider APIs agree on their vocabulary (spec §4): every `stats` carries
   `sessions` (top-level) and `subagentSessions` so the folder total equals the
   sum of its projects; `history[]` is `{ display, project, sessionId, ts }` for

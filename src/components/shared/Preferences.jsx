@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { DENSITIES, PATH_DEPTHS, THEMES, setPref, usePrefs } from '../../lib/prefs.js'
 import InfoDot from './InfoDot.jsx'
+import { MOD_WORD } from './ShortcutHints.jsx'
 import { providerColorValue, providerDefaultColor, STATUS_KINDS, STATUS_DEFAULTS, statusColorValue } from '../../lib/providerColors.js'
 import AccentField from './AccentPicker.jsx'
 import { GearIcon } from './shellIcons.jsx'
@@ -155,7 +156,7 @@ export default function Preferences({ className = '', providers = [] }) {
               <StatusColors prefs={prefs} />
             </Group>
           )}
-          <Group title="Paths" info="How many folders of a project path to show — sidebar, Ctrl+K, Home, Stats. Windows and macOS/Linux paths alike.">
+          <Group title="Paths" info={`How many folders of a project path to show — sidebar, ${MOD_WORD}+K, Home, Stats. Windows and macOS/Linux paths alike.`}>
             <Pills options={PATH_DEPTHS} value={prefs.pathDepth} onPick={(v) => setPref('pathDepth', v)} />
           </Group>
           <Group title="Sidebar" info="Which sections the sidebar shows. Grouped and pinned rows leave the Projects list; suggestions are the “same folder in several places” box.">
@@ -163,8 +164,8 @@ export default function Preferences({ className = '', providers = [] }) {
             <Toggle label="Workspace suggestions" hint="“Same folder in several places” under Workspaces" value={prefs.showSuggestions} onChange={(v) => setPref('showSuggestions', v)} />
             <Toggle label="Pinned section" hint="Pinned rows leave the Projects list" value={prefs.showPinned} onChange={(v) => setPref('showPinned', v)} />
           </Group>
-          <Group title="Lists" info="The first prompt under each session title in Activity and Ctrl+K.">
-            <Toggle label="First prompt under session titles" hint="Activity and Ctrl+K" value={prefs.showFirstPrompt} onChange={(v) => setPref('showFirstPrompt', v)} />
+          <Group title="Lists" info={`The first prompt under each session title in Activity and ${MOD_WORD}+K.`}>
+            <Toggle label="First prompt under session titles" hint={`Activity and ${MOD_WORD}+K`} value={prefs.showFirstPrompt} onChange={(v) => setPref('showFirstPrompt', v)} />
           </Group>
           <Group title="Conversation" info="Sub-agent threads expand under the tool call that spawned them; off = the Sub-agents tab only.">
             <Toggle label="Sub-agent threads inline in the conversation" hint="Expand a sub-agent under the tool call that spawned it" value={prefs.inlineSubagents} onChange={(v) => setPref('inlineSubagents', v)} />

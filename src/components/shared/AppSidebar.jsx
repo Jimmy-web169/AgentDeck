@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createApi } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
+import { MOD_WORD } from './ShortcutHints.jsx'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
 import { createWorkspace, deleteWorkspace, projectKey, removeFromWorkspace, renameWorkspace, setWorkspaceColor, setWorkspaceIcon, sourceKey, suggestWorkspaces, useWorkspaces, workspaceHolding, workspaceSources } from '../../lib/workspaces.js'
 import { WorkspaceIcon } from './workspaceIcons.jsx'
@@ -117,7 +118,7 @@ function SessionLine({ ctx, src, s, indent = 'pl-7', showSource = false, menuKey
         onClick={(e) => (selectable ? toggleSelected(s.id) : onOpenTarget(t, { newTab: e.ctrlKey || e.metaKey }))}
         onMouseDown={(e) => e.button === 1 && e.preventDefault()}
         onAuxClick={(e) => e.button === 1 && !selectable && onOpenTarget(t, { newTab: true })}
-        title={selectable ? undefined : `${s.title}\nOpen here · Ctrl+click or middle-click opens in a new tab`}
+        title={selectable ? undefined : `${s.title}\nOpen here · ${MOD_WORD}+click or middle-click opens in a new tab`}
         className={`flex-1 min-w-0 text-left ${indent} pr-2 sb-row`}
       >
         <div className="text-[12px] text-zinc-400 group-hover:text-zinc-200 truncate flex items-center gap-1.5">
