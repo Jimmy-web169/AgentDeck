@@ -52,7 +52,7 @@ export function composeBrief({ need, providerLabel, kind, filePath, content, doc
     '',
     '1. Read the docs index and the page for the setting involved before touching anything; field names and their meaning come from there, not from memory.',
     '2. Start by asking, not editing. What I wrote above is an intent, not necessarily a finished config change. Work out which of this CLI\'s building blocks serve it (see the list below) and, for each one that applies, tell me in one plain sentence what it is and ask whether I want it. One question at a time; skip the kinds that clearly do not apply. I may not know the difference between a command, a rule, an output style, a workflow, a skill, a hook and an MCP server — that is your job to explain.',
-    '3. When a capability probably exists as an installable skill, search before writing one: use the find-skills skill in this project (skills/find-skills, also .claude/skills/find-skills) or `npx skills find <query>`, and propose what you found.',
+    '3. Once you understand the intent, look for skills that serve it: use the find-skills skill in this project (skills/find-skills, also .claude/skills/find-skills) or `npx skills find <query>` with what I am trying to do, and propose the matches — what each would add and whether I want it — before configuring anything by hand.',
     '4. When my answers are in, show the plan — which files, what each will contain — and wait for a yes.',
     '5. Then change only what the plan names, show the diff, and explain every field you added or changed in plain words.'
   )

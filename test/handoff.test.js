@@ -28,7 +28,7 @@ test('composeBrief: request, where, how to work, docs first, current content fen
   assert.match(md, /## Current content of \/home\/demo\/\.codex\/config\.toml\n\n```\n\[hooks\]\n\n```/)
   assert.match(md, /Read the docs index and the page for the setting involved/, 'docs-first instruction')
   assert.match(md, /Start by asking, not editing/, 'interview before editing')
-  assert.match(md, /find-skills/, 'search the skills ecosystem first')
+  assert.match(md, /look for skills that serve it: use the find-skills skill/, 'find skills for the intent')
 })
 
 test('composeBrief: docs index and the provider\x27s building blocks are listed for the interview', () => {
