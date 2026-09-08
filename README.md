@@ -12,7 +12,7 @@ more. It runs entirely on your machine, reads the files each CLI already writes
 to disk (`~/.claude/projects/**`, `~/.codex/sessions/**`,
 `~/.gemini/antigravity-cli/brain/**`), and never sends your data anywhere.
 
-> **Site:** <https://jimmy-web169.github.io/AgentDeck/> — a one-page overview with the tour.
+> **Site:** <https://jimmyblog.site/AgentDeck/> — a one-page overview with the tour.
 >
 > **Status:** v2. Read-only monitoring is solid; continuing a session runs the
 > real CLI in an embedded terminal, so it needs that CLI installed.
