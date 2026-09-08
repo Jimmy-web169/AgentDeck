@@ -74,6 +74,23 @@
   footer { padding: 32px 0 48px; border-top: 1px solid rgb(var(--zinc-800)); font-size: 13px; color: rgb(var(--zinc-500)); }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; }
   footer a { color: rgb(var(--zinc-400)); }
+  /* phones: tighter rhythm, a shorter nav, single columns (the grids above already collapse at 860px) */
+  @media (max-width: 700px) {
+    .wrap { padding: 0 16px; }
+    header.top .wrap { height: 52px; gap: 12px; }
+    nav.links { gap: 14px; }
+    nav.links a:not(.keep) { display: none; }
+    section { padding: 48px 0; }
+    section.hero { padding-top: 40px; }
+    h1 { max-width: none; }
+    .lead { font-size: 16px; }
+    .hero .cta .btn { flex: 1 1 auto; justify-content: center; }
+    .feature { gap: 18px; margin-top: 22px; }
+    .feature .text h3 { font-size: 15px; }
+    .video { border-radius: 8px; box-shadow: 0 16px 40px rgba(0,0,0,0.45); }
+    pre { font-size: 12px; padding: 12px; }
+    footer .wrap { gap: 6px 16px; }
+  }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 </style>
 </head>
@@ -90,8 +107,8 @@
       <a href="#browse">Browse</a>
       <a href="#steer">See &amp; steer</a>
       <a href="#protocol">Protocol</a>
-      <a href="#install">Install</a>
-      <a href="https://github.com/Jimmy-web169/AgentDeck">GitHub ↗</a>
+      <a class="keep" href="#install">Install</a>
+      <a class="keep" href="https://github.com/Jimmy-web169/AgentDeck">GitHub ↗</a>
     </nav>
   </div>
 </header>
@@ -214,15 +231,24 @@
   <section id="protocol">
     <div class="wrap">
       <div class="eyebrow">A provider protocol</div>
-      <h2>Know the day a vendor changes its format.</h2>
-      <div class="feature">
-        <div class="text">
-          <p>Every CLI writes its own format under <code>~/.claude</code>, <code>~/.codex</code>, <code>~/.gemini</code>, and there is no shared spec. AgentDeck's <code>spec/</code> defines the contract every provider implements — one vocabulary for sessions, sub-agents, tool calls, tokens, memory, MCP servers, history and stats — plus a YAML descriptor per CLI and a conformance gate with golden outputs.</p>
-          <p>A <strong>format probe</strong> reads each tracked folder's newest records on every start and compares them with the descriptor. A new record type, a missing required field or a changed type badges that folder the same day, with the details in the Folders dialog.</p>
-          <p><a href="https://github.com/Jimmy-web169/AgentDeck/blob/main/spec/PROVIDER-SPEC.md">Read the spec ↗</a></p>
+      <h2>Every agent keeps a record. None of them agree on how.</h2>
+      <p class="lead">Codex writes to <code>~/.codex</code>, Claude Code to <code>~/.claude</code>, Gemini to <code>~/.gemini</code>. Underneath they are all JSONL or SQLite, but each in its own shape, and each free to change tomorrow. Protocols like <a href="https://agentclientprotocol.com/get-started/introduction">ACP</a> and <a href="https://agent-plugins.org/">agent-plugins.org</a> are starting to unify how agents talk. AgentDeck wants the same for what they leave on your disk.</p>
+      <div class="grid three pillars">
+        <div class="card">
+          <h3>One vocabulary</h3>
+          <p class="muted" style="margin:0;font-size:14px">Sessions, sub-agents, tool calls, tokens, memory, MCP servers, history, stats: one set of words, whichever CLI wrote the file. Every screen in AgentDeck is built on it, so a fourth provider gets the same UI for free.</p>
         </div>
-        <div class="shot"><img src="https://raw.githubusercontent.com/Jimmy-web169/AgentDeck/main/demo/v2.0/folders-dialog.png" alt="Tracked folders with the format probe" loading="lazy"></div>
+        <div class="card">
+          <h3>One descriptor per CLI</h3>
+          <p class="muted" style="margin:0;font-size:14px">What each vendor's records look like, written down in YAML with the version it was seen in, and checked against fixtures. Adding a provider is one folder and one descriptor, not a rewrite.</p>
+        </div>
+        <div class="card">
+          <h3>Drift you notice the same day</h3>
+          <p class="muted" style="margin:0;font-size:14px">On every start the newest records are compared with the descriptor. A field or type nobody has seen yet marks that folder, so a vendor's quiet format change is a badge today, not a broken screen next week.</p>
+        </div>
       </div>
+      <p class="lead" style="margin-top:28px">The provider layer is modular on purpose: the core knows no vendor by name, and each provider is a self-contained module. The next step is to open more of AgentDeck up the same way, so anyone who cares about one piece can build just that piece. Longer term, the hope is a shared protocol, so watching your agents stops meaning reading every vendor's format.</p>
+      <p><a class="btn" href="https://github.com/Jimmy-web169/AgentDeck/blob/main/spec/PROVIDER-SPEC.md">Read the spec ↗</a></p>
     </div>
   </section>
 

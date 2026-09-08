@@ -7,6 +7,9 @@ All notable changes to AgentDeck are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **GitHub Pages one-pager** fits phone widths (short nav, single columns, full-width
+  buttons) and its protocol section reads as a pitch: one vocabulary, one descriptor
+  per CLI, drift noticed the same day, a modular provider layer — no screenshot.
 - **GitHub Pages one-pager** (`docs/`, served from `main`): the tour, the three
   providers, browse / see & steer / protocol, install. Images come from
   `demo/v2.0/` on `main`; the version from `docs/site.json`.
