@@ -13,8 +13,8 @@ All notable changes to AgentDeck are recorded here. The format follows
 - **AI hand-off interviews first**: the brief now lists the provider's building
   blocks (instructions, commands, rules, output styles, workflows, skills,
   sub-agents, hooks, MCP servers, plugins) with their docs and tells the CLI to
-  explain each and ask, one question at a time, before editing — then search
-  find-skills, show a plan, and only then write. Same brief for all providers.
+  explain each and ask, one question at a time, before editing — then use
+  find-skills to find skills that serve the intent, show a plan, and only then write. Same brief for all providers.
 - Sidebar: "+ new" sits in the Projects section header; a project's ⋯ menu has
   "New conversation here".
 - **Preferences › Paths**: how many trailing folders a project path shows (1–4 or

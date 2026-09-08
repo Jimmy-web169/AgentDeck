@@ -723,8 +723,8 @@ export default function AppSidebar({
             open={sections.projects || !!filter}
             onToggle={() => toggleSection('projects')}
             right={
-              <button onClick={newProjectFlow} disabled={picking || !api} title="New project: pick a folder (opens Finder/Explorer) and start a conversation in it" className="text-[11px] px-1.5 py-0.5 rounded text-emerald-300/80 hover:text-emerald-200 hover:bg-ink-700 disabled:opacity-60">
-                {picking ? 'choosing…' : '+ new'}
+              <button onClick={newProjectFlow} disabled={picking || !api} title={picking ? 'Choosing a folder…' : 'New project: pick a folder and start a conversation in it'} className={`${iconBtn} text-zinc-500 hover:text-zinc-100 hover:bg-ink-600 disabled:opacity-60`}>
+                <PlusIcon className="w-3.5 h-3.5" />
               </button>
             }
           />

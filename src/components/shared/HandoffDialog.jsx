@@ -39,7 +39,7 @@ export function composeBriefPreview({ need, providerLabel, kind, filePath, conte
   if (cwd) lines.push(`- Working folder: ${cwd}`)
   if (docs) lines.push(`- Official docs (read first): ${docs}`)
   if (docsIndex) lines.push(`- Docs index: ${docsIndex}`)
-  lines.push('', '## How to work', '', '1. Read the docs first.', '2. Ask, don’t edit: explain each building block that applies and ask whether I want it, one question at a time.', '3. Search the skills ecosystem (find-skills) before writing a skill by hand.', '4. Show the plan, wait for a yes.', '5. Change only what the plan names; show the diff; explain every field.')
+  lines.push('', '## How to work', '', '1. Read the docs first.', '2. Ask, don’t edit: explain each building block that applies and ask whether I want it, one question at a time.', '3. Search the skills ecosystem (find-skills) for what my intent needs and propose matches.', '4. Show the plan, wait for a yes.', '5. Change only what the plan names; show the diff; explain every field.')
   if (kinds.length) lines.push('', `## ${providerLabel}'s building blocks`, '', ...kinds.map((k) => `- ${k.name}`))
   lines.push('', '(the real brief spells these out in full)', '4. If the request is ambiguous, ask first.')
   if (content) lines.push('', `## Current content of ${filePath || 'the file'}`, '', '```', content.length > 2000 ? content.slice(0, 2000) + '\n… (' + (content.length - 2000) + ' more characters in the real brief)' : content, '```')
@@ -121,7 +121,7 @@ export default function HandoffDialog({ api, providerId, providerLabel, root, cw
                     </li>
                   )}
                   <li>this CLI’s building blocks ({kinds.length}) with their docs, so it can ask you which ones you want</li>
-                  <li>how to work: read the docs, interview you first (one question at a time), search find-skills before writing a skill, show the plan, then the diff</li>
+                  <li>how to work: read the docs, interview you first (one question at a time), search find-skills for skills your intent needs, show the plan, then the diff</li>
                 </ul>
               </div>
               <button onClick={() => setShowBrief((s) => !s)} className="text-[11px] text-zinc-500 hover:text-zinc-200">{showBrief ? 'hide the brief' : 'preview the brief'}</button>
