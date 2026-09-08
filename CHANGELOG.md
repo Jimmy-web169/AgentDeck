@@ -15,6 +15,10 @@ All notable changes to AgentDeck are recorded here. The format follows
   sub-agents, hooks, MCP servers, plugins) with their docs and tells the CLI to
   explain each and ask, one question at a time, before editing — then use
   find-skills to find skills that serve the intent, show a plan, and only then write. Same brief for all providers.
+- Home › Activity › Recent projects can list **by folder** (one row per working
+  folder with a dot per provider / tracked folder that has sessions there, the
+  same grouping as the workspace suggestions) or by source; the header count is
+  the number of rows shown, with "show all N" to expand.
 - Sidebar: "+ new" sits in the Projects section header; a project's ⋯ menu has
   "New conversation here".
 - **Preferences › Paths**: how many trailing folders a project path shows (1–4 or

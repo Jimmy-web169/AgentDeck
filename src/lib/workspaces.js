@@ -167,7 +167,7 @@ export const workspaceSources = (w) => {
 // Projects that share a working directory across providers or folders (the
 // same repo opened with Claude Code, a second Claude account and Codex) and
 // aren't grouped yet — offered as one-click workspaces.
-const normCwd = (c) =>
+export const normCwd = (c) =>
   String(c || '')
     .replace(/[\\/]+$/, '')
     .replace(/\\/g, '/')
