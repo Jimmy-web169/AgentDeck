@@ -4,7 +4,7 @@ import { fmtRelative } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
 import { MOD_WORD } from './ShortcutHints.jsx'
 import { isPinned, togglePin, usePins } from '../../lib/pins.js'
-import { createWorkspace, deleteWorkspace, projectKey, removeFromWorkspace, renameWorkspace, setWorkspaceColor, setWorkspaceIcon, sourceKey, suggestWorkspaces, useWorkspaces, workspaceHolding, workspaceSources } from '../../lib/workspaces.js'
+import { adoptPendingProjects, createWorkspace, deleteWorkspace, normCwd, projectKey, rememberAdoption, removeFromWorkspace, renameWorkspace, setWorkspaceColor, setWorkspaceIcon, sourceKey, suggestWorkspaces, useWorkspaces, workspaceHolding, workspaceSources } from '../../lib/workspaces.js'
 import { WorkspaceIcon } from './workspaceIcons.jsx'
 import { usePrefs } from '../../lib/prefs.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
@@ -183,7 +183,7 @@ function ProjectLine({ ctx, src, open, onToggle, menuKey, children }) {
             <DotsIcon className="w-3.5 h-3.5" />
           </button>
         </div>
-        <RowMenu open={menuFor === menuKey} onClose={() => setMenuFor(null)} items={[]} workspaceItem={projectItem(src)} workspaces={workspaces} />
+        <RowMenu open={menuFor === menuKey} onClose={() => setMenuFor(null)} items={ctx.newConversationItems(src)} workspaceItem={projectItem(src)} workspaces={workspaces} />
       </div>
       {children}
     </div>
@@ -459,6 +459,46 @@ export default function AppSidebar({
     return { ...src, rootLabel: labelOf(src.provider, src.root, src.rootLabel) }
   }
 
+  // The ⋯ menu of every project row (Projects, Pinned, a workspace's groups):
+  // "New conversation here", and — when another folder or provider is tracked —
+  // "New conversation here with…", the same folder opened by another account
+  // or CLI. Every scope but this one is listed (a second Claude account counts:
+  // switching accounts is half the point); one that already has a project for
+  // the folder shows its session count and reuses it, one that has none is
+  // tagged "new here" and starts from the path alone (the server accepts a
+  // cwd without a slug). The user asked for exactly this (2026-09-08): no
+  // switching the folder chip, no folder picker, no workspace needed first.
+  const draftTarget = (t) => ({ ...t, draft: true, title: 'New conversation', newConversation: true })
+  const newConversationItems = (src) => {
+    const items = [{ label: 'New conversation here', onClick: () => onOpenTarget(draftTarget({ provider: src.provider, root: src.root, rootLabel: src.rootLabel, slug: src.slug, cwd: src.cwd, project: src.project })) }]
+    if (!src.cwd) return items
+    const others = index.scopes.filter((x) => !(x.provider === src.provider && x.root === src.root))
+    if (!others.length) return items
+    const cwdKey = normCwd(src.cwd)
+    const children = others.map((x) => {
+      const existing = index.projects.find((p) => p.provider === x.provider && p.root === x.root && p.cwd && normCwd(p.cwd) === cwdKey)
+      const n = existing?.sessionCount || 0
+      return {
+        key: sourceKey(x),
+        label: providerLabel(providers, x.provider),
+        sub: x.rootLabel,
+        dot: providerColor(providers, x.provider).dot,
+        tag: existing ? `${n} session${n === 1 ? '' : 's'}` : 'new here',
+        title: existing ? `${src.cwd}\nalready a project in ${providerLabel(providers, x.provider)} · ${x.rootLabel} — the conversation joins it` : `${src.cwd}\nnot opened with ${providerLabel(providers, x.provider)} · ${x.rootLabel} yet — the project appears once the first conversation is written`,
+        onClick: () => {
+          const t = { provider: x.provider, root: x.root, rootLabel: x.rootLabel, cwd: src.cwd, project: existing?.name || src.project }
+          if (existing) t.slug = existing.slug
+          else rememberAdoption(src, x, src.cwd)
+          onOpenTarget(draftTarget(t))
+        },
+      }
+    })
+    items.push({ label: 'New conversation here with…', children })
+    return items
+  }
+  // a workspace waiting for a project started this way adopts it once the index lists it
+  useEffect(() => adoptPendingProjects(index.projects), [index.projects])
+
   const askTrash = async (src, s, active) => {
     const ok = await confirm({
       title: 'Move this session to the trash?',
@@ -478,7 +518,7 @@ export default function AppSidebar({
     if (ok) deleteWorkspace(w.id)
   }
 
-  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, askTrash, menuFor, setMenuFor, workspaces, openKeys, toggleKey, hidePinned, hideGrouped, drafts, activeTarget }
+  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, askTrash, menuFor, setMenuFor, workspaces, openKeys, toggleKey, hidePinned, hideGrouped, drafts, activeTarget, newConversationItems }
 
   const filtered = projects.filter((p) => {
     if (hidePinned && isPinned({ provider, root, slug: p.slug })) return false
@@ -639,7 +679,7 @@ export default function AppSidebar({
                                       </button>
                                     </div>
                                   )}
-                                  {!g.partial && <RowMenu open={menuFor === gk} onClose={() => setMenuFor(null)} items={[{ label: `Remove ${g.src.project} (${g.src.rootLabel}) from workspace`, onClick: () => removeItem(w.id, g.item) }]} />}
+                                  {!g.partial && <RowMenu open={menuFor === gk} onClose={() => setMenuFor(null)} items={[...newConversationItems(g.src), { label: `Remove ${g.src.project} (${g.src.rootLabel}) from workspace`, onClick: () => removeItem(w.id, g.item) }]} />}
                                 </div>
                                 {gopen &&
                                   shownRows.map((r) => (
@@ -773,7 +813,7 @@ export default function AppSidebar({
                       open={menuFor === mk}
                       onClose={() => setMenuFor(null)}
                       items={[
-                        { label: 'New conversation here', onClick: () => onOpenTarget({ provider, root, rootLabel, slug: p.slug, cwd: p.cwd, project: p.name, draft: true, title: 'New conversation', newConversation: true }) },
+                        ...newConversationItems(src),
                         onDeleteSessions && { label: 'Select sessions to trash…', disabled: !p.sessionCount, onClick: () => { setOpenSlug(p.slug); setSelectMode(true) } },
                       ].filter(Boolean)}
                       workspaceItem={projectItem(src)}

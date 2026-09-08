@@ -173,6 +173,61 @@ export const normCwd = (c) =>
     .replace(/\\/g, '/')
     .toLowerCase()
 
+// "New conversation here with…" opens a project's folder in another provider /
+// account that has no project for it yet. The project only exists once the CLI
+// writes its first record, so the workspaces holding the source project note
+// the (provider, folder, cwd) they are waiting for and adopt the newcomer when
+// the index shows it — the user should not have to tick it by hand a second
+// time. Pending adoptions live in localStorage (the terminal outlives a reload)
+// and expire after a day. The suggestions box would not offer it: a folder
+// group counts as dealt with once any of its projects is grouped.
+const ADOPT_KEY = 'agentdeck_workspace_adopt'
+const ADOPT_TTL = 24 * 60 * 60 * 1000
+function loadAdoptions() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(ADOPT_KEY) || '[]')
+    return Array.isArray(arr) ? arr.filter((a) => a && a.ws && a.provider && a.root && a.cwd && Date.now() - (a.at || 0) < ADOPT_TTL) : []
+  } catch {
+    return []
+  }
+}
+function saveAdoptions(list) {
+  try {
+    if (list.length) localStorage.setItem(ADOPT_KEY, JSON.stringify(list))
+    else localStorage.removeItem(ADOPT_KEY)
+  } catch {}
+}
+
+// `source` is the project the conversation was started from, `target` the
+// { provider, root } it was started in, `cwd` the folder. No-op unless a
+// workspace holds the source project.
+export function rememberAdoption(source, target, cwd) {
+  const src = normItem({ ...source, kind: 'project' })
+  if (!src || !target?.provider || !target?.root || !cwd) return
+  const holders = workspaces.filter((w) => inWorkspace(w, src))
+  if (!holders.length) return
+  const key = normCwd(cwd)
+  const list = loadAdoptions().filter((a) => !holders.some((w) => w.id === a.ws && a.provider === target.provider && a.root === target.root && a.cwd === key))
+  for (const w of holders) list.push({ ws: w.id, provider: target.provider, root: target.root, cwd: key, at: Date.now() })
+  saveAdoptions(list)
+}
+
+// called with the live project index; adopts what has appeared, keeps waiting for the rest
+export function adoptPendingProjects(indexProjects = []) {
+  const list = loadAdoptions()
+  if (!list.length) return
+  const keep = []
+  for (const a of list) {
+    const p = indexProjects.find((x) => x.provider === a.provider && x.root === a.root && x.cwd && normCwd(x.cwd) === a.cwd)
+    if (!p) {
+      keep.push(a)
+      continue
+    }
+    if (workspaces.some((w) => w.id === a.ws)) addToWorkspace(a.ws, { kind: 'project', provider: p.provider, root: p.root, rootLabel: p.rootLabel, slug: p.slug, cwd: p.cwd, project: p.name || p.project })
+  }
+  if (keep.length !== list.length) saveAdoptions(keep)
+}
+
 export function suggestWorkspaces(indexProjects = [], current = workspaces) {
   // a folder group counts as "dealt with" as soon as ANY of its projects is in
   // some workspace — the user made a call about it

@@ -7,6 +7,17 @@ All notable changes to AgentDeck are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- **New conversation here with…** on every project row's ⋯ menu (Projects,
+  Pinned, a workspace's project groups): the same folder opened by another
+  tracked account or provider, without switching the folder chip or picking
+  the folder again. Every scope but the current one is listed — a second
+  Claude account included — with the provider dot and folder label; one that
+  already has a project for the folder shows its session count and the
+  conversation joins it, one that has none is tagged *new here* and starts
+  from the path alone. When the source project sits in a workspace, the
+  project the other CLI creates is adopted into that workspace as soon as its
+  first conversation is written (the suggestions box would not offer it: a
+  folder group counts as dealt with once any of its projects is grouped).
 - **GitHub Pages one-pager** fits phone widths (short nav, single columns, full-width
   buttons) and its protocol section reads as a pitch: one vocabulary, one descriptor
   per CLI, drift noticed the same day, a modular provider layer — no screenshot.

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { addToWorkspace, createWorkspace, inWorkspace, removeFromWorkspace } from '../../lib/workspaces.js'
 import AccentField from './AccentPicker.jsx'
 import { IconField } from './workspaceIcons.jsx'
-import { PlusIcon } from './shellIcons.jsx'
+import { ChevronRightIcon, PlusIcon } from './shellIcons.jsx'
 
 // The "⋯" menu of a sidebar row. Every row gets the same two hover controls —
 // pin and ⋯ — and everything else lives in here: workspace membership toggles
@@ -10,6 +10,10 @@ import { PlusIcon } from './shellIcons.jsx'
 // confirm in the centered dialog (useConfirm), never inline.
 //
 //   items: [{ label, onClick, danger, disabled }]
+//          or { label, children: [{ key, label, sub?, dot?, tag?, onClick }] } — a
+//          group that unfolds in place (no fly-out: the menu is narrow and the
+//          sidebar is the edge of the window); `dot` is a provider dot class,
+//          `sub` the folder label, `tag` a short note on the right
 //   workspaceItem: the project / session to toggle in workspaces (optional)
 //   accent: { value, defaultValue?, onChange, onReset?, resetLabel? } — a colour picker (a workspace's colour)
 //   icon:   { value, onPick, accentStyle? } — a glyph picker (a workspace's icon)
@@ -18,12 +22,14 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
   const onCloseRef = useRef(onClose)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
+  const [unfolded, setUnfolded] = useState(null) // label of the open group
   useEffect(() => void (onCloseRef.current = onClose), [onClose])
 
   useEffect(() => {
     if (!open) return
     setCreating(false)
     setName('')
+    setUnfolded(null)
     const off = (e) => !ref.current?.contains(e.target) && onCloseRef.current()
     const key = (e) => e.key === 'Escape' && onCloseRef.current()
     window.addEventListener('mousedown', off)
@@ -44,19 +50,49 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
 
   return (
     <div ref={ref} onMouseDown={(e) => e.stopPropagation()} className={`absolute right-2 top-full z-30 mt-0.5 ${accent || icon ? 'w-64' : 'w-60'} rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl py-1`}>
-      {items.map((it) => (
-        <button
-          key={it.label}
-          disabled={it.disabled}
-          onClick={() => {
-            onClose()
-            it.onClick()
-          }}
-          className={`${row} ${it.danger ? 'text-red-300 hover:text-red-200' : ''}`}
-        >
-          {it.label}
-        </button>
-      ))}
+      {items.map((it) =>
+        it.children ? (
+          <div key={it.label}>
+            <button onClick={() => setUnfolded((u) => (u === it.label ? null : it.label))} className={row} aria-expanded={unfolded === it.label}>
+              <span className="truncate">{it.label}</span>
+              <ChevronRightIcon className={`w-3 h-3 ml-auto text-zinc-600 shrink-0 transition-transform ${unfolded === it.label ? 'rotate-90' : ''}`} />
+            </button>
+            {unfolded === it.label &&
+              it.children.map((c) => (
+                <button
+                  key={c.key || c.label}
+                  onClick={() => {
+                    onClose()
+                    c.onClick()
+                  }}
+                  title={c.title}
+                  className={`${row} pl-6 py-1`}
+                >
+                  {c.dot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.dot}`} />}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate">{c.label}</span>
+                      {c.tag && <span className="ml-auto text-[10.5px] text-zinc-600 shrink-0">{c.tag}</span>}
+                    </span>
+                    {c.sub && <span className="block text-[10.5px] text-zinc-500 truncate">{c.sub}</span>}
+                  </span>
+                </button>
+              ))}
+          </div>
+        ) : (
+          <button
+            key={it.label}
+            disabled={it.disabled}
+            onClick={() => {
+              onClose()
+              it.onClick()
+            }}
+            className={`${row} ${it.danger ? 'text-red-300 hover:text-red-200' : ''}`}
+          >
+            {it.label}
+          </button>
+        )
+      )}
       {(icon || accent) && (
         <>
           {items.length > 0 && <div className="my-1 border-t border-zinc-800" />}
