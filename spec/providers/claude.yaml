@@ -159,6 +159,8 @@ probe:
            bridge-session, atis-latch, artifact-autoreact-ledger, artifact-comment-monitor,
            # custom-title: the record `/rename` writes (the demo fixture emits it too)
            custom-title,
+           # pr-link (2.1.263): written when a pull request is opened from the session
+           pr-link,
            # history-suppression (2.1.263): written when a session is resumed under another account
            # (cause restored_owner_mismatch) — happens whenever the two homes swap transcripts
            history-suppression]

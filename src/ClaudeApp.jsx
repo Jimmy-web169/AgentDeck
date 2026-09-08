@@ -493,6 +493,25 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     usage?.sessionId && active && usage.sessionId === active.id && typeof usage.contextWindow?.used_percentage === 'number'
       ? Math.min(100, Math.round(usage.contextWindow.used_percentage))
       : null
+  // "fork from here": POST /api/fork copies the transcript up to the next user
+  // prompt into a new session id (the original is untouched); the shell then
+  // opens the fork as its own tab, where "Open terminal" resumes it
+  const forkFromReply = useCallback(
+    async (ev) => {
+      const tl = sessionData?.timeline || []
+      const i = tl.indexOf(ev)
+      if (i < 0 || !root || !openSlug || !active) return
+      const next = tl.slice(i + 1).find((e) => e.kind === 'user' && e.uuid)
+      try {
+        const res = await api.fork(root, openSlug, active.id, next ? next.uuid : null)
+        loadSessions(root, openSlug)
+        onOpenSession?.('claude', { root, slug: openSlug, id: res.id, title: res.title || `${active.title || active.id.slice(0, 8)} (fork)` }, { newTab: true })
+      } catch (e) {
+        setError(e.message)
+      }
+    },
+    [sessionData, root, openSlug, active, loadSessions, onOpenSession]
+  )
   const disabledTab = (t) =>
     (t.need === 'session' && !active) || (t.need === 'subagents' && !hasSubagentsNow(active, sessions)) || (t.need === 'project' && !openSlug)
 
@@ -550,7 +569,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
                     <div className="text-[11.5px] text-zinc-600 mt-1">Nothing is written yet — open the terminal below to start; the session appears in the sidebar with its first record.</div>
                   </div>
               ) : sessionData ? (
-                <Conversation key={active?.id} data={sessionData} subagentCtx={subagentCtx} />
+                <Conversation key={active?.id} data={sessionData} subagentCtx={subagentCtx} onFork={forkFromReply} />
               ) : (
                 <Empty active={active} />
               )}

@@ -444,6 +444,27 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
     }, [sessionData, tab])
 
     const sinceEvent = lastEvent ? Math.round((Date.now() - lastEvent) / 1000) : null
+    // "fork from here" (providers with POST /api/fork — Codex today): the cut is
+    // the ordinal of the next user prompt; the fork opens in its own tab
+    const canFork = typeof api.fork === 'function' && providerId === 'codex'
+    const forkFromReply = useCallback(
+      async (ev) => {
+        const tl = sessionData?.timeline || []
+        const i = tl.indexOf(ev)
+        if (i < 0 || !root || !active) return
+        const users = tl.filter((e) => e.kind === 'user')
+        const next = tl.slice(i + 1).find((e) => e.kind === 'user')
+        const cut = next ? users.indexOf(next) + 1 : null
+        try {
+          const res = await api.fork(root, active.id, cut)
+          if (openSlug) loadSessions(root, openSlug)
+          onOpenSession?.(providerId, { root, slug: openSlug, id: res.id, title: res.title || `${active.title || active.id.slice(0, 8)} (fork)` }, { newTab: true })
+        } catch (e) {
+          setError(e.message)
+        }
+      },
+      [sessionData, root, active, openSlug, loadSessions, onOpenSession]
+    )
     // Sub-agents needs a session that actually spawned some (childCount from the
     // sessions list, hasSubagents when the provider marks it directly)
     const hasSubagents = !!active && (active.childCount > 0 || !!active.hasSubagents)
@@ -504,7 +525,7 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
                     <div className="text-[11.5px] text-zinc-600 mt-1">Nothing is written yet — open the terminal below to start; the session appears in the sidebar with its first record.</div>
                   </div>
                 ) : sessionData ? (
-                  <Conversation key={active?.id} data={sessionData} onOpenSession={openSessionById} subagentCtx={subagentCtx} />
+                  <Conversation key={active?.id} data={sessionData} onOpenSession={openSessionById} subagentCtx={subagentCtx} onFork={canFork ? forkFromReply : null} />
                 ) : (
                   <Empty active={active} />
                 )}

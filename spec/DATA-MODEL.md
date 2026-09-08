@@ -48,5 +48,11 @@ handling (and any traversal guard) inside the provider.
 ## Writes
 
 The only writes are user-initiated config edits (create/edit/delete a resource,
-open a terminal) at a chosen scope. Resource deletes go to the OS trash
+open a terminal) at a chosen scope, plus session **forks**
+(`POST /api/<provider>/fork`): a fork copies a transcript up to a cut point
+into a NEW session id — claude: truncate before a user record's `uuid`,
+rewrite `sessionId`; codex: truncate before the N-th user prompt, rewrite
+`session_meta.id` and the rollout filename — so `--resume <newId>` /
+`codex resume <newId>` continues the branch in its terminal. The original
+transcript is never modified. Resource deletes go to the OS trash
 (recoverable). The server is localhost-only and never touches credentials.
