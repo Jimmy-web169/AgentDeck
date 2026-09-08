@@ -55,6 +55,8 @@ All notable changes to AgentDeck are recorded here. The format follows
   45 s tick or a page switch.
 
 ### Fixed
+- The API log no longer repeats tmux's "no server running" line every poll
+  when no tmux server exists.
 - Antigravity terminals now light the running-terminal dot, show the right
   provider tag in Live, and end when their tab closes: the tmux metadata stored
   the CLI title (`agy`) where the client expects the provider id.

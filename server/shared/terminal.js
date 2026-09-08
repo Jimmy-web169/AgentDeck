@@ -233,7 +233,8 @@ export function listLiveTmux() {
   if (!tmux) return []
   let rows
   try {
-    rows = execFileSync(tmux, ['list-sessions', '-F', '#{session_name}\t#{session_attached}'], { encoding: 'utf8', timeout: 3000 })
+    // stderr dropped: with no tmux server running, tmux prints "no server running on …" on every poll
+    rows = execFileSync(tmux, ['list-sessions', '-F', '#{session_name}\t#{session_attached}'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] })
       .split('\n')
       .filter(Boolean)
   } catch {
@@ -247,7 +248,7 @@ export function listLiveTmux() {
     try {
       // tmux prints just the named variable; psmux (the Windows tmux stand-in)
       // prints the whole environment — pick the right line either way.
-      const env = execFileSync(tmux, ['show-environment', '-t', name, 'AGENTDECK_META'], { encoding: 'utf8', timeout: 2000 })
+      const env = execFileSync(tmux, ['show-environment', '-t', name, 'AGENTDECK_META'], { encoding: 'utf8', timeout: 2000, stdio: ['ignore', 'pipe', 'ignore'] })
       const line = env
         .split('\n')
         .map((s) => s.trim())
