@@ -22,7 +22,7 @@ already used in the code; renames are listed as decisions in §7.
 |---|---|---|
 | `Root` | `id, label, dir, exists, hasData` | one neutral probe flag (today `hasProjects` vs `hasSessions`) |
 | `Project` | `slug, cwd, sessionCount, lastActivity(ms)` | `slug` is opaque to the UI; only `cwd` is compared across providers |
-| `SessionSummary` | `id, title, firstPrompt, firstTs, lastTs, userTurns, assistantTurns, toolCalls, models[], toolCounts{}, tokens` + `cwd?, origin?('user'\|'subagent'), parentId?, childCount?, contextWindow?, mtime?, oversized?` | `origin`/`parentId` let sub-agents be plain sessions (codex) or nested (claude) |
+| `SessionSummary` | `id, title, firstPrompt, lastUserPrompt, lastUserPromptTs, firstTs, lastTs, userTurns, assistantTurns, toolCalls, models[], toolCounts{}, tokens` + `cwd?, origin?('user'\|'subagent'), parentId?, childCount?, contextWindow?, mtime?, oversized?` | `origin`/`parentId` let sub-agents be plain sessions (codex) or nested (claude) |
 | `Tokens` | `input, output, cacheRead, cacheCreate, reasoning, total` | **provider computes `total`; UI never re-derives it** (today three formulas disagree) |
 | `TimelineEvent` | `kind('user'\|'assistant'\|'system'\|'attachment'), ts, id?` + `text` (user/system) or `model, usage?, parts[]` (assistant) | `id` nullable so codex can opt out explicitly |
 | `Part` | `kind('text'\|'thinking'\|'tool_call')`; `tool_call` = `{id, name, input, result?{content, isError, meta?}, server?}` | matches OTel `tool_call` / `tool_call_response` one-to-one (raw vendor types stay: Claude `tool_use`, Codex `function_call`) |
@@ -126,7 +126,7 @@ shell; keep it that way.
    `plugins.marketplaces` objects vs strings.
 6. ~~`GET /api/browse` and `pick-folder` are byte-identical copies~~ **done 2026-09-08** — `server/shared/browse.js`.
 7. ~~Codex `getStats`/`getActivity` skip the fingerprint~~ **done 2026-09-08** — one `fingerprintOf` per file before the read, as claude does.
-8. ~~The cross-folder aggregated view~~ **dropped 2026-09-08** — built as "All folders" on Home › Stats, then removed at the maintainer's request: Stats follows the sidebar's folder chip like every other Home page.
+8. Home aggregation **revised 2026-09-09** — Provider mode preserves native root-scoped pages; Folder mode aggregates registered roots using the sidebar's provider/root exclusions. Stats drills through folders and sources, or uses native detail directly for a single root. Insights retains the complete overview without extra folder dashboards; Plugins/Resources/History remain source-owned. See §9.
 
 ## 5. Format-drift detection
 
@@ -197,6 +197,35 @@ one-line prompt pointing at that file (`server/shared/handoff.js`). Capability
 `ai_handoff`. Entry points: the three Config views (current selection as
 context) and Insights (the digest as context).
 
+## 7c. Portable conversation JSONL (host service, 2026-09-09)
+
+This is separate from the config-assistance `brief` above. The registry declares
+`capabilities.readTimeline` and `capabilities.interactiveContext`; an optional
+`validateContextTarget(root)` adapter rejects unsupported execution homes before
+launch (for example Antigravity's non-CLI data root). A provider that does not
+declare these capabilities is unsupported, not guessed from its name.
+
+The registry's `history` adapter provides `read(source)` (fingerprinted timeline)
+and `children(source)` (child locators). Independent-session providers recurse;
+nested-sidecar providers enumerate the owner's sidecars and resolve exact parent
+spawn IDs before stripping tool events. No provider-specific storage branching
+is needed in the UI. Unresolved/missing child histories are recorded explicitly.
+
+The host captures the full locally available visible conversation graph, checking
+stability across whole-graph reads, then writes a self-contained JSONL with one
+`handoff` header, conversation descriptors, and ordered message records. There
+is no SQLite or draft/approval lifecycle. Exports carry no cwd/root paths as
+metadata; original message text is preserved. Incomplete exports cannot launch.
+The source cwd is private local runtime metadata, not inferred from imported
+history. A fsynced exclusive file claim commits launch intent before spawning;
+only an in-process `HANDOFF_LAUNCH` grant can authorize a `handoffExportId` and
+matching launch/target. The provider uses its own `promptArgs` and normal
+permissions; no vendor-native transcript is imported or overwritten.
+
+See the [host collaboration layer](../server/deck/) for state, retention and
+unknown/reconcile semantics. Provider capability declarations alone do not
+establish real CLI transport compatibility; validate each adapter interactively.
+
 ## 8. Reference
 
 - Agent Plugins 1.0 — https://agent-plugins.org/ (packaging only; Anthropic absent)
@@ -204,3 +233,73 @@ context) and Insights (the digest as context).
 - OpenTelemetry GenAI semantic conventions — https://opentelemetry.io/docs/specs/semconv/gen-ai/
 - deepseek-ai/deepseek-harness — plugin-per-concern harness; session log = append-only typed events with `seq`, messages derived
 - Research notes (local, git-ignored): `tmp/research/standards-2026-09.md`, `tmp/research/antigravity-*.md`; provider audit 2026-09-07 folded into §4
+
+## 9. Cross-source Home adapter
+
+The server registry may expose a `home` adapter for cross-source Home pages.
+This is distinct from the interactive history/handoff adapter and from the
+provider's native UI `homePages`. The shared service lives in
+`server/deck/home.js`; the reusable dispatch adapter is
+`server/deck/homeAdapter.js`. No provider ID switches belong in aggregation.
+
+The resolver supplies `{ provider, root, rootLabel, allProjects: true }` for
+each registered root. Folder catalog availability and sidebar filters are not
+dependencies of these reads. Roots without conversations still supply user
+resources and plugins. Legacy explicit adapter project filters remain supported:
+an empty projects array without `allProjects` means no projects, never all.
+
+Optional reader methods (unsupported methods produce source-level notices):
+
+| Method | Result contract |
+| --- | --- |
+| `stats(source)` | `{ projects, fields: { common, specific }, incomplete? }`; per-project counters and provider-computed token totals, filtered before aggregation |
+| `insights(source)` | `{ records }`; project-native session summaries with IDs, timestamps, counts, `isSubagent` and `oversized` flags |
+| `history(source)` | `{ history, coverage? }`; unpaginated native prompts with stable source-local `rowId`, optional `sessionId`, `project`, `ts`, `display` |
+| `plugins(source)` | `{ installed, marketplaces? }`; keep enabled state unknown when it is not reported |
+| `resources(source, project?)` | `{ items: [{ label, names }], readOnly, base }`; metadata only; omitted project means User scope |
+
+`statsNote` describes the provider's actual accounting population. The common
+dispatch adapter requests `home=1`; explicit project-scoped callers may also supply `slugs=<JSON array>` and `cwds=<JSON array>`.
+Native Stats and Activity handlers filter the slugs before scanning. Home
+Activity returns records instead of pre-aggregated daily buckets; legacy callers
+retain their original response. Native History filters before the legacy
+500-record limit; `coverage` reports unattributed, malformed and unreadable data.
+
+`GET /api/deck/home` accepts `view`, JSON `excluded` provider IDs, optional
+`excludedRoots` (JSON array of canonical `JSON.stringify([provider, root])`
+keys), optional
+History `search`/`cursor`, and `fresh=1`. Legacy `folder`/`unavailable`
+parameters do not narrow the read. Source identities remain exact
+`(provider, root, sessionId)`; Stats/Insights include canonical folder breakdowns
+alongside overall totals. Unresolved folders remain source-specific.
+History retains unattributed/old-folder prompts. Cursors bind to the query and
+config directory and expire after two minutes. No reader invokes a writer.
+
+Client Home follows the sidebar preference. Provider mode uses the selected
+provider/root's native `homePages` and the complete shared Insights page. Folder
+mode reads all registered roots except providers or exact roots excluded in the sidebar;
+there is no second filter row or independent per-tab scope. Legacy `homeScope`
+links still parse but cannot override the sidebar. An explicit `homeSource`
+in Folder mode opens native User resources or plugins with exact ownership.
+
+Stats drill-down reuses the provider's `homePages.stats`, whose optional props
+`initialProject` (native slug), `breadcrumbPrefix` and `embedded` provide a
+project entry point within Folder mode. Existing `root`, `focus`, `onOpen`
+behavior stays unchanged when these props are absent. Providers forwarding to
+shared `Stats` should forward all three optional props. A provider without a
+detail page gets an explicit unsupported state, never another provider's page.
+With one selected root, Stats renders that root's registered native page without
+an initial project. Count the selected scope, not successful reads: an unreadable
+second root must not trigger this shortcut. A folder with one member opens its
+native project details directly. Root exclusions apply before adapter reads and
+participate in cache and History cursor identity; same-named roots in different
+providers never share a filter identity.
+
+Insights folder breakdowns include `sources`, each with exact provider/root,
+native `slug`/`cwd`, and recomputed `activity`. The global and folder summaries
+use canonical folder keys; source details retain native project slugs for
+navigation. These remain response metadata; the UI shows only the complete global
+Insights presentation, including its original Needs attention section, without
+additional folder/source dashboards.
+Project configuration stays in the native project Config view. No standalone
+Folder detail route or endpoint remains; `/api/deck/folders` is catalog metadata.

@@ -45,7 +45,8 @@ test('terminal survives frontend shutdown, attaches by exact key, persists bindi
     id: 'fixture', title: 'fixture', envKey: 'FIXTURE_CONFIG_DIR',
     findBin: () => path.join(dir, 'fixture-cli'), resumeArgs: (id) => ['--resume', id],
     resolveSession: ({ meta }) => { discoveryCalls++; return meta.id ? null : observed },
-    resolveSavedSession: ({ id }) => ['saved-id', 'manual-id'].includes(id) ? { id, slug: dir } : null,
+    resolveSavedSession: ({ id }) => ['saved-id', 'manual-id', 'other-folder', 'unknown-folder'].includes(id)
+      ? { id, slug: dir, cwd: id === 'other-folder' ? os.tmpdir() : id === 'unknown-folder' ? null : dir } : null,
   }
   pool.registerTerminalProvider(config)
   const identity = terminalIdentity(config.id, 'account')
@@ -94,6 +95,9 @@ test('terminal survives frontend shutdown, attaches by exact key, persists bindi
   await assert.rejects(bind({ bindSessionId: 'manual-id' }), { status: 400 })
   await assert.rejects(bind({ terminalKey: a.key, bindSessionId: 'unknown-id' }), { status: 404 })
   await assert.rejects(bind({ terminalKey: a.key, bindSessionId: 'saved-id' }), { status: 409 })
+  await assert.rejects(bind({ terminalKey: a.key, bindSessionId: 'other-folder', cwd: os.tmpdir() }), { status: 409 })
+  await assert.rejects(bind({ terminalKey: a.key, bindSessionId: 'unknown-folder' }), { status: 409 })
+  await assert.rejects(bind({ terminalKey: second.key, bindSessionId: 'manual-id' }), { status: 409 })
   const manual = await bind({ terminalKey: a.key, bindSessionId: 'manual-id' })
   assert.equal(manual.id, 'manual-id')
   assert.equal(manual.key, a.key)

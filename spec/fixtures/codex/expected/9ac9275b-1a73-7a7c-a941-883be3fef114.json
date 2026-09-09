@@ -3,6 +3,8 @@
     "id": "9ac9275b-1a73-7a7c-a941-883be3fef114",
     "title": "Scan test/ for tests that use real timers (setTimeout without a fake clock) and list them.",
     "firstPrompt": "Scan test/ for tests that use real timers (setTimeout without a fake clock) and list them.",
+    "lastUserPrompt": "Scan test/ for tests that use real timers (setTimeout without a fake clock) and list them.",
+    "lastUserPromptTs": "2026-09-01T06:21:30.000Z",
     "firstTs": "2026-09-01T06:21:30.000Z",
     "lastTs": "2026-09-01T06:22:44.213Z",
     "cwd": "/home/demo/code/orbit-api",

@@ -10,15 +10,20 @@ import { baseName, shortPath } from './paths.js'
 //                color = any hex (lib/accent.js; legacy names still resolve) — tints the icon only
 //                icon  = one of WORKSPACE_ICON_KEYS (glyphs in components/shared/workspaceIcons.jsx)
 //   item      = { kind: 'project' | 'session', provider, root, rootLabel, slug, cwd, project, id?, title? }
+//             | { kind: 'folder', folderId, cwd, name } (live canonical reference)
 const KEY = 'agentdeck_workspaces'
 import { normalizeColor } from './accent.js'
 export const WORKSPACE_ICON_KEYS = ['layers', 'folder', 'star', 'bolt', 'rocket', 'flask', 'book', 'briefcase', 'globe', 'code', 'heart', 'tag']
 
 export const projectKey = (p) => `${p?.provider || ''}|${p?.root || ''}|${p?.slug || ''}`
-export const itemKey = (it) => `${projectKey(it)}|${it?.kind === 'session' || it?.id ? it.id || '' : ''}`
+export const isFolderItem = (it) => it?.kind === 'folder'
+export const folderItem = (folder) => ({ kind: 'folder', folderId: folder.id, cwd: folder.cwd, name: folder.name || baseName(folder.cwd) })
+export const itemKey = (it) => isFolderItem(it) ? JSON.stringify(['folder', it.folderId]) : `${projectKey(it)}|${it?.kind === 'session' || it?.id ? it.id || '' : ''}`
 export const sourceKey = (it) => `${it?.provider || ''}|${it?.root || ''}`
 
 function normItem(it) {
+  if (isFolderItem(it)) return typeof it.folderId === 'string' && it.folderId && typeof it.cwd === 'string' && it.cwd
+    ? { kind: 'folder', folderId: it.folderId, cwd: it.cwd, name: it.name || baseName(it.cwd) } : null
   if (!it || !it.provider || !it.root || !it.slug) return null
   const kind = it.kind === 'session' || (it.kind == null && it.id) ? 'session' : 'project'
   return {
@@ -128,11 +133,12 @@ export function setWorkspaceIcon(id, icon) {
 // row into its workspace the way pinning moves it into Pinned: the sidebar
 // hides a held project from Projects and a held session from its project's
 // inline list, so nothing is listed twice (searching shows everything again).
-export function workspaceHolding(raw, list = workspaces) {
+export function workspaceHolding(raw, list = workspaces, folders = []) {
   const it = normItem(raw)
   if (!it) return null
   const k = itemKey(it)
-  return list.find((w) => w.items.some((x) => itemKey(x) === k)) || null
+  return list.find((w) => w.items.some((x) => itemKey(x) === k) ||
+    (!isFolderItem(it) && folderProjects(w, folders).some((p) => projectKey(p) === projectKey(it)))) || null
 }
 
 export function addToWorkspace(id, raw) {
@@ -154,10 +160,25 @@ export const inWorkspace = (w, raw) => {
   return !!it && w.items.some((x) => itemKey(x) === itemKey(it))
 }
 
-// distinct provider · folder sources of a workspace (what tells its members apart)
-export const workspaceSources = (w) => {
+// Resolve against the current catalog only. Missing/moved folders are never
+// rebound by path or name; persisted membership never stores source snapshots.
+export function folderProjects(w, folders = []) {
+  const ids = new Set(w.items.filter(isFolderItem).map((it) => it.folderId))
+  return folders.filter((f) => f.resolved && ids.has(f.id)).flatMap((f) => f.sources
+    .filter((s) => s.slug).map((s) => normItem({ ...s, kind: 'project', cwd: s.cwd || f.cwd, project: baseName(f.cwd) }))).filter(Boolean)
+}
+
+// The folder tree renders covered members once; explicit membership stays
+// stored, so removing a folder restores separately added projects/sessions.
+export function standaloneWorkspaceItems(w, folders = []) {
+  const covered = new Set(folderProjects(w, folders).map(projectKey))
+  return w.items.filter((it) => !isFolderItem(it) && !covered.has(projectKey(it)))
+}
+
+// Distinct provider/root sources, including current folder membership.
+export const workspaceSources = (w, folders = []) => {
   const seen = new Map()
-  for (const it of w.items) {
+  for (const it of [...w.items.filter((it) => !isFolderItem(it)), ...folderProjects(w, folders)]) {
     const k = sourceKey(it)
     if (!seen.has(k)) seen.set(k, { key: k, provider: it.provider, root: it.root, rootLabel: it.rootLabel })
   }
@@ -228,10 +249,10 @@ export function adoptPendingProjects(indexProjects = []) {
   if (keep.length !== list.length) saveAdoptions(keep)
 }
 
-export function suggestWorkspaces(indexProjects = [], current = workspaces) {
+export function suggestWorkspaces(indexProjects = [], current = workspaces, folders = []) {
   // a folder group counts as "dealt with" as soon as ANY of its projects is in
   // some workspace — the user made a call about it
-  const grouped = new Set(current.flatMap((w) => w.items.map(projectKey)))
+  const grouped = new Set(current.flatMap((w) => [...w.items.filter((it) => !isFolderItem(it)), ...folderProjects(w, folders)].map(projectKey)))
   const byCwd = new Map()
   for (const p of indexProjects) {
     if (!p.cwd) continue

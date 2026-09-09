@@ -198,7 +198,7 @@ export default function Resources({ root, slug }) {
       )}
       <span className={`text-[12.5px] font-mono flex-1 truncate ${s.exists ? 'text-zinc-200' : 'text-zinc-500'}`}>{s.name}</span>
       {s.exists ? (
-        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 shrink-0">in project</span>
+        <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 shrink-0">{isProject ? 'in project' : 'in source'}</span>
       ) : (
         <span className="text-[9px] px-1.5 py-0.5 rounded border border-dashed border-sky-500/40 text-sky-300 shrink-0">create</span>
       )}
@@ -209,7 +209,7 @@ export default function Resources({ root, slug }) {
     <div className="flex flex-col h-full">
       <div className="px-4 py-2 border-b border-zinc-800 text-[12px] flex items-center gap-2 shrink-0">
         <span className={`px-1.5 py-0.5 rounded text-[10px] ${isProject ? 'bg-sky-500/15 text-sky-300' : 'bg-zinc-500/15 text-zinc-300'}`}>
-          {isProject ? 'PROJECT scope' : 'FOLDER (user) scope'}
+          {isProject ? 'PROJECT scope' : 'USER scope'}
         </span>
         <span className="text-zinc-500 font-mono truncate">{inv.base}</span>
         <span className="flex-1" />
@@ -235,7 +235,7 @@ export default function Resources({ root, slug }) {
         <div className="w-72 shrink-0 border-r border-zinc-800 overflow-y-auto">
           {/* legend so the two states are unmistakable */}
           <div className="px-3 py-1.5 border-b border-zinc-800/60 flex items-center gap-3 text-[10px] text-zinc-500">
-            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> in project</span>
+            <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400" /> {isProject ? 'in project' : 'in source'}</span>
             <span className="flex items-center gap-1 text-sky-300">+ tap to create / add</span>
           </div>
 
@@ -251,7 +251,7 @@ export default function Resources({ root, slug }) {
                   {label}
                   <span
                     className={`text-[10px] normal-case px-1 rounded ${(inv[key] || []).length ? 'bg-emerald-500/15 text-emerald-300' : 'text-zinc-600'}`}
-                    title={(inv[key] || []).length ? 'in project' : 'none yet'}
+                    title={(inv[key] || []).length ? (isProject ? 'in project' : 'in source') : 'none yet'}
                   >
                     {(inv[key] || []).length}
                   </span>
@@ -287,7 +287,7 @@ export default function Resources({ root, slug }) {
               )}
               {(inv[key] || []).map((it) => (
                 <button key={it.name} onClick={() => open(key, it.name)} className={`w-full text-left px-3 py-1.5 hover:bg-ink-700/50 flex items-start gap-2 ${sel?.kind === key && sel?.name === it.name ? 'bg-sky-500/10 border-l-2 border-sky-500' : ''}`}>
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-1.5" title="in project" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mt-1.5" title={isProject ? 'in project' : 'in source'} />
                   <span className="min-w-0">
                     <span className="block text-[12.5px] text-zinc-200 truncate font-mono">{it.name}</span>
                     {it.description && <span className="block text-[10.5px] text-zinc-500 truncate">{it.description}</span>}

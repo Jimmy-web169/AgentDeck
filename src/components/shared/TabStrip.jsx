@@ -28,6 +28,8 @@ export default function TabStrip({
   onNew,
   onReorder,
   onSearch,
+  onLive,
+  liveCount = 0,
   onHome,
   onCopyLink,
   sidebarCollapsed,
@@ -165,6 +167,10 @@ export default function TabStrip({
         <span className="hidden md:inline">Search…</span>
         <kbd className="hidden md:inline text-[10px] px-1 py-px rounded bg-ink-700 text-zinc-500 border border-zinc-800">{MOD} K</kbd>
       </button>
+      {onLive && <button onClick={onLive} title="Live sessions & dashboards · all providers" className="shrink-0 self-center mr-2 h-6 flex items-center gap-1.5 px-2 rounded-full bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 text-[11.5px]">
+        <span className={`w-1.5 h-1.5 rounded-full ${liveCount ? 'bg-emerald-400' : 'bg-zinc-500'}`} />
+        Live <span className="tabular-nums">{liveCount}</span>
+      </button>}
       {onToggleSidebar && (
         <button onClick={onToggleSidebar} title={`${sidebarCollapsed ? 'Show' : 'Hide'} sidebar  (${MOD_WORD}+B)`} className={`shrink-0 self-center mr-1 w-7 h-7 rounded-md flex items-center justify-center hover:bg-ink-700 ${sidebarCollapsed ? 'text-zinc-300 bg-ink-800' : 'text-zinc-500 hover:text-zinc-100'}`}>
           <PanelLeftIcon />
@@ -204,7 +210,7 @@ export default function TabStrip({
             ['Close tab', () => onClose(menu.key), true, 'Alt W'],
             ['Close other tabs', () => onCloseOthers(menu.key), tabs.length > 1],
             ['Close tabs to the right', () => onCloseRight(menu.key), menuIdx < tabs.length - 1],
-            ['Copy link', () => onCopyLink(menu.key), !!menuTab.target?.provider],
+            ['Copy link', () => onCopyLink(menu.key), !!menuTab.target],
           ].map(([label, fn, enabled, keys]) => (
             <button
               key={label}

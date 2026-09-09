@@ -7,6 +7,14 @@ All notable changes to AgentDeck are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Outer folders have a matching ⋯ → Workspaces menu for dynamic whole-folder
+  membership. Source identities and explicit project/session memberships are
+  retained, duplicate display is suppressed, and removing a folder only ungroups it.
+- Outer Folder-mode folders can be pinned as live canonical-folder references.
+  Their provider/root tree moves into Pinned without losing expansion state;
+  membership follows current sources and filters, with existing individual pins
+  and Workspace exclusions preserved. Activity and search reveal that same
+  sidebar tree, while Provider mode keeps its existing source-only pins.
 - **New conversation here with…** on every project row's ⋯ menu (Projects,
   Pinned, a workspace's project groups): the same folder opened by another
   tracked account or provider, without switching the folder chip or picking
@@ -69,6 +77,29 @@ All notable changes to AgentDeck are recorded here. The format follows
   note under Home › Activity's keyboard map is gone too.
 
 ### Changed
+- Folder trees distinguish provider headings, quieter root labels and brighter
+  session titles; an inset guide line separates session lists from source rows.
+- Stats values no longer truncate with an ellipsis. The existing metric cards
+  wrap to fit the content area's width without reducing the number font size.
+- Folder-mode folder, provider and root counts share a stable right-aligned
+  column, reserving the same action space even on rows without pin/menu controls.
+- Ending a dashboard removes its tracking JSON and closes its tab without ending
+  source agents. Failed verification/termination retains tracking for retry;
+  verified legacy End records and empty viewer containers are retired as well.
+- Folder-mode source projects reuse Provider-mode pin and ⋯ actions, including
+  Workspace membership and new conversations. Pinned/grouped entries move out
+  of the ordinary tree consistently, and Folder project menus stay within the
+  viewport without widening or stretching the sidebar.
+- Home follows the sidebar mode: Provider / root restores native page navigation
+  and the full Insights report; Folder mode filters individual roots as well as
+  providers in the same sidebar group. Stats drills through folders and source
+  briefs, skipping briefs for single-source folders and using the full native
+  page when only one root is selected. Insights retains its complete report
+  without an extra per-folder dashboard.
+  Plugins and Resources keep explicit native source ownership, and History stays
+  read/search-only. Redundant Stats root labels and the extra Home filter row are
+  removed. Activity restores its original viewport breakpoints, 320px right
+  column and compact Recent projects rows, with local overflow handling.
 - Graphite is the default theme (Midnight stays the demo theme).
 - `make update` also runs `agy update`.
 - Demo: Midnight, twelve shots (Antigravity session, Config › Ask the agent, the

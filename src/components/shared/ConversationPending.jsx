@@ -17,7 +17,7 @@ export default function ConversationPending({ target, error, onRetry }) {
       <p className="text-xs text-zinc-500 max-w-md">{saved
         ? 'Record loading does not block opening or using the terminal below.'
         : 'Start or use the terminal below. This area updates when the provider saves a conversation record.'}</p>
-      {delayed && !saved && target?.terminalKey && <p className="text-xs text-zinc-400 max-w-md">No record identified yet. Keep working, or choose “Link saved conversation” in the terminal if a record is already available.</p>}
+      {delayed && !saved && target?.terminalKey && <p className="text-xs text-zinc-400 max-w-md">No conversation record detected yet. You can keep using the terminal; this view will sync automatically when the record appears.</p>}
       {saved && (error || delayed) && onRetry && <button onClick={onRetry} className="text-xs text-sky-300 hover:text-sky-200">Retry loading record</button>}
     </div>
   )

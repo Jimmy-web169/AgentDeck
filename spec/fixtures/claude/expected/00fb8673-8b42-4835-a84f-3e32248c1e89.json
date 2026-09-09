@@ -3,6 +3,8 @@
     "id": "00fb8673-8b42-4835-a84f-3e32248c1e89",
     "title": "Add a rate limit to POST /v1/orders — 60 requests per minute per API key, and answer 429 with a Retry-After header.",
     "firstPrompt": "Add a rate limit to POST /v1/orders — 60 requests per minute per API key, and answer 429 with a Retry-After header.",
+    "lastUserPrompt": "Then, write a migration that adds an `archived_at` column to orders, and a nightly job that archives orders older than 18 months.",
+    "lastUserPromptTs": "2026-08-18T08:28:20.000Z",
     "firstTs": "2026-08-18T08:15:00.000Z",
     "lastTs": "2026-08-18T08:31:41.000Z",
     "userTurns": 3,

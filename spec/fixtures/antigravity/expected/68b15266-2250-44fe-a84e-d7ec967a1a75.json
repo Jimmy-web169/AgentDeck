@@ -3,6 +3,8 @@
     "id": "68b15266-2250-44fe-a84e-d7ec967a1a75",
     "title": "The webhook retry test is flaky — fails about one run in five with a timeout. Find the cause and fix it.",
     "firstPrompt": "The webhook retry test is flaky — fails about one run in five with a timeout. Find the cause and fix it.",
+    "lastUserPrompt": "Next, add request logging with a correlation id to every route. Reuse an incoming X-Request-Id when present.",
+    "lastUserPromptTs": "2026-08-31T08:40:00Z",
     "firstTs": "2026-08-31T08:30:00Z",
     "lastTs": "2026-08-31T08:40:59Z",
     "cwd": null,

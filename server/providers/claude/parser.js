@@ -82,6 +82,7 @@ function isToolResultCarrier(rec) {
 
 // Some user records are slash-command / meta envelopes with no real prose.
 function isMetaUser(rec) {
+  if (rec.isMeta === true) return true
   const text = contentToText(rec.message?.content)
   const stripped = text.replace(STRIP_TAGS, '').trim()
   return stripped.length === 0 && /<command-name>|<local-command-stdout>|<local-command-caveat>/.test(text)
@@ -223,6 +224,7 @@ export function summarize(records, id) {
   let customTitle = null
   let aiTitle = null
   let firstPrompt = null
+  let lastUserPrompt = '', lastUserPromptTs = null
   let firstTs = null
   let lastTs = null
   let userTurns = 0
@@ -260,9 +262,12 @@ export function summarize(records, id) {
     } else if (rec.type === 'user') {
       if (isToolResultCarrier(rec) || isMetaUser(rec)) continue
       userTurns++
-      if (!firstPrompt) {
-        const txt = cleanSnippet(contentToText(rec.message?.content))
-        if (txt) firstPrompt = txt
+      const txt = cleanSnippet(contentToText(rec.message?.content))
+      if (!firstPrompt && txt) firstPrompt = txt
+      const hasAttachment = Array.isArray(rec.message?.content) && rec.message.content.some((p) => ['image', 'document'].includes(p?.type))
+      if (txt || hasAttachment) {
+        lastUserPrompt = txt || '(Image or attachment)'
+        lastUserPromptTs = rec.timestamp || null
       }
     }
   }
@@ -271,6 +276,7 @@ export function summarize(records, id) {
     id,
     title: customTitle || aiTitle || firstPrompt || '(untitled session)',
     firstPrompt: firstPrompt || '',
+    lastUserPrompt, lastUserPromptTs,
     firstTs,
     lastTs,
     userTurns,

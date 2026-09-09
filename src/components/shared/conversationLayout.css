@@ -1,0 +1,39 @@
+/* Bound transcript content, including inline subagent conversations, without
+   changing app chrome, terminal sizing, typography or message contents. */
+.conversation-content {
+  width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* break-word does not reduce min-content width. Long URLs, IDs and opaque
+   advisor payloads must also participate in intrinsic sizing and wrap. */
+.conversation-content .md,
+.conversation-content .whitespace-pre-wrap {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.conversation-content .conversation-message-meta {
+  flex-wrap: wrap;
+}
+
+/* Preserve code formatting and wide tables. Only the individual block may
+   scroll horizontally, never the entire conversation pane. */
+.conversation-content pre {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.conversation-content .md table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.conversation-content .md img {
+  max-width: 100%;
+  height: auto;
+}

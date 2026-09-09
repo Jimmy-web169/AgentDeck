@@ -177,7 +177,7 @@ a **navigation-first workbench**. The short version:
 |---|---|---|
 | Providers | Claude Code, Codex | + Google Antigravity (`agy`), through one provider contract |
 | Shape | one provider at a time; session list left, transcript right | Chrome-style tabs across providers *and* tracked folders, one persistent sidebar, ⌘/Ctrl+K |
-| Home | — | Activity, Stats, Insights, History, Plugins, Resources, per tracked folder |
+| Home | — | Activity, Stats, Insights, History, Plugins, Resources, following the sidebar mode |
 | Sub-agents | a modal per agent | the thread inline under the tool call that spawned it, plus the Sub-agents tab |
 | Organising | — | pins, workspaces grouped by project with their own colour, provider accents, three themes |
 | AI | — | Ask the agent (config, interview-first) and an Insights digest hand-off; `find-skills` bundled |
@@ -376,6 +376,120 @@ AgentDeck's **Resources → Skills → ↓ install**), then **paste this to Clau
 ```text
 Use the onboard-usage-bar skill to set up AgentDeck's usage bar: wrap my existing Claude Code status line without modifying it, so AgentDeck can read my 5-hour / weekly rate limits and context usage. Ask me before editing settings.json.
 ```
+
+## Observable collaboration
+
+AgentDeck supports Folder-first navigation, experimental live tmux dashboards,
+and portable conversation exports. **Live**, beside Search in the top tab bar,
+is available on every page, even with no running sessions. Its Sessions and
+Dashboards tabs manage terminals and existing layouts; dashboards no longer add
+a page to Home. Enter focuses an existing session tab or opens a new one.
+End dashboard terminates only its viewer container, removes its tracking JSON
+under `.agentdeck/dashboards/`, and closes its tab. The original agents continue
+running. Closing a tab alone does not end the dashboard. Unavailable containers
+can also be explicitly ended to remove their records; verification failures keep
+the record for a safe retry.
+
+In **Preferences → Sidebar → Project grouping → Folder mode**, the sidebar
+automatically groups projects by their canonical working directory across all
+tracked providers and roots. Home no longer has a separate Folders page; old
+Home Folders links and saved tabs fall back to Activity. The tree is
+Folder → Provider → Sessions; a provider
+with multiple roots adds collapsible account groups. Only the active conversation's
+branch opens automatically. Top provider chips hide/show the whole provider;
+providers with multiple roots also expose individual account chips. Filters do
+not navigate, untrack sources or stop sessions; + manages sources.
+Filters persist, and Show all restores excluded providers and roots. Unavailable working
+folders are hidden by default; Preferences → Sidebar → Show unavailable folders
+reveals their read-only history entries without enabling launches into old paths.
+No manual Workspace membership is required. Each source project uses the same
+pin and ⋯ actions as Provider mode, including new conversations and Workspace
+membership. Pinning or grouping moves that exact source project into Pinned or
+Workspaces; searching or hiding those sections shows it in the tree again.
+Session rows follow the same rule. Source identities remain distinct, unavailable paths are not
+merged by guesswork, and natural folder-name order stays stable while sessions
+write (full paths break name ties). New conversations
+choose an explicit provider/root and retain the folder's cwd. The original
+Provider / root mode remains available; this setting does not move data.
+
+The outer folder itself can also be pinned. Its existing tree moves into Pinned
+with its expansion state intact; unpinning restores its normal place. Folder pins
+reference the canonical folder ID and dynamically include newly tracked sources,
+while still respecting provider/root filters and individual project/session
+pinning or Workspace membership. Empty or unavailable references remain removable
+and are never rebound by matching a folder name. Folder pins appear only in Folder
+mode, including Activity's Pinned and search; those entry points reveal the same
+sidebar tree rather than opening a new folder page. Existing source pins remain
+unchanged and share the existing browser-local pin store.
+
+An outer folder's **⋯ → Workspaces** adds the entire canonical folder to an
+existing or new Workspace. Its provider/root tree moves there, follows newly
+tracked sources, and remains accessible in either sidebar mode. Folder-mode
+source filters and the Workspace's own source filter affect visibility only.
+Explicit project/session memberships covered by the folder are displayed once,
+not deleted: removing the folder restores those separately added members.
+Missing folders remain removable and are never reassigned by matching a path.
+Membership reuses the existing browser-local Workspace store; adding/removing
+a grouping never moves conversation files or stops terminals.
+
+**Home → Stats, Insights, History, Plugins and Resources** follow the sidebar
+mode. Provider / root mode keeps the original native pages for the selected
+root, including the complete Insights charts. Folder mode includes all registered
+provider/root combinations enabled in the sidebar, with no second set of filters.
+
+- In Folder mode, Stats shows combined totals, then clickable folders and source
+  briefs leading to complete project details. A single selected root uses its
+  full native Stats page directly; a folder with one source skips the brief.
+  Stats retains its session drill-down. Insights keeps the complete heatmap,
+  rhythms and distributions without an additional per-folder dashboard.
+  Stats keeps provider/root accounting and provider-specific token fields separate.
+  Unavailable folders are hidden by default in the breakdown, but still contribute
+  to totals. Insights recomputes active days as a union across main conversations.
+- History merges native prompt history by time and pages a frozen result set.
+  Search runs before pagination. Unattributed prompts and records from old working
+  directories remain visible. History is a reading/search page, with no conversation
+  navigation action. Refresh starts a new snapshot; cursors expire after two minutes.
+- Plugins lists installations per provider/root, including roots without projects,
+  and distinguishes unknown enabled state from disabled. Inventory is not evidence
+  of runtime loading.
+- Resources lists user-level inventories per registered provider/root. Opening
+  an inventory leads to the source's native page, with explicit ownership and
+  read-only restrictions. Plugins likewise opens its native source details.
+  Project resources remain in the project's Config view, not Home.
+- Activity stays global. Recent projects follows the sidebar mode in Preferences;
+  compact folder rows link directly to their exact provider/root projects.
+- Standalone Folder pages are retired. Old `#/folder/…` links and saved tabs return
+  to Activity. The folder catalog remains the internal source for sidebar grouping.
+
+Home aggregation uses read-only provider adapters and bounded, short-lived
+in-memory caches. It does not create a database, exported history files, or a new
+copy of provider configuration. Use Refresh to retrieve current data.
+
+In a saved conversation, beside the terminal
+controls, **Export JSONL** saves history only; **Continue with another AI** saves
+the same format and opens the selected provider/root in a new tab, using the
+source conversation's working folder. It never injects into an existing agent.
+
+Exports live in `<configDir>/.agentdeck/handoffs/` (the AgentDeck directory by
+default). Filenames contain local export time with UTC offset, project name,
+source provider and a short unique ID. The first JSONL record contains `handoff`:
+format version, full ID, UTC export time, project/provider, optional next task,
+completeness and reading guidance. Subsequent records contain complete locally
+available visible main/subagent conversations with separate identities and
+parent links; not raw tool output, thinking or system instructions. Original
+paths in conversation text are not rewritten; no cwd/root paths are added as
+export metadata. Copy the JSONL to another machine and explicitly choose that
+machine's working folder and provider/root before continuing there.
+
+Conversation exports do not use SQLite. Tiny local launch receipts live separately
+in `.agentdeck/runtime/handoffs/`; they prevent repeat launches but are not needed
+to read an exported JSONL. Missing subagent history is recorded as incomplete and
+blocks direct sending. Unstable or oversized captures fail explicitly, never
+silently shorten history (current safety limits: 1000 conversations / 64 MiB of
+visible text, plus each provider's native parse limit). Long histories are given
+to the receiving AI as a file to read in chunks, not a giant command-line prompt.
+`.agentdeck/` is Git-ignored; exports remain until you remove them. If a launch
+is uncertain, check the existing conversation instead of resending.
 
 ## Security
 

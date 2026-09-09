@@ -3,6 +3,8 @@
     "id": "c3a9f0d4-2b1e-4f6a-9c8d-5e7f1a2b3c4d",
     "title": "Review src/middleware/requestId.js for edge cases (STRICTLY READ-ONLY). Report findings only.",
     "firstPrompt": "Review src/middleware/requestId.js for edge cases (STRICTLY READ-ONLY). Report findings only.",
+    "lastUserPrompt": "Review src/middleware/requestId.js for edge cases (STRICTLY READ-ONLY). Report findings only.",
+    "lastUserPromptTs": "2026-09-01T06:20:10Z",
     "firstTs": "2026-09-01T06:20:10Z",
     "lastTs": "2026-09-01T06:21:40Z",
     "cwd": null,

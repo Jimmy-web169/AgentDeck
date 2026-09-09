@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import crypto from 'node:crypto'
+import { homeProjects, homeHistory } from '../../shared/homeQuery.js'
 import {
   rootsWithMeta,
   renameRoot,
@@ -23,6 +24,7 @@ import {
 import { safeTrash } from '../../shared/trash.js'
 import { probeStatus, runProbe, acceptProbe } from '../../shared/formatProbe.js'
 import { writeBrief, composeBrief, seedPrompt } from '../../shared/handoff.js'
+import { handoffLaunch } from '../../deck/handoffStore.js'
 import { HOME as USER_HOME } from '../../shared/roots.js'
 import { readRecords, buildTimeline, summarize } from './parser.js'
 import { addTokens, tokenFields, zeroTokens as zeroTokensShared } from '../../shared/tokens.js'
@@ -291,6 +293,7 @@ const zeroTokens = () => zeroTokensShared([...TOKEN_SPECIFIC, 'cacheCreate'])
 // per-session breakdown via GET /api/sessions?root=&slug= .
 function getStats(q) {
   const root = resolveRoot(q.get('root'))
+  const selected = homeProjects(q), incomplete = []
   let sessions = 0
   let userTurns = 0
   let toolCalls = 0
@@ -300,6 +303,7 @@ function getStats(q) {
   const projects = []
   let subagentSessions = 0
   for (const proj of listProjects(root.dir)) {
+    if (selected && !selected.has(proj.slug)) continue
     // one population everywhere: `sessions` counts top-level rollouts (what the
     // sidebar lists), `subagentSessions` the spawned children; turns and tokens
     // add up over both, so the root numbers equal the sum of the projects
@@ -314,6 +318,7 @@ function getStats(q) {
         () => sessionSummary(f.file, f.id, fp || undefined),
         (e) => oversizeStub(f.id, e) // counts as a session, contributes zeros
       )
+      if (s.oversized) incomplete.push({ slug: proj.slug, id: f.id, reason: 'Transcript too large; usage is unavailable' })
       if (f.isSubagent) {
         subagentSessions++
         acc.subagentSessions++
@@ -341,22 +346,27 @@ function getStats(q) {
   projects.sort((a, b) => b.lastActivity - a.lastActivity)
   // `fields` tells the UI which token fields every provider shares (add these up
   // across folders) and which are Codex's own
-  return { root: root.id, projectCount: projects.length, sessions, subagentSessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
+  return { root: root.id, projectCount: projects.length, sessions, subagentSessions, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC), ...(q.get('home') === '1' ? { incomplete } : {}) }
 }
 
 // --- history -----------------------------------------------------------------
 
 function getHistory(q) {
   const root = resolveRoot(q.get('root'))
+  const projectCache = new Map()
   const projectOfId = (id) => {
+    if (projectCache.has(id)) return projectCache.get(id)
     try {
       const cwd = sessionFileById(root.dir, id)?.cwd
-      return cwd && cwd !== NO_CWD ? cwd : null
+      const project = cwd && cwd !== NO_CWD ? cwd : null
+      projectCache.set(id, project)
+      return project
     } catch {
       return null
     }
   }
   const out = []
+  let readError = null, malformed = 0
   try {
     for (const line of fs.readFileSync(path.join(root.dir, 'history.jsonl'), 'utf8').split('\n')) {
       const s = line.trim()
@@ -367,10 +377,10 @@ function getHistory(q) {
         // the rollout index when the thread is known (history.jsonl has none)
         const sid = o.session_id || null
         out.push({ display: o.text || '', project: (sid && projectOfId(sid)) || null, sessionId: sid, ts: o.ts ? o.ts * 1000 : null })
-      } catch {}
+      } catch { malformed++ }
     }
-  } catch {}
-  return { root: root.id, history: out.reverse().slice(0, 500) }
+  } catch (e) { readError = e.code === 'ENOENT' ? 'No prompt-history file recorded by this source' : e.message }
+  return { root: root.id, ...homeHistory(out, q, readError, malformed) }
 }
 
 // --- configurable resources (user scope + project scope) ---------------------
@@ -512,7 +522,9 @@ async function postTerminal(_q, body) {
     briefFile = writeBrief(composeBrief({ ...body.brief, providerLabel: 'Codex', cwd }), { key })
     promptArgs = TERMINAL_CONFIG.promptArgs(seedPrompt(briefFile))
   }
-  const meta = { root: root.id, slug: body.slug || null, id: resumeId, launchId: identity.launchId, cwd, isNew: !resumeId, title: body.title || null }
+  const context = handoffLaunch(body, TERMINAL_CONFIG.id, root.id, cwd)
+  if (context) promptArgs = TERMINAL_CONFIG.promptArgs(context.prompt)
+  const meta = { root: root.id, slug: body.slug || null, id: resumeId, launchId: identity.launchId, cwd, isNew: !resumeId, title: body.title || null, ...context?.meta }
   const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, promptArgs, meta, config: TERMINAL_CONFIG })
   return { ok: true, key, brief: briefFile, ...res }
 }
@@ -583,9 +595,11 @@ export const dispatch = makeDispatch(ROUTES)
 // Codex home (see server/shared/activity.js for the attribution rules).
 function getActivity(q) {
   const root = resolveRoot(q.get('root'))
+  const selected = homeProjects(q)
   const days = Number(q.get('days')) || 84
   const list = []
   for (const proj of listProjects(root.dir)) {
+    if (selected && !selected.has(proj.slug)) continue
     for (const f of sessionFiles(root.dir, proj.slug)) {
       let fp = null
       try {
@@ -595,8 +609,8 @@ function getActivity(q) {
         () => sessionSummary(f.file, f.id, fp || undefined),
         (e) => oversizeStub(f.id, e)
       )
-      list.push({ id: f.id, slug: proj.slug, cwd: proj.cwd, title: s.title, firstTs: s.firstTs, lastTs: s.lastTs, userTurns: s.userTurns, toolCalls: s.toolCalls, tokens: s.tokens, models: s.models })
+      list.push({ id: f.id, slug: proj.slug, cwd: proj.cwd, title: s.title, firstTs: s.firstTs, lastTs: s.lastTs, userTurns: s.userTurns, toolCalls: s.toolCalls, tokens: s.tokens, models: s.models, ...(q.get('home') === '1' ? { isSubagent: !!f.isSubagent, oversized: !!s.oversized } : {}) })
     }
   }
-  return { root: root.id, ...bucketActivity(list, { days }) }
+  return q.get('home') === '1' ? { root: root.id, records: list } : { root: root.id, ...bucketActivity(list, { days }) }
 }

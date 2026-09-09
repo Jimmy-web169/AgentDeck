@@ -10,7 +10,7 @@ const shortName = (cwd, slug) => (cwd ? shortPath(cwd) : slug)
 function Tile({ label, value, hint }) {
   return (
     <div className={`rounded-lg bg-ink-700/60 border p-4 ${hint ? 'border-dashed border-zinc-700' : 'border-zinc-800'}`}>
-      <div className="text-2xl font-semibold text-zinc-100 leading-tight truncate" title={String(value)}>{value}</div>
+      <div className="text-2xl font-semibold text-zinc-100 leading-tight tabular-nums whitespace-nowrap" title={String(value)}>{value}</div>
       <div className="text-[12px] text-zinc-500 mt-0.5">{label}</div>
       {hint && <div className="text-[10.5px] text-zinc-600">{hint}</div>}
     </div>
@@ -58,7 +58,7 @@ function BarList({ title, data, color }) {
 function StatBlock({ tokens, sessions, userTurns, toolCalls, toolCounts, models, fields, providerLabel }) {
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-3">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,11rem),1fr))] gap-3">
         {sessions != null && <Tile label="sessions" value={sessions} />}
         <Tile label="user prompts" value={userTurns ?? 0} />
         <Tile label="tool calls" value={toolCalls ?? 0} />
@@ -104,8 +104,8 @@ function DrillRow({ name, cwd, count, countLabel, toolCalls, total, max, onClick
 
 // one component for every provider (Claude Code, Codex, Antigravity): the stats
 // API has the same shape everywhere; `providerLabel` names the provider-only tiles
-export default function Stats({ stats, root, focus, onOpenSession, apiClient, providerLabel = 'this provider' }) {
-  const [path, setPath] = useState({ slug: null, sid: null })
+export default function Stats({ stats, root, focus, onOpenSession, apiClient, providerLabel = 'this provider', initialProject = null, breadcrumbPrefix, embedded = false }) {
+  const [path, setPath] = useState({ slug: focus?.slug || initialProject, sid: focus?.id || null })
   const [sessionsBySlug, setSessionsBySlug] = useState({})
 
   // Reset the drill when the tracked folder (root) changes — OR, when arrived via a
@@ -113,19 +113,22 @@ export default function Stats({ stats, root, focus, onOpenSession, apiClient, pr
   // project's session list if needed). A fresh `focus` object re-triggers this even
   // when the target session is unchanged.
   useEffect(() => {
-    if (!focus?.slug || !focus?.id) {
+    const slug = focus?.slug || initialProject
+    if (!slug) {
       setPath({ slug: null, sid: null })
       return
     }
-    if (sessionsBySlug[focus.slug] === undefined) {
+    let cancelled = false
+    if (sessionsBySlug[slug] === undefined) {
       apiClient
-        .sessions(root, focus.slug)
-        .then((d) => setSessionsBySlug((m) => ({ ...m, [focus.slug]: d.sessions })))
-        .catch(() => setSessionsBySlug((m) => ({ ...m, [focus.slug]: [] })))
+        .sessions(root, slug)
+        .then((d) => !cancelled && setSessionsBySlug((m) => ({ ...m, [slug]: d.sessions })))
+        .catch(() => !cancelled && setSessionsBySlug((m) => ({ ...m, [slug]: [] })))
     }
-    setPath({ slug: focus.slug, sid: focus.id })
+    setPath({ slug, sid: focus?.id || null })
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stats?.root, focus])
+  }, [root, stats?.root, focus, initialProject])
 
   if (!stats) return <div className="p-8 text-zinc-600">Loading stats…</div>
   const projects = stats.projects || []
@@ -142,14 +145,14 @@ export default function Stats({ stats, root, focus, onOpenSession, apiClient, pr
   const session = path.sid && sessions ? sessions.find((s) => s.id === path.sid) : null
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6 space-y-6">
+    <div className={`min-w-0 mx-auto max-w-6xl space-y-6 ${embedded ? '' : 'px-6 py-6'}`}>
       {/* breadcrumb */}
-      <div className="flex items-center gap-1.5 text-[13px] flex-wrap">
-        <button onClick={() => setPath({ slug: null, sid: null })} className={path.slug ? 'text-sky-400 hover:underline' : 'text-zinc-100 font-semibold'}>Folder</button>
+      {(path.slug || breadcrumbPrefix) && <div className="flex items-center gap-1.5 text-[13px] flex-wrap">
+        {breadcrumbPrefix || <button onClick={() => setPath({ slug: null, sid: null })} className="text-sky-400 hover:underline">Stats</button>}
         {proj && (
           <>
             <span className="text-zinc-600">/</span>
-            <button onClick={() => setPath({ slug: path.slug, sid: null })} className={path.sid ? 'text-sky-400 hover:underline' : 'text-zinc-100 font-semibold'}>{shortName(proj.cwd, proj.slug)}</button>
+            <button onClick={() => setPath({ slug: path.slug, sid: null })} className={path.sid ? 'text-sky-400 hover:underline' : 'text-zinc-100 font-semibold'}>{breadcrumbPrefix ? 'Project stats' : shortName(proj.cwd, proj.slug)}</button>
           </>
         )}
         {session && (
@@ -159,7 +162,7 @@ export default function Stats({ stats, root, focus, onOpenSession, apiClient, pr
             <button onClick={() => onOpenSession?.(path.slug, session)} className="ml-2 text-[11px] px-2 py-0.5 rounded bg-sky-500/20 text-sky-200 hover:bg-sky-500/30">Open session ↗</button>
           </>
         )}
-      </div>
+      </div>}
 
       {!path.slug ? (
         // FOLDER level

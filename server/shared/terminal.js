@@ -280,9 +280,16 @@ export async function reattachTerminal({ body, root, config }) {
     return null
   }
   if (body.bindSessionId) {
+    if (hit.id && hit.id !== body.bindSessionId) throw err(409, 'This terminal already has an identified conversation. Manual repair cannot replace it.')
     if (!config.resolveSavedSession) throw err(400, 'This provider does not support linking saved conversations.')
     const saved = config.resolveSavedSession({ root, id: body.bindSessionId, slug: body.slug })
     if (!saved?.id) throw err(404, 'The selected conversation is not available in this data folder.')
+    const localFolder = (cwd) => {
+      if (!cwd || !path.isAbsolute(cwd)) return null
+      try { return fs.realpathSync(cwd) } catch { return null }
+    }
+    const folder = localFolder(hit.cwd)
+    if (!folder || localFolder(saved.cwd) !== folder) throw err(409, 'Only a conversation in this terminal’s current working folder can be linked.')
     if (entries.some((e) => e.provider === config.id && e.root === root.id && e.id === saved.id && e.key !== hit.key)) throw err(409, 'That conversation already has a different running terminal.')
     const bound = metadataOf({ ...hit, ...saved, isNew: false })
     if (hit.tmuxName) {
@@ -300,6 +307,8 @@ export async function reattachTerminal({ body, root, config }) {
 // Metadata is read back from each session's AGENTDECK_META env var. `attached`
 // reflects whether something (a ttyd or a real terminal) is viewing it now.
 const LEGACY_PROVIDER = { agy: 'antigravity' }
+const terminalObservers = new Set()
+export function observeTerminals(listener) { terminalObservers.add(listener); return () => terminalObservers.delete(listener) }
 const discovered = new Map()
 const discoveryVersions = new Map()
 const discoveryScope = (meta) => `${meta.provider}|${meta.root}`
@@ -318,7 +327,7 @@ export function listLiveTmux() {
   let rows
   try {
     // stderr dropped: with no tmux server running, tmux prints "no server running on …" on every poll
-    rows = execFileSync(tmux, ['list-sessions', '-F', '#{session_name}\t#{session_attached}'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] })
+    rows = execFileSync(tmux, ['list-sessions', '-F', '#{session_name}\t#{session_attached}\t#{socket_path}'], { encoding: 'utf8', timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] })
       .split('\n')
       .filter(Boolean)
   } catch {
@@ -326,7 +335,7 @@ export function listLiveTmux() {
   }
   const out = []
   for (const row of rows) {
-    const [name, attached] = row.split('\t')
+    const [name, attached, tmuxSocket] = row.split('\t')
     if (!name || !name.startsWith('agentdeck-')) continue
     let meta = {}
     try {
@@ -357,7 +366,11 @@ export function listLiveTmux() {
       } catch { /* Unavailable evidence does not make a live terminal disappear. */ }
       discovered.set(name, { at: Date.now(), version })
     }
-    out.push({ ...meta, tmuxName: name, attached: attached !== '0' })
+    const entry = { ...meta, tmuxName: name, tmuxSocket: tmuxSocket || null, attached: attached !== '0' }
+    out.push(entry)
+    for (const listener of terminalObservers) {
+      try { listener(entry) } catch { /* An optional audit projection must not break terminal inventory. */ }
+    }
   }
   return out
 }

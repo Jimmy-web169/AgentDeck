@@ -1,4 +1,6 @@
 import path from 'node:path'
+import { historyReader } from './deck/history.js'
+import { createHomeAdapter } from './deck/homeAdapter.js'
 // codex provider
 import { dispatch as codexDispatch } from './providers/codex/api.js'
 import {
@@ -14,6 +16,7 @@ import { dispatch as claudeDispatch } from './providers/claude/api.js'
 import { loadRoots as claudeLoadRoots, projectsDir as claudeProjectsDir } from './providers/claude/paths.js'
 // antigravity provider
 import { dispatch as agyDispatch } from './providers/antigravity/api.js'
+import { prepareAntigravityLaunch } from './providers/antigravity/terminal.js'
 import { loadRoots as agyLoadRoots, brainDir as agyBrainDir, invalidateIndex as agyInvalidateIndex, cwdForId as agyCwdForId, isSessionId as agyIsSessionId } from './providers/antigravity/paths.js'
 
 // Provider registry. Each provider supplies:
@@ -28,7 +31,10 @@ import { loadRoots as agyLoadRoots, brainDir as agyBrainDir, invalidateIndex as 
 export const PROVIDERS = {
   claude: {
     id: 'claude',
+    capabilities: { readTimeline: true, interactiveContext: true },
     dispatch: claudeDispatch,
+    home: createHomeAdapter(claudeDispatch, { resourceStyle: 'slug', statsNote: 'Usage from main transcripts; separate subagent sidecars are not included.' }),
+    history: historyReader(claudeDispatch, { nested: true }),
     loadRoots: claudeLoadRoots,
     watch: {
       watchDir: (rootDir) => claudeProjectsDir(rootDir),
@@ -48,7 +54,10 @@ export const PROVIDERS = {
   },
   codex: {
     id: 'codex',
+    capabilities: { readTimeline: true, interactiveContext: true },
     dispatch: codexDispatch,
+    home: createHomeAdapter(codexDispatch, { statsNote: 'Usage includes main and independent subagent transcripts; session counts keep them separate.' }),
+    history: historyReader(codexDispatch),
     loadRoots: codexLoadRoots,
     watch: {
       watchDir: (rootDir) => codexSessionsDir(rootDir),
@@ -69,7 +78,11 @@ export const PROVIDERS = {
   },
   antigravity: {
     id: 'antigravity',
+    capabilities: { readTimeline: true, interactiveContext: true },
+    validateContextTarget: (root) => prepareAntigravityLaunch({ configDir: root.dir }),
     dispatch: agyDispatch,
+    home: createHomeAdapter(agyDispatch, { statsNote: 'Usage includes main and independent subagent transcripts; session counts keep them separate.' }),
+    history: historyReader(agyDispatch),
     loadRoots: agyLoadRoots,
     watch: {
       // the transcript lives under brain/<id>/, but the facts that place a

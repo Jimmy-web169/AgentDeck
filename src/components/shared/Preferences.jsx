@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { DENSITIES, HOME_PROJECTS, HOME_SESSIONS, PATH_DEPTHS, THEMES, setPref, usePrefs } from '../../lib/prefs.js'
+import { DENSITIES, FONT_SIZES, HOME_PROJECTS, HOME_SESSIONS, PATH_DEPTHS, SIDEBAR_MODES, THEMES, setPref, usePrefs } from '../../lib/prefs.js'
 import InfoDot from './InfoDot.jsx'
 import { MOD_WORD } from './ShortcutHints.jsx'
 import { providerColorValue, providerDefaultColor, STATUS_KINDS, STATUS_DEFAULTS, statusColorValue } from '../../lib/providerColors.js'
@@ -8,7 +8,7 @@ import { GearIcon } from './shellIcons.jsx'
 
 // The gear in the tab strip: a small popover with the things a person is likely
 // to want their own way — theme, row density, which sidebar sections show, and
-// whether session lists carry the first prompt under each title.
+// which question previews session lists carry under each title.
 // `info`: the one sentence a section needs, behind an (i) — the panel itself
 // stays labels and controls
 function Group({ title, info, children }) {
@@ -31,6 +31,7 @@ function Pills({ options, value, onPick }) {
           key={o.k}
           onClick={() => onPick(o.k)}
           title={o.hint || o.label}
+          aria-pressed={value === o.k}
           className={`flex-1 h-7 px-2 rounded text-[12px] transition-colors ${value === o.k ? 'bg-ink-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-100 hover:bg-ink-700'}`}
         >
           {o.label}
@@ -43,7 +44,7 @@ function Pills({ options, value, onPick }) {
 // `hint` is the one-line explanation — shown on hover, not printed under the label
 function Toggle({ label, hint, value, onChange }) {
   return (
-    <button onClick={() => onChange(!value)} title={hint || undefined} className="w-full flex items-center gap-3 py-1 text-left group">
+    <button role="switch" aria-checked={!!value} onClick={() => onChange(!value)} title={hint || undefined} className="w-full flex items-center gap-3 py-1 text-left group">
       <span className={`relative w-8 h-[18px] rounded-full transition-colors shrink-0 ${value ? 'bg-sky-500/70' : 'bg-zinc-700'}`}>
         <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${value ? 'translate-x-[16px]' : 'translate-x-[2px]'}`} />
       </span>
@@ -139,12 +140,16 @@ export default function Preferences({ className = '', providers = [] }) {
         <GearIcon />
       </button>
       {open && (
-        <div ref={ref} className="absolute right-0 top-full z-50 mt-1 w-[300px] max-h-[85vh] overflow-y-auto rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl p-3.5">
+        <div ref={ref} className="absolute right-0 top-full z-50 mt-1 w-[20rem] max-w-[95vw] max-h-[85vh] overflow-y-auto rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl p-3.5">
           <Group title="Theme">
             <Pills options={THEMES} value={prefs.theme} onPick={(v) => setPref('theme', v)} />
           </Group>
           <Group title="Density">
             <Pills options={DENSITIES} value={prefs.density} onPick={(v) => setPref('density', v)} />
+          </Group>
+          <Group title="Interface text size" info="Scales navigation, lists and conversation text. Terminal viewers keep their own font size. 100% is the original size.">
+            <Pills options={FONT_SIZES} value={prefs.fontSize} onPick={(v) => setPref('fontSize', v)} />
+            <p className="mt-2 text-[13px] text-zinc-300">Preview · Questions and conversations</p>
           </Group>
           {providers.length > 0 && (
             <Group title="Colours" info="Overrides a provider's accent; the theme keeps the lightness. A workspace's colour is in its ⋯ menu.">
@@ -165,13 +170,17 @@ export default function Preferences({ className = '', providers = [] }) {
             <div className="text-[10.5px] uppercase tracking-wide text-zinc-600 mt-2 mb-0.5">Recent projects</div>
             <Pills options={HOME_PROJECTS} value={prefs.homeProjects} onPick={(v) => setPref('homeProjects', v)} />
           </Group>
-          <Group title="Sidebar" info="Which sections the sidebar shows. Grouped and pinned rows leave the Projects list; suggestions are the “same folder in several places” box.">
-            <Toggle label="Workspaces section" hint="Grouped projects and sessions leave the Projects list" value={prefs.showWorkspaces} onChange={(v) => setPref('showWorkspaces', v)} />
-            <Toggle label="Workspace suggestions" hint="“Same folder in several places” under Workspaces" value={prefs.showSuggestions} onChange={(v) => setPref('showSuggestions', v)} />
-            <Toggle label="Pinned section" hint="Pinned rows leave the Projects list" value={prefs.showPinned} onChange={(v) => setPref('showPinned', v)} />
+          <Group title="Sidebar" info={prefs.sidebarMode === 'folder' ? 'Folder → Provider → Sessions. Top chips hide/show a provider without changing tracked sources. Workspaces and pins remain independent shortcuts.' : 'Which sections the sidebar shows. Grouped and pinned rows leave the Projects list; suggestions are the “same folder in several places” box.'}>
+            <div className="text-[10.5px] uppercase tracking-wide text-zinc-600 mb-1">Project grouping</div>
+            <Pills options={SIDEBAR_MODES} value={prefs.sidebarMode} onPick={(v) => setPref('sidebarMode', v)} />
+            <p className="mt-2 text-xs text-zinc-500">Also controls Recent projects on Activity. Provider mode follows the selected root; Folder mode combines the providers and roots enabled in the sidebar.</p>
+            <Toggle label="Show unavailable folders" hint="Show unresolved folders in folder lists and report breakdowns. Overall totals and History always retain their records." value={prefs.showUnavailableFolders} onChange={(v) => setPref('showUnavailableFolders', v)} />
+            <Toggle label="Workspaces section" hint={prefs.sidebarMode === 'folder' ? 'Optional collections; the folder tree stays complete' : 'Grouped projects and sessions leave the Projects list'} value={prefs.showWorkspaces} onChange={(v) => setPref('showWorkspaces', v)} />
+            {prefs.sidebarMode !== 'folder' && <Toggle label="Workspace suggestions" hint="“Same folder in several places” under Workspaces" value={prefs.showSuggestions} onChange={(v) => setPref('showSuggestions', v)} />}
+            <Toggle label="Pinned section" hint={prefs.sidebarMode === 'folder' ? 'Pinned shortcuts; the folder tree stays complete' : 'Pinned rows leave the Projects list'} value={prefs.showPinned} onChange={(v) => setPref('showPinned', v)} />
           </Group>
-          <Group title="Lists" info={`The first prompt under each session title in Activity and ${MOD_WORD}+K.`}>
-            <Toggle label="First prompt under session titles" hint={`Activity and ${MOD_WORD}+K`} value={prefs.showFirstPrompt} onChange={(v) => setPref('showFirstPrompt', v)} />
+          <Group title="Question preview" info={`Shows only your most recent question under session titles in Activity and ${MOD_WORD}+K. Hidden questions remain searchable.`}>
+            <Toggle label="Show question preview" hint="Show your most recent question" value={prefs.showLatestPrompt} onChange={(v) => setPref('showLatestPrompt', v)} />
           </Group>
           <Group title="Conversation" info="Sub-agent threads expand under the tool call that spawned them; off = the Sub-agents tab only.">
             <Toggle label="Sub-agent threads inline in the conversation" hint="Expand a sub-agent under the tool call that spawned it" value={prefs.inlineSubagents} onChange={(v) => setPref('inlineSubagents', v)} />

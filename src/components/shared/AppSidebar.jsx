@@ -4,10 +4,11 @@ import { createApi } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
 import { shortPath } from '../../lib/paths.js'
 import { MOD_WORD } from './ShortcutHints.jsx'
-import { isPinned, togglePin, usePins } from '../../lib/pins.js'
-import { adoptPendingProjects, createWorkspace, deleteWorkspace, normCwd, projectKey, rememberAdoption, removeFromWorkspace, renameWorkspace, setWorkspaceColor, setWorkspaceIcon, sourceKey, suggestWorkspaces, useWorkspaces, workspaceHolding, workspaceSources } from '../../lib/workspaces.js'
+import { isPinned, togglePin, usePins, isFolderPin, pinsForMode } from '../../lib/pins.js'
+import { adoptPendingProjects, createWorkspace, deleteWorkspace, normCwd, projectKey, rememberAdoption, removeFromWorkspace, renameWorkspace, setWorkspaceColor, setWorkspaceIcon, sourceKey, suggestWorkspaces, useWorkspaces, workspaceHolding, workspaceSources, isFolderItem, standaloneWorkspaceItems } from '../../lib/workspaces.js'
 import { WorkspaceIcon } from './workspaceIcons.jsx'
-import { usePrefs } from '../../lib/prefs.js'
+import { setFolderFilter, usePrefs } from '../../lib/prefs.js'
+import { toggleHomeFilter } from '../../lib/homeScope.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
 import { providerColor, providerLabel, statusDot } from '../../lib/providerColors.js'
 import { accentStyle } from '../../lib/accent.js'
@@ -17,6 +18,10 @@ import PathPicker from './PathPicker.jsx'
 import FolderChips from './FolderChips.jsx'
 import RowMenu from './RowMenu.jsx'
 import useConfirm from '../../lib/useConfirm.jsx'
+import useFolderCatalog from '../../lib/useFolderCatalog.js'
+import FolderProjects from './FolderProjects.jsx'
+import ProviderFilterChips from './ProviderFilterChips.jsx'
+import useEscToClose from '../../lib/useEscToClose.js'
 
 // The one sidebar. It belongs to the shell, so it is the same column whether
 // the active tab shows Home or a session — only the highlights move.
@@ -33,6 +38,9 @@ import useConfirm from '../../lib/useConfirm.jsx'
 //                list and a pinned session leaves its project's inline list, so
 //                nothing is listed twice (searching shows everything again).
 //   Projects     the current folder's projects; expand one to see its sessions
+//   Folder mode  replaces the root chips and Projects with the host's canonical
+//                folder tree, filtered by provider chips. Workspaces/pins are
+//                independent shortcuts; provider/root identities stay distinct.
 //
 // Every row has the same two hover controls — pin and ⋯ — and everything else
 // (workspaces, select, trash, rename…) lives in the ⋯ menu. Click opens in
@@ -122,7 +130,7 @@ function SessionLine({ ctx, src, s, indent = 'pl-7', showSource = false, menuKey
         title={selectable ? undefined : `${s.title}\nOpen here · ${MOD_WORD}+click or middle-click opens in a new tab`}
         className={`flex-1 min-w-0 text-left ${indent} pr-2 sb-row`}
       >
-        <div className="text-[12px] text-zinc-400 group-hover:text-zinc-200 truncate flex items-center gap-1.5">
+        <div className={`text-[12px] ${ctx.folderSession ? 'text-zinc-300' : 'text-zinc-400'} group-hover:text-zinc-200 truncate flex items-center gap-1.5`}>
           {selectable && <span className={`shrink-0 ${checked ? 'text-red-300' : 'text-zinc-600'}`}>{checked ? '☑' : '☐'}</span>}
           {dot && <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} title={dot.includes('terminal') ? 'terminal running' : 'being written'} />}
           {s.isSubagent && <span className="shrink-0 text-violet-400" title={`subagent${s.agentRole ? ` · ${s.agentRole}` : ''}`}>⤷</span>}
@@ -156,11 +164,22 @@ function SessionLine({ ctx, src, s, indent = 'pl-7', showSource = false, menuKey
   )
 }
 
+// Exact project actions shared by Provider mode, Pinned and Folder-mode roots.
+export function ProjectActions({ ctx, src, menuKey, items, bounded = false }) {
+  const pinned = isPinned(src)
+  return <>
+    <div className="flex items-center gap-0.5 pr-1.5 shrink-0">
+      <button disabled={!src.slug} onClick={() => togglePin(src)} title={pinned ? 'Unpin project' : 'Pin project'} className={`${hoverBtn} disabled:opacity-30 ${pinned ? 'text-amber-300 opacity-100' : ''}`}><PinIcon className="w-3.5 h-3.5" filled={pinned} /></button>
+      <button onClick={() => ctx.setMenuFor(ctx.menuFor === menuKey ? null : menuKey)} title="More" className={`${hoverBtn} ${ctx.menuFor === menuKey ? 'opacity-100 text-zinc-100 bg-ink-600' : ''}`}><DotsIcon className="w-3.5 h-3.5" /></button>
+    </div>
+    <RowMenu open={ctx.menuFor === menuKey} onClose={() => ctx.setMenuFor(null)} items={items || ctx.newConversationItems(src)} workspaceItem={src.slug ? projectItem(src) : null} workspaces={ctx.workspaces} bounded={bounded} />
+  </>
+}
+
 // a project row for the cross-provider sections (pinned): chevron, dot, name, folder
 function ProjectLine({ ctx, src, open, onToggle, menuKey, children }) {
-  const { providers, onOpenTarget, menuFor, setMenuFor, workspaces } = ctx
+  const { providers, onOpenTarget } = ctx
   const c = providerColor(providers, src.provider)
-  const pinned = isPinned({ provider: src.provider, root: src.root, slug: src.slug })
   const t = { provider: src.provider, root: src.root, rootLabel: src.rootLabel, slug: src.slug, cwd: src.cwd, project: src.project }
   return (
     <div>
@@ -176,15 +195,7 @@ function ProjectLine({ ctx, src, open, onToggle, menuKey, children }) {
           </div>
           <div className="sb-meta text-[10.5px] text-zinc-600 truncate pl-5">{providerLabel(providers, src.provider)} · {src.rootLabel}</div>
         </button>
-        <div className="flex items-center gap-0.5 pr-1.5">
-          <button onClick={() => togglePin(t)} title={pinned ? 'Unpin project' : 'Pin project'} className={`${hoverBtn} ${pinned ? 'text-amber-300 opacity-100' : ''}`}>
-            <PinIcon className="w-3.5 h-3.5" filled={pinned} />
-          </button>
-          <button onClick={() => setMenuFor(menuFor === menuKey ? null : menuKey)} title="More" className={`${hoverBtn} ${menuFor === menuKey ? 'opacity-100 text-zinc-100 bg-ink-600' : ''}`}>
-            <DotsIcon className="w-3.5 h-3.5" />
-          </button>
-        </div>
-        <RowMenu open={menuFor === menuKey} onClose={() => setMenuFor(null)} items={ctx.newConversationItems(src)} workspaceItem={projectItem(src)} workspaces={workspaces} />
+        <ProjectActions ctx={ctx} src={t} menuKey={menuKey} />
       </div>
       {children}
     </div>
@@ -245,14 +256,19 @@ export default function AppSidebar({
   onDeleteSession,
   onDeleteSessions,
   drafts = [],
+  folderFocus,
 }) {
   const [filter, setFilter] = useState('')
   const [openSlug, setOpenSlug] = useState(null) // expanded project in the folder list
   const [openKeys, setOpenKeys] = useState(() => new Set()) // expanded pinned projects
+  const [folderExpanded, setFolderExpanded] = useState(() => new Set())
   const [openWs, setOpenWs] = useState(() => new Set()) // expanded workspaces
   const [wsFilter, setWsFilter] = useState({}) // workspace id -> Set(sourceKey)
   const [sections, setSections] = useState(loadSections)
   const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerScope, setPickerScope] = useState(null)
+  const [newScope, setNewScope] = useState(null)
+  const pickerApi = useMemo(() => pickerScope ? createApi(pickerScope.provider) : null, [pickerScope?.provider])
   const [picking, setPicking] = useState(false)
   const [menuFor, setMenuFor] = useState(null) // key of the open ⋯ menu
   const [selectMode, setSelectMode] = useState(false)
@@ -262,9 +278,18 @@ export default function AppSidebar({
   const [newWs, setNewWs] = useState(null) // '' while typing a new workspace name
   const [renaming, setRenaming] = useState(null) // { id, name }
   const batchEpoch = useRef(0)
-  const pins = usePins()
+  const allPins = usePins()
   const workspaces = useWorkspaces()
   const prefs = usePrefs()
+  const pins = pinsForMode(allPins, prefs.sidebarMode)
+  const folderPins = pins.filter(isFolderPin)
+  const folderMode = prefs.sidebarMode === 'folder'
+  const folderCatalog = useFolderCatalog(folderMode || workspaces.some((w) => w.items.some(isFolderItem)), index.projects)
+  useEffect(() => {
+    if (!folderFocus || !folderMode) return
+    setFilter('')
+    setSections((s) => ({ ...s, pinned: true, projects: true }))
+  }, [folderFocus, folderMode])
 
   const provider = scope?.provider || null
   const root = scope?.root || null
@@ -274,7 +299,7 @@ export default function AppSidebar({
 
   const projects = useMemo(() => index.projects.filter((p) => p.provider === provider && p.root === root), [index.projects, provider, root])
   const sessions = openSlug && provider ? index.sessionsFor(provider, root, openSlug) : null
-  const suggestions = useMemo(() => suggestWorkspaces(index.projects, workspaces), [index.projects, workspaces])
+  const suggestions = useMemo(() => suggestWorkspaces(index.projects, workspaces, folderCatalog.folders), [index.projects, workspaces, folderCatalog.folders])
   // two workspaces called "AgentDeck" (…/project/AgentDeck vs …/maintain/AgentDeck) → show the parent folder too
   const wsName = useMemo(() => {
     const count = new Map()
@@ -367,12 +392,14 @@ export default function AppSidebar({
     }
   }
 
-  const newProjectFlow = async () => {
-    if (picking || !api) return
+  const newProjectFlow = async (chosenScope = scope) => {
+    if (picking || !chosenScope?.provider) return
+    const pickerApi = createApi(chosenScope.provider)
+    setPickerScope(chosenScope)
     setPicking(true)
     try {
-      const r = await api.pickFolder()
-      if (r?.ok && r.path) onNewProject(scope, r.path)
+      const r = await pickerApi.pickFolder()
+      if (r?.ok && r.path) onNewProject(chosenScope, r.path)
       else if (!r?.cancelled) setPickerOpen(true)
     } catch {
       setPickerOpen(true)
@@ -395,6 +422,7 @@ export default function AppSidebar({
   // what makes "which project, which folder" readable at a glance — a flat
   // list with a source tag per row did not (the user said so, 2026-09-07).
   const wsGroups = (w) => {
+    const members = standaloneWorkspaceItems(w, folderCatalog.folders)
     const groups = new Map()
     let loading = false
     let untracked = 0
@@ -411,7 +439,7 @@ export default function AppSidebar({
       }
       return g
     }
-    for (const it of w.items) {
+    for (const it of members) {
       if (it.kind !== 'project') continue
       if (!tracked(it)) {
         untracked++
@@ -429,7 +457,7 @@ export default function AppSidebar({
         g.rows.push({ s, item: it })
       }
     }
-    for (const it of w.items) {
+    for (const it of members) {
       if (it.kind !== 'session') continue
       if (!tracked(it)) {
         untracked++
@@ -476,8 +504,12 @@ export default function AppSidebar({
     const others = index.scopes.filter((x) => !(x.provider === src.provider && x.root === src.root))
     if (!others.length) return items
     const cwdKey = normCwd(src.cwd)
+    const canonicalFolder = folderMode ? folderCatalog.folders.find((f) => f.sources.some((s) => s.provider === src.provider && s.root === src.root && s.slug === src.slug)) : null
     const children = others.map((x) => {
-      const existing = index.projects.find((p) => p.provider === x.provider && p.root === x.root && p.cwd && normCwd(p.cwd) === cwdKey)
+      const canonicalSource = canonicalFolder?.sources.find((s) => s.provider === x.provider && s.root === x.root)
+      const existing = index.projects.find((p) => p.provider === x.provider && p.root === x.root && (folderMode
+        ? (canonicalSource ? p.slug === canonicalSource.slug : p.cwd === src.cwd)
+        : p.cwd && normCwd(p.cwd) === cwdKey))
       const n = existing?.sessionCount || 0
       return {
         key: sourceKey(x),
@@ -513,29 +545,47 @@ export default function AppSidebar({
     const ok = await confirm({
       title: `Delete workspace “${w.name}”?`,
       message: 'Only the grouping goes away.',
-      detail: `Its ${w.items.length} project${w.items.length === 1 ? '' : 's'} and sessions stay where they are.`,
+      detail: 'Its folders, projects, sessions and running terminals stay where they are.',
       confirmLabel: 'Delete workspace',
     })
     if (ok) deleteWorkspace(w.id)
   }
 
-  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, askTrash, menuFor, setMenuFor, workspaces, openKeys, toggleKey, hidePinned, hideGrouped, drafts, activeTarget, newConversationItems }
+  const projectHidden = (src) => (hidePinned && isPinned(src)) || (hideGrouped && !!workspaceHolding(projectItem(src), workspaces))
+  const onFolderWorkspaceChange = (id, added) => {
+    if (!added) return
+    setFilter('')
+    setSections((s) => ({ ...s, workspaces: true }))
+    setOpenWs((s) => new Set(s).add(id))
+  }
+  const ctx = { providers, index, dotFor, isActive, isRecent, selected, toggleSelected, onOpenTarget, onDeleteSession, askTrash, menuFor, setMenuFor, workspaces, openKeys, toggleKey, hidePinned, hideGrouped, drafts, activeTarget, newConversationItems, projectHidden, folderPins, folderFocus, folderExpanded, setFolderExpanded, onFolderWorkspaceChange }
+  const renderFolderProjects = (section, workspace) => {
+    const treeCtx = { ...ctx, folderSession: true, ...(workspace ? { hidePinned: false, hideGrouped: false, projectHidden: () => false } : {}) }
+    const sourceFilter = workspace && wsFilter[workspace.id]
+    const excludedRoots = [...(folderMode ? prefs.folderExcludedRoots || [] : []), ...(sourceFilter?.size ? index.scopes.filter((s) => !sourceFilter.has(sourceKey(s))).map((s) => JSON.stringify([s.provider, s.root])) : [])]
+    return <FolderProjects section={section} workspace={workspace} catalog={folderCatalog} ctx={treeCtx} filter={filter} excludedProviders={folderMode ? prefs.folderExcludedProviders : []} excludedRoots={excludedRoots} showUnavailable={prefs.showUnavailableFolders}
+    renderProjectActions={(src, key, launchable) => <ProjectActions ctx={ctx} src={src} menuKey={`folder-project|${workspace?.id || section}|${key}`} bounded items={newConversationItems(src).map((item) => launchable ? item : { label: item.label, disabled: true })} />}
+    renderSessions={(src, key, indent) => <ProjectSessions ctx={treeCtx} src={src} indent={indent} keyPrefix={`folder|${workspace?.id || section}|${key}`} />}
+    renderDrafts={(src, indent) => draftsOf(drafts, src).map((d) => <DraftLine key={targetKey(d)} ctx={ctx} d={d} indent={indent} />)} />
+  }
 
   const filtered = projects.filter((p) => {
     if (hidePinned && isPinned({ provider, root, slug: p.slug })) return false
-    if (hideGrouped && workspaceHolding({ kind: 'project', provider, root, slug: p.slug }, workspaces)) return false
+    if (hideGrouped && workspaceHolding({ kind: 'project', provider, root, slug: p.slug }, workspaces, folderCatalog.folders)) return false
     if (!filter) return true
     const hay = `${p.cwd || ''} ${p.slug} ${p.name}`.toLowerCase()
     return hay.includes(filter.toLowerCase())
   })
-  const pinnedProjects = pins.filter((p) => !p.id)
+  const pinnedProjects = pins.filter((p) => !isFolderPin(p) && !p.id)
   const pinnedSessions = pins.filter((p) => p.id)
 
   return (
     <aside className="w-full h-full flex flex-col bg-ink-900 border-r border-zinc-800">
       <div className="p-3 border-b border-zinc-800 space-y-2.5">
-        <FolderChips scopes={index.scopes} providers={providers} value={scope} onPick={onScope} onManage={onManageFolders} />
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter projects…" className="w-full bg-ink-700 border border-zinc-700 rounded-md px-2.5 py-1.5 text-[13px] text-zinc-200 placeholder-zinc-600 focus:border-zinc-500 outline-none" />
+        {folderMode ? <ProviderFilterChips scopes={index.scopes} providers={providers} excluded={prefs.folderExcludedProviders} excludedRoots={prefs.folderExcludedRoots}
+          onToggle={(provider, root) => setFolderFilter(toggleHomeFilter({ excluded: prefs.folderExcludedProviders, excludedRoots: prefs.folderExcludedRoots }, index.scopes, provider, root))}
+          onReset={() => setFolderFilter({})} onManage={onManageFolders} /> : <FolderChips scopes={index.scopes} providers={providers} value={scope} onPick={onScope} onManage={onManageFolders} />}
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder={folderMode ? 'Filter folders…' : 'Filter projects…'} className="w-full bg-ink-700 border border-zinc-700 rounded-md px-2.5 py-1.5 text-[13px] text-zinc-200 placeholder-zinc-600 focus:border-zinc-500 outline-none" />
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -576,7 +626,8 @@ export default function AppSidebar({
                 )}
                 {workspaces.map((w) => {
                   const open = openWs.has(w.id)
-                  const sources = workspaceSources(w).map((x) => ({ ...x, rootLabel: labelOf(x.provider, x.root, x.rootLabel) }))
+                  const sources = workspaceSources(w, folderCatalog.folders).map((x) => ({ ...x, rootLabel: labelOf(x.provider, x.root, x.rootLabel) }))
+                  const hasFolders = w.items.some(isFolderItem)
                   const filt = wsFilter[w.id]
                   const { groups, loading, untracked } = open ? wsGroups(w) : { groups: [], loading: false, untracked: 0 }
                   const visible = filt?.size ? groups.filter((g) => filt.has(sourceKey(g.src))) : groups
@@ -652,6 +703,7 @@ export default function AppSidebar({
                               })}
                             </div>
                           )}
+                          {hasFolders && renderFolderProjects('workspace', w)}
                           {visible.map((g) => {
                             const gk = `${mk}|${g.key}`
                             const gopen = !openKeys.has(`${gk}|closed`) // groups start open
@@ -705,16 +757,16 @@ export default function AppSidebar({
                           })}
                           {loading && <div className="pl-7 pr-2 py-1.5 text-[11.5px] text-zinc-600">loading…</div>}
                           {untracked > 0 && <div className="pl-7 pr-2 py-1 text-[11px] text-zinc-600">{untracked} member{untracked === 1 ? '' : 's'} in a folder that is no longer tracked — hidden</div>}
-                          {!loading && !groups.length && <div className="pl-7 pr-2 py-1.5 text-[11.5px] text-zinc-600">Empty — open ⋯ on a project or session and tick this workspace.</div>}
+                          {!loading && !groups.length && !hasFolders && <div className="pl-7 pr-2 py-1.5 text-[11.5px] text-zinc-600">Empty — open ⋯ on a folder, project or session and tick this workspace.</div>}
                         </div>
                       )}
                     </div>
                   )
                 })}
-                {!workspaces.length && newWs == null && !(prefs.showSuggestions && suggestions.length) && (
-                  <div className="px-3 pb-1.5 text-[11.5px] text-zinc-600">Group projects and sessions from any provider under one name — ⋯ on a row → Workspaces.</div>
+                {!workspaces.length && newWs == null && !(!folderMode && prefs.showSuggestions && suggestions.length) && (
+                  <div className="px-3 pb-1.5 text-[11.5px] text-zinc-600">Group folders, projects and sessions from any provider under one name — ⋯ on a row → Workspaces.</div>
                 )}
-                {prefs.showSuggestions && suggestions.length > 0 && (
+                {!folderMode && prefs.showSuggestions && suggestions.length > 0 && (
                   <div className="mt-1 mx-2 mb-1 rounded-md border border-dashed border-zinc-700/70 px-2 py-1.5">
                     <div className="text-[10px] uppercase tracking-wider text-zinc-600 mb-1">Suggested · same folder in several places</div>
                     {suggestions.slice(0, 5).map((s) => (
@@ -740,6 +792,7 @@ export default function AppSidebar({
             <SectionHeader title="Pinned" count={pins.length} open={sections.pinned} onToggle={() => toggleSection('pinned')} />
             {sections.pinned && (
               <>
+                {folderMode && folderPins.length > 0 && renderFolderProjects('pinned')}
                 {pinnedProjects.map((p) => {
                   const k = projectKey(p)
                   const src = srcL(p)
@@ -758,6 +811,11 @@ export default function AppSidebar({
         )}
 
         {/* ---- Projects of the current folder ---- */}
+        {folderMode ? <div className="pb-2">
+          <SectionHeader title="Folders" open={sections.projects || !!filter} onToggle={() => toggleSection('projects')}
+            right={<button disabled={picking || !index.scopes.some((s) => s.exists !== false)} onClick={() => setNewScope(index.scopes.find((s) => s.provider === scope?.provider && s.root === scope?.root && s.exists !== false) || index.scopes.find((s) => s.exists !== false))} title="New folder: choose AI and working folder" className={`${iconBtn} text-zinc-500 hover:text-zinc-200`}><PlusIcon className="w-3.5 h-3.5" /></button>} />
+          {(sections.projects || !!filter) && renderFolderProjects('folders')}
+        </div> :
         <div className="pb-2">
           <SectionHeader
             title="Projects"
@@ -765,7 +823,7 @@ export default function AppSidebar({
             open={sections.projects || !!filter}
             onToggle={() => toggleSection('projects')}
             right={
-              <button onClick={newProjectFlow} disabled={picking || !api} title={picking ? 'Choosing a folder…' : 'New project: pick a folder and start a conversation in it'} className={`${iconBtn} text-zinc-500 hover:text-zinc-100 hover:bg-ink-600 disabled:opacity-60`}>
+              <button onClick={() => newProjectFlow()} disabled={picking || !api} title={picking ? 'Choosing a folder…' : 'New project: pick a folder and start a conversation in it'} className={`${iconBtn} text-zinc-500 hover:text-zinc-100 hover:bg-ink-600 disabled:opacity-60`}>
                 <PlusIcon className="w-3.5 h-3.5" />
               </button>
             }
@@ -788,7 +846,6 @@ export default function AppSidebar({
             filtered.map((p) => {
               const isOpen = p.slug === openSlug
               const src = srcL({ ...p, provider, root, rootLabel })
-              const pinned = isPinned({ provider, root, slug: p.slug })
               const pk = projectKey({ provider, root, slug: p.slug })
               const mk = `proj|${pk}`
               return (
@@ -802,23 +859,11 @@ export default function AppSidebar({
                         <span className="text-[11px] text-zinc-600 shrink-0">{p.sessionCount}</span>
                       </div>
                     </button>
-                    <div className="flex items-center gap-0.5 pr-1.5">
-                      <button onClick={() => togglePin({ provider, root, rootLabel, slug: p.slug, cwd: p.cwd, project: p.name })} title={pinned ? 'Unpin project' : 'Pin project'} className={`${hoverBtn} ${pinned ? 'text-amber-300 opacity-100' : ''}`}>
-                        <PinIcon className="w-3.5 h-3.5" filled={pinned} />
-                      </button>
-                      <button onClick={() => setMenuFor(menuFor === mk ? null : mk)} title="More" className={`${hoverBtn} ${menuFor === mk ? 'opacity-100 text-zinc-100 bg-ink-600' : ''}`}>
-                        <DotsIcon className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <RowMenu
-                      open={menuFor === mk}
-                      onClose={() => setMenuFor(null)}
+                    <ProjectActions ctx={ctx} src={src} menuKey={mk}
                       items={[
                         ...newConversationItems(src),
                         onDeleteSessions && { label: 'Select sessions to trash…', disabled: !p.sessionCount, onClick: () => { setOpenSlug(p.slug); setSelectMode(true) } },
                       ].filter(Boolean)}
-                      workspaceItem={projectItem(src)}
-                      workspaces={workspaces}
                     />
                   </div>
 
@@ -865,16 +910,17 @@ export default function AppSidebar({
           {(sections.projects || !!filter) && filtered.length === 0 && (
             <div className="px-3 py-3 text-[12px] text-zinc-600">{!scope ? 'No tracked folders yet — press + above to track one.' : index.loading && !projects.length ? 'Loading projects…' : 'No projects.'}</div>
           )}
-        </div>
+        </div>}
       </div>
 
       {confirmEl}
-      {pickerOpen && api && (
+      {newScope && <NewFolderDialog scope={newScope} scopes={index.scopes} providers={providers} onChange={setNewScope} onClose={() => setNewScope(null)} onChoose={() => { const chosen = newScope; setNewScope(null); newProjectFlow(chosen) }} />}
+      {pickerOpen && pickerScope && (
         <PathPicker
-          apiClient={api}
+          apiClient={pickerApi}
           onPick={(p) => {
             setPickerOpen(false)
-            onNewProject(scope, p)
+            onNewProject(pickerScope, p)
           }}
           onClose={() => setPickerOpen(false)}
         />
@@ -885,4 +931,17 @@ export default function AppSidebar({
 
 function removeItem(wid, item) {
   removeFromWorkspace(wid, item)
+}
+
+function NewFolderDialog({ scope, scopes, providers, onChange, onClose, onChoose }) {
+  useEscToClose(onClose)
+  return <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="New folder conversation" className="w-96 max-w-full rounded-xl bg-ink-800 border border-zinc-700 p-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+      <h2 className="text-sm text-zinc-200">New folder conversation</h2>
+      <label className="block text-xs text-zinc-400">Receiving AI / root<select aria-label="Receiving AI / root" className="block w-full mt-2 bg-ink-900 border border-zinc-700 rounded p-2" value={JSON.stringify([scope.provider, scope.root])} onChange={(e) => { const [p, r] = JSON.parse(e.target.value); onChange(scopes.find((s) => s.provider === p && s.root === r)) }}>
+        {scopes.filter((s) => s.exists !== false).map((s) => <option key={JSON.stringify([s.provider, s.root])} value={JSON.stringify([s.provider, s.root])}>{providerLabel(providers, s.provider)} · {s.rootLabel}</option>)}
+      </select></label>
+      <div className="flex gap-3 text-xs"><button className="text-sky-300" onClick={onChoose}>Choose working folder…</button><button className="text-zinc-400" onClick={onClose}>Cancel</button></div>
+    </div>
+  </div>
 }

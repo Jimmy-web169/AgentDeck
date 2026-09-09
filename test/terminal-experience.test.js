@@ -68,7 +68,7 @@ test('connection and transcript states are separate, with actionable long-wait c
   assert.match(terminalStatus({ running: true }), /Opening terminal view/)
   assert.match(terminalStatus({ running: true, delayed: true }), /reload it or pop it out/)
   assert.match(terminalStatus({ running: true, frameLoaded: true }), /waiting for its conversation record/)
-  assert.match(terminalStatus({ running: true, frameLoaded: true, delayed: true }), /Link saved conversation/)
+  assert.match(terminalStatus({ running: true, frameLoaded: true, delayed: true }), /Conversation record not detected yet/)
   assert.match(terminalStatus({ running: true, frameLoaded: true, id: 's', delayed: true }), /keep using the terminal/)
   assert.match(terminalStatus({ running: true, frameLoaded: true, id: 's', transcriptReady: true }), /synced/)
 })

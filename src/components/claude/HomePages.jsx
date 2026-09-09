@@ -29,10 +29,10 @@ function useFetch(fn, deps) {
 
 const Err = ({ msg }) => <div className="m-4 text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded p-3">{msg}</div>
 
-export function StatsPage({ root, focus, onOpen }) {
+export function StatsPage({ root, focus, onOpen, initialProject, breadcrumbPrefix, embedded }) {
   const [stats, err] = useFetch(() => api.stats(root), [root])
   if (err) return <Err msg={err} />
-  return <Stats apiClient={api} providerLabel="Claude Code" stats={stats} root={root} focus={focus} onOpenSession={(slug, s) => onOpen({ root, slug, id: s.id, title: s.title })} />
+  return <Stats apiClient={api} providerLabel="Claude Code" stats={stats} root={root} focus={focus} initialProject={initialProject} breadcrumbPrefix={breadcrumbPrefix} embedded={embedded} onOpenSession={(slug, s) => onOpen({ root, slug, id: s.id, title: s.title })} />
 }
 
 export function HistoryPage({ root }) {

@@ -30,12 +30,12 @@ function useFetch(fn, deps) {
 
 const Err = ({ msg }) => <div className="m-4 text-sm text-red-300 bg-red-500/10 border border-red-500/30 rounded p-3">{msg}</div>
 
-export function StatsPage({ root, focus, onOpen }) {
+export function StatsPage({ root, focus, onOpen, initialProject, breadcrumbPrefix, embedded }) {
   const api = useProviderApi()
   const label = useProviderLabel()
   const [stats, err] = useFetch(() => api.stats(root), [root])
   if (err) return <Err msg={err} />
-  return <Stats apiClient={api} providerLabel={label} root={root} stats={stats} focus={focus} onOpenSession={(slug, s) => onOpen({ root, id: s.id, title: s.title })} />
+  return <Stats apiClient={api} providerLabel={label} root={root} stats={stats} focus={focus} initialProject={initialProject} breadcrumbPrefix={breadcrumbPrefix} embedded={embedded} onOpenSession={(slug, s) => onOpen({ root, id: s.id, title: s.title })} />
 }
 
 export function HistoryPage({ root }) {

@@ -4,13 +4,16 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { resolveRoot, listProjectSlugs, projectsDir, assertInside } from './paths.js'
 import { uniqueSession } from '../../shared/terminalDiscovery.js'
+import { readRecords } from './parser.js'
 
 const supported = new Map()
 export function resolveSavedClaudeSession({ root, id, slug }) {
   if (!/^[0-9a-f-]{36}$/i.test(id) || !slug) return null
   const file = path.join(projectsDir(root.dir), slug, `${id}.jsonl`)
   assertInside(root.dir, file)
-  return fs.existsSync(file) ? { id, slug } : null
+  if (!fs.existsSync(file)) return null
+  const cwd = readRecords(file).find((r) => typeof r.cwd === 'string' && r.cwd)?.cwd || null
+  return { id, slug, cwd }
 }
 export function prepareClaudeLaunch({ bin, resumeId }) {
   if (resumeId) return {}

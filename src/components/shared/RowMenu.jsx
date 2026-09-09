@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { addToWorkspace, createWorkspace, inWorkspace, removeFromWorkspace } from '../../lib/workspaces.js'
 import AccentField from './AccentPicker.jsx'
 import { IconField } from './workspaceIcons.jsx'
 import { ChevronRightIcon, PlusIcon } from './shellIcons.jsx'
+const useMenuLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 
 // The "⋯" menu of a sidebar row. Every row gets the same two hover controls —
 // pin and ⋯ — and everything else lives in here: workspace membership toggles
@@ -17,12 +19,30 @@ import { ChevronRightIcon, PlusIcon } from './shellIcons.jsx'
 //   workspaceItem: the project / session to toggle in workspaces (optional)
 //   accent: { value, defaultValue?, onChange, onReset?, resetLabel? } — a colour picker (a workspace's colour)
 //   icon:   { value, onPick, accentStyle? } — a glyph picker (a workspace's icon)
-export default function RowMenu({ open, onClose, items = [], workspaceItem, workspaces = [], accent = null, icon = null }) {
+export default function RowMenu({ open, onClose, items = [], workspaceItem, workspaces = [], accent = null, icon = null, bounded = false, onWorkspaceChange }) {
   const ref = useRef(null)
+  const anchor = useRef(null)
+  const [position, setPosition] = useState(null)
   const onCloseRef = useRef(onClose)
   const [creating, setCreating] = useState(false)
   const [name, setName] = useState('')
   const [unfolded, setUnfolded] = useState(null) // label of the open group
+  useMenuLayoutEffect(() => {
+    if (!open || !bounded) return
+    const place = () => {
+      const row = anchor.current?.parentElement?.getBoundingClientRect(), menu = ref.current
+      if (!row || !menu) return
+      const width = Math.min(accent || icon ? 256 : 240, window.innerWidth - 16)
+      const below = window.innerHeight - row.bottom - 10, above = row.top - 10
+      const up = below < Math.min(menu.scrollHeight, 240) && above > below
+      const height = Math.max(48, up ? above : below)
+      setPosition({ width, maxHeight: Math.min(height, window.innerHeight - 16), left: Math.max(8, Math.min(row.right - width - 8, window.innerWidth - width - 8)), ...(up ? { bottom: Math.max(8, window.innerHeight - row.top + 2) } : { top: Math.max(8, row.bottom + 2) }) })
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => { window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true) }
+  }, [open, bounded, unfolded, creating, workspaces.length, accent, icon])
   useEffect(() => void (onCloseRef.current = onClose), [onClose])
 
   useEffect(() => {
@@ -43,13 +63,14 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
 
   const create = () => {
     if (!name.trim() || !workspaceItem) return
-    createWorkspace(name, [workspaceItem])
+    const id = createWorkspace(name, [workspaceItem])
+    onWorkspaceChange?.(id, true)
     onClose()
   }
   const row = 'w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] text-zinc-300 hover:bg-ink-600 hover:text-zinc-100 disabled:opacity-40 disabled:hover:bg-transparent'
 
-  return (
-    <div ref={ref} onMouseDown={(e) => e.stopPropagation()} className={`absolute right-2 top-full z-30 mt-0.5 ${accent || icon ? 'w-64' : 'w-60'} rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl py-1`}>
+  const menu = (
+    <div ref={ref} style={bounded ? position || { visibility: 'hidden' } : undefined} onMouseDown={(e) => e.stopPropagation()} className={`${bounded ? 'fixed z-50 overflow-y-auto overscroll-contain' : 'absolute right-2 top-full z-30 mt-0.5'} ${accent || icon ? 'w-64' : 'w-60'} rounded-lg border border-zinc-700 bg-ink-800 shadow-2xl py-1`}>
       {items.map((it) =>
         it.children ? (
           <div key={it.label}>
@@ -109,7 +130,11 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
           {workspaces.map((w) => {
             const member = inWorkspace(w, workspaceItem)
             return (
-              <button key={w.id} onClick={() => (member ? removeFromWorkspace(w.id, workspaceItem) : addToWorkspace(w.id, workspaceItem))} className={row}>
+              <button key={w.id} onClick={() => {
+                if (member) removeFromWorkspace(w.id, workspaceItem)
+                else addToWorkspace(w.id, workspaceItem)
+                onWorkspaceChange?.(w.id, !member)
+              }} className={row}>
                 <span className={`w-3.5 h-3.5 rounded border flex items-center justify-center text-[10px] shrink-0 ${member ? 'bg-sky-500/30 border-sky-400 text-sky-100' : 'border-zinc-600'}`}>{member ? '✓' : ''}</span>
                 <span className="truncate">{w.name}</span>
                 <span className="ml-auto text-zinc-600">{w.items.length}</span>
@@ -140,4 +165,5 @@ export default function RowMenu({ open, onClose, items = [], workspaceItem, work
       )}
     </div>
   )
+  return bounded && typeof document !== 'undefined' ? <><span ref={anchor} className="hidden" />{createPortal(menu, document.body)}</> : menu
 }

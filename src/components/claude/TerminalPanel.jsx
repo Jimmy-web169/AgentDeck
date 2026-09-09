@@ -7,6 +7,7 @@ import { getTermView, setTermView } from '../../lib/termView.js'
 import { terminalRequest, announceTerminal, announceTerminalEnd } from '../../lib/terminalTarget.js'
 import TerminalStatus from '../shared/TerminalStatus.jsx'
 import LinkConversationButton from '../shared/LinkConversationButton.jsx'
+import HandoffActions from '../shared/HandoffActions.jsx'
 
 // Terminal chat mode: embeds the real `claude` TUI (served by ttyd) below the
 // conversation. props: continue an existing session ({root,slug,id}) or start a
@@ -142,10 +143,11 @@ export default function TerminalPanel({ paneKey, transcriptReady, root, slug, id
 
   if (!open || !url) {
     return (
-      <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex items-center gap-3">
+      <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex flex-wrap items-center gap-3">
         <button onClick={start} disabled={loading} className="shrink-0 text-[13px] px-3 py-1.5 rounded bg-sky-500/20 text-sky-200 hover:bg-sky-500/30 disabled:opacity-50">
           {loading ? (isLive ? 'Reconnecting to terminal…' : 'Starting terminal…') : isNew ? `▸ Open terminal in ${shortPath(cwd || slug)} (new conversation)` : '▸ Open terminal (continue this session)'}
         </button>
+        <HandoffActions provider={'claude'} root={root} slug={slug} id={id} cwd={cwd} title={title} disabled={loading} />
         <OpenAppButtons onOpenTool={onOpenTool} />
         {err ? (
           <span className="text-[11px] text-red-300 truncate">⚠ {err}</span>
@@ -159,9 +161,10 @@ export default function TerminalPanel({ paneKey, transcriptReady, root, slug, id
   // popped out: collapse to a slim bar so the monitoring page stays clean
   if (view === 'popped') {
     return (
-      <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex items-center gap-3">
+      <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex flex-wrap items-center gap-3">
         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse shrink-0" />
         <span className="text-[12px] text-zinc-400 shrink-0">Terminal running in a separate tab</span>
+        <HandoffActions provider={'claude'} root={root} slug={slug} id={id} cwd={cwd} title={title} disabled={loading} />
         <span className="flex-1" />
         <button onClick={() => { try { const w = window.open(url, `agentdeck-term-${key || myKey}`); if (w) { popoutRef.current = w; w.focus() } } catch {} }} className="text-[12px] text-sky-300/90 hover:text-sky-200">focus tab</button>
         <button onClick={reEmbed} className="text-[12px] text-zinc-400 hover:text-zinc-200">⧉ re-embed</button>
@@ -173,9 +176,10 @@ export default function TerminalPanel({ paneKey, transcriptReady, root, slug, id
   // hidden: collapsed but tmux + ttyd kept running — bring it back with "show"
   if (view === 'hidden') {
     return (
-      <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex items-center gap-3">
+      <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex flex-wrap items-center gap-3">
         <span className="w-1.5 h-1.5 rounded-full bg-zinc-500 shrink-0" />
         <span className="text-[12px] text-zinc-400 shrink-0">Terminal hidden · tmux still running</span>
+        <HandoffActions provider={'claude'} root={root} slug={slug} id={id} cwd={cwd} title={title} disabled={loading} />
         <span className="flex-1" />
         <button onClick={reEmbed} className="text-[12px] text-sky-300/90 hover:text-sky-200">▸ show</button>
         <button onClick={popOut} className="text-[12px] text-zinc-400 hover:text-zinc-200">⤢ pop out</button>
@@ -187,7 +191,7 @@ export default function TerminalPanel({ paneKey, transcriptReady, root, slug, id
   return (
     <div ref={panelRef} className="shrink-0 border-t border-zinc-800 flex flex-col" style={{ height }}>
       <ResizeHandle targetRef={panelRef} onHeight={setHeight} min={160} max={1200} title="Drag to resize the terminal" />
-      <div className="h-7 shrink-0 flex items-center gap-2 px-3 text-[11px] bg-ink-900/70 border-b border-zinc-800">
+      <div className="min-h-7 py-1 shrink-0 flex flex-wrap items-center gap-2 px-3 text-[11px] bg-ink-900/70 border-b border-zinc-800">
         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse" />
         <span className="text-zinc-400">terminal · real claude TUI{isNew ? ' · new' : ''}</span>
         <div className="flex-1" />
@@ -196,14 +200,15 @@ export default function TerminalPanel({ paneKey, transcriptReady, root, slug, id
             ⛶ ctx {contextUsed}% used
           </span>
         )}
-        {canLink && key && <LinkConversationButton api={api} provider={'claude'} root={root} terminalKey={key} />}
+        <HandoffActions provider={'claude'} root={root} slug={slug} id={id} cwd={cwd} title={title} disabled={loading} />
         <OpenAppButtons onOpenTool={onOpenTool} className="mr-1" />
         <button onClick={popOut} className="text-zinc-500 hover:text-sky-300" title="Open in a new browser tab and collapse this panel">⤢ pop out</button>
         <button onClick={() => { setFrameLoaded(false); setNonce((n) => n + 1) }} className="text-zinc-500 hover:text-zinc-200">⟳ reload</button>
         <button onClick={hide} className="text-zinc-500 hover:text-zinc-200 ml-1" title="Hide this panel but keep the session running">▾ hide</button>
         <button onClick={close} className="text-zinc-500 hover:text-red-300 ml-1" title="End this terminal">End ✕</button>
       </div>
-      <TerminalStatus loading={loading} reconnecting={isLive} running={open && !!url} frameLoaded={frameLoaded} id={id} transcriptReady={transcriptReady} />
+      <TerminalStatus loading={loading} reconnecting={isLive} running={open && !!url} frameLoaded={frameLoaded} id={id} transcriptReady={transcriptReady} terminalKey={key}
+        repair={canLink && key && cwd ? <LinkConversationButton api={api} provider="claude" root={root} cwd={cwd} terminalKey={key} /> : null} />
       <iframe key={nonce} src={url} onLoad={() => setFrameLoaded(true)} title="claude terminal" className="flex-1 w-full border-0" style={{ background: '#000' }} />
     </div>
   )

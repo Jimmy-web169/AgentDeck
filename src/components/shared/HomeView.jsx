@@ -1,29 +1,26 @@
 import { announceTerminalEnd } from '../../lib/terminalTarget.js'
+import { sessionPreviews } from '../../lib/sessionPreviews.js'
 import { liveTarget } from '../../lib/tabs.js'
 import { useEffect, useMemo, useState } from 'react'
 import { fmtRelative } from '../../lib/format.js'
-import { baseName, shortPath } from '../../lib/paths.js'
-import { normCwd } from '../../lib/workspaces.js'
-import { setPref } from '../../lib/prefs.js'
+import { shortPath } from '../../lib/paths.js'
+import useFolderCatalog from '../../lib/useFolderCatalog.js'
+import { visibleFolderTree, resolveFolderPins } from '../../lib/folderTree.js'
 import { HOME_VIEWS, homeViewLabel, normalizeView } from '../../lib/tabs.js'
 import { providerColor, providerLabel, statusDot, statusText } from '../../lib/providerColors.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
-import { isPinned, togglePin, usePins } from '../../lib/pins.js'
+import { isPinned, togglePin, usePins, pinsForMode, isFolderPin, pinKey, revealPinnedFolder } from '../../lib/pins.js'
+import { FolderIcon } from './icons.jsx'
 import useActiveSessions, { toManagerItems } from '../../lib/useActiveSessions.js'
 import { PinIcon, SearchIcon, TerminalIcon } from './shellIcons.jsx'
-import InsightsPage from './InsightsPage.jsx'
 import { usePrefs } from '../../lib/prefs.js'
 import { MOD_WORD } from './ShortcutHints.jsx'
+import InsightsPage from './InsightsPage.jsx'
+import IntegratedHomePage from './IntegratedHomePage.jsx'
+import { resolveHomePresentation } from '../../lib/homeScope.js'
 
-// Home pages — the main area when a tab points at Home. The page switch is in
-// this header (these pages are about the whole deck, not a session, so they
-// don't belong in the session sidebar); the provider · folder scope for the
-// per-folder pages comes from the shell's sidebar.
-//   Activity   what is going on across every provider: running terminals,
-//              the latest sessions, pinned items, recent projects, shortcuts
-//   Stats / Insights / History / Plugins / Resources   for the sidebar's scope
-// Tracked folders are managed in FoldersDialog (the "+" next to the folder
-// chips), not on a page of their own.
+// Provider mode follows the sidebar's native source. Only Folder mode uses
+// cross-source reports; both paths keep the established detailed components.
 
 const RECENT_PROJECTS_SCANNED = 10 // projects whose session lists feed "Latest sessions"
 const LATEST_SESSIONS_MAX = 60 // how far the pager can go (the scan is 10 projects deep)
@@ -57,70 +54,43 @@ function pageOf(list, page, size) {
   return { pages, page: p, items: list.slice(p * size, p * size + size) }
 }
 
-// Recent projects, two ways: one row per provider × tracked folder ('source',
-// what the index lists), or one row per working folder with every source that
-// has sessions there ('folder' — the same grouping as the workspace suggestions).
-// The count in the header is the number of rows on screen, never the index total.
-function groupByFolder(projects) {
-  const byCwd = new Map()
-  for (const p of projects) {
-    const k = p.cwd ? normCwd(p.cwd) : `slug:${p.provider}|${p.root}|${p.slug}`
-    if (!byCwd.has(k)) byCwd.set(k, { key: k, cwd: p.cwd || null, name: p.cwd ? baseName(p.cwd) : p.name, sources: [], sessionCount: 0, lastActivity: 0 })
-    const g = byCwd.get(k)
-    g.sources.push(p)
-    g.sessionCount += p.sessionCount || 0
-    if ((p.lastActivity || 0) > g.lastActivity) g.lastActivity = p.lastActivity || 0
-  }
-  const out = [...byCwd.values()]
-  for (const g of out) g.sources.sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0))
-  // two folders with the same name (…/project/AgentDeck, …/maintain/AgentDeck) show a parent
-  const byName = new Map()
-  for (const g of out) byName.set(g.name, (byName.get(g.name) || 0) + 1)
-  for (const g of out) if (byName.get(g.name) > 1 && g.cwd) g.name = shortPath(g.cwd, 2)
-  return out.sort((a, b) => b.lastActivity - a.lastActivity)
-}
-
+// Recent projects follows the navigation preference; canonical folder grouping
+// and unavailable/provider filters match the sidebar, without a second switch.
 function RecentProjects({ providers, index, onOpen }) {
-  const { recentProjectsBy: by, homeProjects: size } = usePrefs()
+  const { sidebarMode: by, homeProjects: size, showUnavailableFolders, folderExcludedProviders, folderExcludedRoots } = usePrefs()
+  const catalog = useFolderCatalog(by === 'folder', index.projects)
   const [pageN, setPageN] = useState(0)
-  const rows = useMemo(() => (by === 'folder' ? groupByFolder(index.projects) : index.projects), [by, index.projects])
+  const rows = useMemo(() => {
+    if (by !== 'folder') return index.projects
+    return visibleFolderTree(catalog.folders, { excludedProviders: folderExcludedProviders, excludedRoots: folderExcludedRoots, showUnavailable: showUnavailableFolders })
+      .map((f) => ({ ...f, key: f.id, name: shortPath(f.cwd || f.name), sources: f.sources.map((s) => ({ ...s, name: f.name })) }))
+      .sort((a, b) => b.lastActivity - a.lastActivity || a.id.localeCompare(b.id))
+  }, [by, index.projects, catalog.folders, folderExcludedProviders, folderExcludedRoots, showUnavailableFolders])
   const { pages, page, items: shown } = pageOf(rows, pageN, size || 5)
   const open = (p, e) => onOpen(p.provider, { root: p.root, rootLabel: p.rootLabel, slug: p.slug, cwd: p.cwd, project: p.name }, { newTab: e.ctrlKey || e.metaKey })
-  const pill = (k, label, title) => (
-    <button onClick={() => setPref('recentProjectsBy', k)} title={title} className={`h-6 px-2 rounded text-[11px] transition-colors ${by === k ? 'bg-ink-600 text-zinc-100' : 'text-zinc-500 hover:text-zinc-200 hover:bg-ink-700'}`}>
-      {label}
-    </button>
-  )
   return (
     <Section
       title="Recent projects"
       count={shown.length}
-      right={
-        <span className="flex items-center gap-0.5 rounded-md bg-ink-800 border border-zinc-800 p-0.5 whitespace-nowrap">
-          {pill('source', 'Source', 'One row per provider and tracked folder')}
-          {pill('folder', 'Folder', 'One row per working folder — every provider and tracked folder that has sessions there, like the workspace suggestions')}
-        </span>
-      }
       pager={<Pager page={page} pages={pages} onPage={setPageN} />}
     >
+      {by === 'folder' && catalog.error && <p role="alert" className="text-xs text-red-300 mb-2">{catalog.error}</p>}
       {rows.length === 0 ? (
-        <Empty>{index.loading ? 'Loading…' : 'No projects yet.'}</Empty>
+        <Empty>{index.loading || (by === 'folder' && catalog.loading) ? 'Loading…' : 'No projects yet.'}</Empty>
       ) : (
         <Panel>
           {by === 'folder'
             ? shown.map((g) => (
-                <div key={g.key} className="flex items-center gap-2.5 px-3 py-2 hover:bg-ink-800 border-b border-zinc-800/60 last:border-0">
-                  <button onClick={(e) => open(g.sources[0], e)} className="min-w-0 flex-1 text-left" title={g.cwd || g.name}>
+                <div key={g.key} className="min-w-0 flex flex-wrap items-center gap-2.5 px-3 py-2 hover:bg-ink-800 border-b border-zinc-800/60 last:border-0">
+                  <button onClick={(e) => open(g.sources[0], e)} className="min-w-0 flex-[1_1_7rem] text-left" title={g.cwd || g.name}>
                     <span className="block text-[12.5px] text-zinc-200 truncate">{g.name}</span>
-                    <span className="block text-[10.5px] text-zinc-600 truncate">{g.cwd ? shortPath(g.cwd) : g.sources[0].rootLabel} · {g.sessionCount} session{g.sessionCount === 1 ? '' : 's'}</span>
+                    <span className="block text-[10.5px] text-zinc-600 truncate">{g.sessionCount} sessions · {g.sources.length} sources</span>
                   </button>
-                  <span className="shrink-0 flex items-center gap-1" title={g.sources.map((s) => `${providerLabel(providers, s.provider)} · ${s.rootLabel} · ${s.sessionCount}`).join('\n')}>
-                    {g.sources.map((s) => (
-                      <button key={`${s.provider}:${s.root}`} onClick={(e) => open(s, e)} title={`${providerLabel(providers, s.provider)} · ${s.rootLabel} · ${s.sessionCount} session${s.sessionCount === 1 ? '' : 's'}`} className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-ink-700">
-                        <span className={`w-1.5 h-1.5 rounded-full ${providerColor(providers, s.provider).dot}`} />
-                        <span className="text-[10.5px] text-zinc-500">{s.sessionCount}</span>
-                      </button>
-                    ))}
+                  <span className="max-w-full flex flex-wrap items-center gap-1">
+                    {g.sources.map((s) => <button key={JSON.stringify([s.provider, s.root, s.slug])} onClick={(e) => open(s, e)} title={`${providerLabel(providers, s.provider)} · ${s.rootLabel || s.root} · ${s.sessionCount} sessions`} className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-ink-700">
+                      <span className={`w-1.5 h-1.5 rounded-full ${providerColor(providers, s.provider).dot}`} />
+                      <span className="text-[10.5px] text-zinc-500">{s.sessionCount}</span>
+                    </button>)}
                   </span>
                   <span className="shrink-0 text-[10.5px] text-zinc-600 w-14 text-right">{fmtRelative(g.lastActivity)}</span>
                 </div>
@@ -149,7 +119,7 @@ function RecentProjects({ providers, index, onOpen }) {
 function Section({ title, count, right, pager, children, className = '' }) {
   return (
     <section className={className}>
-      <div className="flex items-center gap-2 mb-2.5 min-w-0">
+      <div className="flex flex-wrap items-center gap-2 mb-2.5 min-w-0">
         <span className="text-[11px] uppercase tracking-wide text-zinc-500 whitespace-nowrap">{title}</span>
         {count != null && <span className="text-[11px] text-zinc-600 whitespace-nowrap shrink-0">· {count}</span>}
         <span className="flex-1" />
@@ -162,11 +132,11 @@ function Section({ title, count, right, pager, children, className = '' }) {
 }
 
 const Empty = ({ children }) => <div className="text-[12.5px] text-zinc-600 bg-ink-900 border border-zinc-800 rounded-lg px-4 py-5 text-center">{children}</div>
-const Panel = ({ children, className = '' }) => <div className={`rounded-lg border border-zinc-800 bg-ink-900 ${className}`}>{children}</div>
+const Panel = ({ children, className = '' }) => <div className={`min-w-0 rounded-lg border border-zinc-800 bg-ink-900 ${className}`}>{children}</div>
 
-// a session row: dot (terminal red › writing yellow › provider), title, first
-// prompt, project · folder, time, pin
-function SessionRow({ s, providers, live, termKeys, onOpen, showPrompt = true }) {
+// A session row: status dot, title, optional question previews, source, time, pin.
+export function SessionRow({ s, providers, live, termKeys, onOpen, showLatestPrompt = true }) {
+  const previews = sessionPreviews(s, { showLatestPrompt })
   const k = liveSessionKey(s.provider, s.root, s.id)
   const term = termKeys?.has(k)
   const writing = live?.ids?.has(k)
@@ -188,7 +158,15 @@ function SessionRow({ s, providers, live, termKeys, onOpen, showPrompt = true })
           {term && <span className="shrink-0 text-[9.5px] uppercase tracking-wide text-red-300">terminal</span>}
           <span className="ml-auto shrink-0 text-[10.5px] text-zinc-600">{fmtRelative(s.lastTs)}</span>
         </div>
-        {showPrompt && s.firstPrompt && s.firstPrompt !== s.title && <div className="text-[11.5px] text-zinc-500 truncate">{s.firstPrompt}</div>}
+        {previews.length > 0 && (
+          <div className="my-1.5 space-y-1 border-l border-zinc-700/60 pl-2.5">
+            {previews.map((preview) => (
+              <div key={preview.kind} data-question-preview={preview.kind} className="min-w-0 truncate text-[12px] leading-4 text-zinc-500" title={preview.text}>
+                {preview.text}
+              </div>
+            ))}
+          </div>
+        )}
         <div className="text-[10.5px] text-zinc-600 truncate">
           <span className={c.text}>{providerLabel(providers, s.provider)}</span> · {s.project} · {s.rootLabel}
         </div>
@@ -203,8 +181,11 @@ function SessionRow({ s, providers, live, termKeys, onOpen, showPrompt = true })
 function Activity({ providers, visible, index, live, termKeys, onOpen }) {
   const active = useActiveSessions(providers, { enabled: visible })
   const liveItems = toManagerItems(active)
-  const pins = usePins()
+  const allPins = usePins()
   const prefs = usePrefs()
+  const pins = pinsForMode(allPins, prefs.sidebarMode)
+  const pinCatalog = useFolderCatalog(prefs.sidebarMode === 'folder' && pins.some(isFolderPin), index.projects)
+  const pinnedFolders = resolveFolderPins(pins, pinCatalog.folders, { excludedProviders: prefs.folderExcludedProviders, excludedRoots: prefs.folderExcludedRoots, showUnavailable: prefs.showUnavailableFolders })
   const [latestPage, setLatestPage] = useState(0)
   const latestLimit = prefs.homeSessions || 10
   const [ended, setEnded] = useState(() => new Set())
@@ -271,7 +252,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
   const shownLatest = latestPaged.items
 
   return (
-    <div className="max-w-6xl mx-auto px-6 py-5">
+    <div className="activity-layout w-full min-w-0 max-w-6xl mx-auto px-6 py-5">
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0 space-y-7">
         <Section title="Live now" count={`${shownLive.length} running terminal${shownLive.length === 1 ? '' : 's'}`}>
@@ -283,7 +264,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {shownLive.map((it) => (
                 <Panel key={it.key} className="px-3 py-3 flex flex-col gap-2 border-red-500/30">
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <ProviderBadge providers={providers} id={it.provider} />
                     <TerminalIcon className={`w-3.5 h-3.5 ${statusText('terminal')}`} />
                     <span className={`ml-auto w-1.5 h-1.5 rounded-full ${statusDot('terminal')}`} />
@@ -312,7 +293,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
           ) : (
             <Panel>
               {shownLatest.map((s) => (
-                <SessionRow key={`${s.provider}|${s.root}|${s.id}`} s={s} providers={providers} live={live} termKeys={termKeys} onOpen={onOpen} showPrompt={prefs.showFirstPrompt} />
+                <SessionRow key={`${s.provider}|${s.root}|${s.id}`} s={s} providers={providers} live={live} termKeys={termKeys} onOpen={onOpen} showLatestPrompt={prefs.showLatestPrompt} />
               ))}
             </Panel>
           )}
@@ -326,6 +307,17 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
           ) : (
             <Panel>
               {pins.map((p) => {
+                if (isFolderPin(p)) {
+                  const folder = pinnedFolders.find((f) => f.id === p.folderId)
+                  return <div key={pinKey(p)} className="group flex items-center gap-2.5 px-3 py-2 hover:bg-ink-800 border-b border-zinc-800/60 last:border-0">
+                    <FolderIcon className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                    <button onClick={() => revealPinnedFolder(p)} title="Show pinned folder in sidebar" className="min-w-0 flex-1 text-left">
+                      <div className="text-[12.5px] text-zinc-200 truncate">{shortPath(p.cwd)}</div>
+                      <div className="text-[10.5px] text-zinc-600 truncate">{pinCatalog.loading ? 'Loading sources…' : folder?.pinStatus || `${folder?.sources.length || 0} sources · Show in sidebar`}</div>
+                    </button>
+                    <button onClick={() => togglePin(p)} title="Unpin folder" className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-amber-300 hover:bg-ink-700"><PinIcon className="w-3.5 h-3.5" filled /></button>
+                  </div>
+                }
                 const k = p.id ? liveSessionKey(p.provider, p.root, p.id) : null
                 const c = providerColor(providers, p.provider)
                 const dot = k && termKeys?.has(k) ? statusDot('terminal') : k && live?.ids?.has(k) ? statusDot('writing') : c.dot
@@ -362,23 +354,26 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
   )
 }
 
-export default function HomeView({ providers = [], visible = true, target, scope, onScope, index, live, termKeys, onOpen, onNavigate, onOpenHome, onManageFolders, onSearch }) {
+export default function HomeView({ tabKey, providers = [], visible = true, target, scope: sidebarScope, index, live, termKeys, onOpen, onNavigate, onOpenHome }) {
   const view = normalizeView(target?.view)
+  const prefs = usePrefs()
+  const { explicitSource, integrated, homeScope, scope } = resolveHomePresentation(prefs, target, sidebarScope)
+  const pageTarget = (page) => ({ view: page })
   const scopeInfo = scope ? index.scopes.find((s) => s.provider === scope.provider && s.root === scope.root) : null
   const providerCfg = scope ? providers.find((p) => p.id === scope.provider) : null
   const Page = providerCfg?.homePages?.[view]
   const scoped = view !== 'activity'
 
   return (
-    <div className="h-full flex flex-col bg-ink-950">
-      <div className="h-12 shrink-0 flex items-center gap-3 px-4 border-b border-zinc-800 bg-ink-900/70">
-        <div className="flex items-center gap-0.5 rounded-md bg-ink-800 border border-zinc-800 p-0.5">
+    <div className="h-full min-w-0 flex flex-col bg-ink-950">
+      <div className="min-h-12 shrink-0 flex items-center gap-3 px-4 py-2 border-b border-zinc-800 bg-ink-900/70">
+        <div className="flex min-w-0 flex-wrap items-center gap-0.5 rounded-md bg-ink-800 border border-zinc-800 p-0.5">
           {HOME_VIEWS.map((v) => (
             <button
               key={v.k}
-              onClick={(e) => (e.ctrlKey || e.metaKey ? onOpenHome?.({ view: v.k }, { newTab: true }) : onNavigate?.({ view: v.k, focus: null }))}
+              onClick={(e) => (e.ctrlKey || e.metaKey ? onOpenHome?.(pageTarget(v.k), { newTab: true }) : onNavigate?.({ view: v.k, focus: null, homeSource: null }))}
               onMouseDown={(e) => e.button === 1 && e.preventDefault()}
-              onAuxClick={(e) => e.button === 1 && onOpenHome?.({ view: v.k }, { newTab: true })}
+              onAuxClick={(e) => e.button === 1 && onOpenHome?.(pageTarget(v.k), { newTab: true })}
               title={`${v.label} · ${MOD_WORD}+click opens in a new tab`}
               className={`h-7 px-3 rounded text-[12.5px] transition-colors ${view === v.k ? 'bg-ink-600 text-zinc-100' : 'text-zinc-400 hover:text-zinc-100 hover:bg-ink-700'}`}
             >
@@ -386,27 +381,28 @@ export default function HomeView({ providers = [], visible = true, target, scope
             </button>
           ))}
         </div>
-        {/* the folder is chosen once, in the sidebar's chips — the pages follow that scope */}
         <span className="flex-1" />
       </div>
 
+      {scoped && explicitSource && <div className="shrink-0 px-4 py-2 border-b border-zinc-800 flex flex-wrap items-center gap-3 text-xs text-zinc-400"><button className="text-sky-300" onClick={() => onNavigate?.({ homeSource: null })}>← {homeViewLabel(view)}</button><span>{providerLabel(providers, scope.provider)} / {scopeInfo?.rootLabel || explicitSource.rootLabel || scope.root}</span>{view === 'resources' && <span>User-level source · May affect other folders</span>}</div>}
+
       {view === 'activity' && (
-        <div className="flex-1 min-h-0 overflow-y-auto">
+        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">
           <Activity providers={providers} visible={visible} index={index} live={live} termKeys={termKeys} onOpen={onOpen} />
         </div>
       )}
-      {scoped && !scope && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">No tracked folders yet — add one with the + next to the folder chips.</div>}
-      {scoped && scope && view === 'insights' && (
-        <div key={`insights|${scope.provider}|${scope.root}`} className="flex-1 min-h-0 overflow-y-auto">
-          <InsightsPage provider={scope.provider} root={scope.root} rootLabel={scopeInfo?.rootLabel || ''} providerLabel={providerLabel(providers, scope.provider)} onOpen={(t) => onOpen(scope.provider, { rootLabel: scopeInfo?.rootLabel, ...t })} />
-        </div>
-      )}
-      {scoped && scope && view !== 'insights' && Page && (
-        <div key={`${view}|${scope.provider}|${scope.root}`} className={view === 'resources' ? 'flex-1 min-h-0' : 'flex-1 min-h-0 overflow-y-auto'}>
+      {scoped && integrated && <div className="flex-1 min-h-0"><IntegratedHomePage key={tabKey} view={view} scope={homeScope} showUnavailable={prefs.showUnavailableFolders} providers={providers} visible={visible} onOpen={onOpen} /></div>}
+      {scoped && !integrated && !scope && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">No tracked folders yet — add one with the + next to the folder chips.</div>}
+
+      {scoped && !integrated && scope && view === 'insights' && <div key={`insights|${scope.provider}|${scope.root}`} className="flex-1 min-w-0 min-h-0 overflow-y-auto">
+        <InsightsPage provider={scope.provider} root={scope.root} rootLabel={scopeInfo?.rootLabel || ''} providerLabel={providerLabel(providers, scope.provider)} onOpen={(t) => onOpen(scope.provider, { rootLabel: scopeInfo?.rootLabel, ...t })} />
+      </div>}
+      {scoped && !integrated && scope && view !== 'insights' && Page && (
+        <div key={`${view}|${scope.provider}|${scope.root}`} className={view === 'resources' ? 'flex-1 min-h-0' : 'flex-1 min-w-0 min-h-0 overflow-y-auto overflow-x-hidden'}>
           <Page root={scope.root} focus={target?.focus || null} onOpen={(t) => onOpen(scope.provider, { rootLabel: scopeInfo?.rootLabel, ...t })} />
         </div>
       )}
-      {scoped && scope && view !== 'insights' && !Page && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">This provider has no {homeViewLabel(view)} page.</div>}
+      {scoped && !integrated && scope && view !== 'insights' && !Page && <div className="flex-1 flex items-center justify-center text-[13px] text-zinc-600">This provider has no {homeViewLabel(view)} page.</div>}
     </div>
   )
 }

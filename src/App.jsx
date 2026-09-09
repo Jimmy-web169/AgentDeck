@@ -6,6 +6,11 @@ import AppSidebar from './components/shared/AppSidebar.jsx'
 import TabStrip from './components/shared/TabStrip.jsx'
 import QuickSwitcher from './components/shared/QuickSwitcher.jsx'
 import FoldersDialog from './components/shared/FoldersDialog.jsx'
+import ConversationHandoffDialog from './components/shared/ConversationHandoffDialog.jsx'
+import DashboardView from './components/shared/DashboardView.jsx'
+import LiveSessionsPanel from './components/shared/LiveSessionsPanel.jsx'
+import { announceTerminalEnd } from './lib/terminalTarget.js'
+import { isDeckTarget } from './lib/tabs.js'
 import { PROVIDER_LIST } from './providers/index.js'
 import { registerProviders } from './lib/providerColors.js'
 
@@ -15,7 +20,7 @@ import { terminalTabKeys, openTabState, adoptTerminalsFor, adoptTerminal, dedupe
 import { forgetPins } from './lib/pins.js'
 import { baseName } from './lib/paths.js'
 import { currentHash, fromHash, replaceHash, toHash } from './lib/route.js'
-import useActiveSessions from './lib/useActiveSessions.js'
+import useActiveSessions, { toManagerItems } from './lib/useActiveSessions.js'
 import useLiveKeys, { liveSessionKey } from './lib/useLiveKeys.js'
 import useNavIndex from './lib/useNavIndex.js'
 
@@ -29,7 +34,7 @@ import useNavIndex from './lib/useNavIndex.js'
 // instant.
 //
 // The sidebar's folder chips (every provider's folders, colour-coded) pick the
-// "scope" that the project list and Home's per-folder pages use; it follows the
+// "scope" that Provider-mode projects and Home pages use; it follows the
 // active tab, and on Home it is whatever was picked last. The sidebar is the
 // shell's, so it is identical on every tab. Clicking in it navigates the
 // current tab, like a link click in Chrome; Ctrl/middle-click opens a new tab.
@@ -59,8 +64,8 @@ function initialState() {
   // a deep link opens (or focuses) its own tab
   const linked = fromHash(currentHash(), PROVIDER_IDS)
   if (linked) {
-    const target = linked.provider ? linked : { ...HOME, view: normalizeView(linked.view) }
-    const existing = target.provider ? tabs.find((t) => sameTarget(t.target, target)) : tabs.find((t) => isHome(t.target) && normalizeView(t.target?.view) === target.view)
+    const target = linked.provider || isDeckTarget(linked) ? linked : { ...HOME, ...linked, view: normalizeView(linked.view) }
+    const existing = !isHome(target) ? tabs.find((t) => sameTarget(t.target, target)) : tabs.find((t) => isHome(t.target) && normalizeView(t.target?.view) === target.view && toHash(t.target) === toHash(target))
     if (existing) activeKey = existing.key
     else {
       const t = emptyTab(target)
@@ -92,12 +97,29 @@ export default function App() {
   const [closedRunning, setClosedRunning] = useState(null)
   const dismissClosedRunning = useCallback(() => setClosedRunning(null), [])
   const [searchOpen, setSearchOpen] = useState(false)
+  const [showLive, setShowLive] = useState(false)
   const searchNewTab = useRef(false)
   const liveTerminalsRef = useRef([])
   const [foldersOpen, setFoldersOpen] = useState(false) // FoldersDialog — the "+" next to the folder chips
+  const [handoffRequest, setHandoffRequest] = useState(null)
+  useEffect(() => {
+    const open = (e) => { if (e.detail?.source?.id && ['send', 'export'].includes(e.detail.mode)) setHandoffRequest(e.detail) }
+    window.addEventListener('agentdeck:conversation-handoff', open)
+    return () => window.removeEventListener('agentdeck:conversation-handoff', open)
+  }, [])
   const [recent, setRecent] = useState(loadRecent)
   const [sticky, setSticky] = useState(() => loadJson(SCOPE_KEY, null)) // last scope picked while on Home
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('agentdeck_collapsed') === '1')
+  const [folderFocus, setFolderFocus] = useState(null)
+  useEffect(() => {
+    const reveal = (e) => {
+      if (typeof e.detail?.folderId !== 'string') return
+      setCollapsed(false)
+      setFolderFocus({ folderId: e.detail.folderId })
+    }
+    window.addEventListener('agentdeck:reveal-folder', reveal)
+    return () => window.removeEventListener('agentdeck:reveal-folder', reveal)
+  }, [])
   const [sidebarW, setSidebarW] = useState(() => {
     const v = Number(localStorage.getItem('agentdeck_sidebarW'))
     return v >= 240 && v <= 600 ? v : 300
@@ -255,15 +277,16 @@ export default function App() {
   }, [])
 
   // scope changes (rail / folder chips): on a provider tab they navigate the
-  // tab to that folder; on Home they just re-scope the Home pages
+  // tab to that source; Provider-mode Home follows it and clears stale focus.
   const onScope = useCallback(
     (s) => {
       setScope(s)
       const cur = stateRef.current
       const t = cur.tabs.find((x) => x.key === cur.activeKey)?.target
       if (t?.provider) openTarget({ provider: s.provider, root: s.root })
+      else if (isHome(t)) updateHome({ focus: null, homeSource: null })
     },
-    [openTarget, setScope]
+    [openTarget, setScope, updateHome]
   )
   const activateTab = useCallback((key) => {
     const cur = stateRef.current
@@ -302,6 +325,14 @@ export default function App() {
     commit({ tabs: [keep], activeKey: key })
     if (cur.activeKey !== key) issuePending(keep.target)
   }, [])
+
+  useEffect(() => {
+    const ended = (e) => {
+      for (const tab of stateRef.current.tabs) if (tab.target?.kind === 'dashboard' && tab.target.dashboardId === e.detail?.id) closeTab(tab.key)
+    }
+    window.addEventListener('agentdeck:dashboard-ended', ended)
+    return () => window.removeEventListener('agentdeck:dashboard-ended', ended)
+  }, [closeTab])
 
   const closeRight = useCallback((key) => {
     const cur = stateRef.current
@@ -421,9 +452,9 @@ export default function App() {
       if (!t) return
       const cur = stateRef.current
       const act = cur.tabs.find((x) => x.key === cur.activeKey)?.target || null
-      if (t.provider) {
+      if (t.provider || isDeckTarget(t)) {
         if (!sameTarget(act, t)) openTarget(t)
-      } else if (!isHome(act) || normalizeView(act?.view) !== normalizeView(t.view)) openHome({ view: normalizeView(t.view) })
+      } else if (!isHome(act) || normalizeView(act?.view) !== normalizeView(t.view) || toHash(act) !== toHash(t)) openHome({ ...t, view: normalizeView(t.view) })
     }
     window.addEventListener('hashchange', onHash)
     return () => window.removeEventListener('hashchange', onHash)
@@ -483,6 +514,11 @@ export default function App() {
 
   const openTabKeys = useMemo(() => new Set(tabs.map((t) => targetKey(t.target)).filter(Boolean)), [tabs])
   const showHome = isHome(activeTarget)
+  useEffect(() => {
+    const open = (e) => { if (isDeckTarget(e.detail)) openTarget(e.detail, { newTab: true }) }
+    window.addEventListener('agentdeck:open-view', open)
+    return () => window.removeEventListener('agentdeck:open-view', open)
+  }, [openTarget])
   const openSession = useCallback((providerId, target, opts) => openTarget({ provider: providerId, ...target }, target.kind === 'tmux' ? { ...opts, newTab: true } : opts), [openTarget])
   // a hand-off dialog (Config views, Insights) started a terminal: enter it the way the Live panel does
   useEffect(() => {
@@ -506,6 +542,8 @@ export default function App() {
         onNew={newTab}
         onReorder={moveTab}
         onSearch={() => { searchNewTab.current = false; setSearchOpen(true) }}
+        onLive={() => setShowLive(true)}
+        liveCount={activeSessions.count}
         onHome={() => openHome()}
         onCopyLink={copyLink}
         sidebarCollapsed={collapsed}
@@ -527,6 +565,7 @@ export default function App() {
                 onOpenTarget={(t, opts) => openTarget({ ...t }, opts)}
                 onNewProject={newProject}
                 drafts={drafts}
+                folderFocus={folderFocus}
                 onDeleteSession={deleteSession}
                 onDeleteSessions={deleteSessions}
               />
@@ -535,6 +574,7 @@ export default function App() {
           </>
         )}
         <div className="flex-1 min-w-0 relative">
+          {tabs.filter((t) => t.target?.kind === 'dashboard').map((tab) => <div key={tab.key} className="absolute inset-0" style={{ display: tab.key === activeKey ? 'block' : 'none' }}><DashboardView dashboardId={tab.target.dashboardId} onOpen={openTarget} providers={PROVIDER_LIST} /></div>)}
           {PROVIDER_LIST.map((p) => {
             const ProviderApp = p.App
             const shown = activeTarget?.provider === p.id
@@ -557,7 +597,7 @@ export default function App() {
             )
           })}
           <div className="absolute inset-0" style={{ display: showHome ? 'block' : 'none' }}>
-            <HomeView providers={PROVIDER_LIST} visible={showHome} target={showHome ? activeTarget : null} scope={scope} onScope={onScope} index={index} live={live} termKeys={termKeys} onOpen={openSession} onNavigate={updateHome} onOpenHome={openHome} onManageFolders={() => setFoldersOpen(true)} onSearch={() => { searchNewTab.current = false; setSearchOpen(true) }} />
+            <HomeView tabKey={activeKey} providers={PROVIDER_LIST} visible={showHome} target={showHome ? activeTarget : null} scope={scope} onScope={onScope} index={index} live={live} termKeys={termKeys} onOpen={openSession} onNavigate={updateHome} onOpenHome={openHome} onManageFolders={() => setFoldersOpen(true)} onSearch={() => { searchNewTab.current = false; setSearchOpen(true) }} />
           </div>
         </div>
       </div>
@@ -587,6 +627,14 @@ export default function App() {
         dismissClosedRunning()
       }} />
       <FoldersDialog open={foldersOpen} onClose={() => setFoldersOpen(false)} providers={PROVIDER_LIST} index={index} />
+      {showLive && <LiveSessionsPanel items={toManagerItems(activeSessions)} providers={PROVIDER_LIST}
+        onEnter={(t) => { openTarget(liveTarget(t), { newTab: true }); setShowLive(false) }}
+        onClose={async (t) => {
+          const response = await fetch(`/api/${encodeURIComponent(t.provider)}/terminal?key=${encodeURIComponent(t.key)}`, { method: 'DELETE' })
+          if (!response.ok) throw new Error('Could not end this terminal. Please refresh and try again.')
+          announceTerminalEnd(t.provider, t.key)
+        }} onClosePanel={() => setShowLive(false)} />}
+      {handoffRequest && <ConversationHandoffDialog {...handoffRequest} providers={PROVIDER_LIST} onOpen={openTarget} onClose={() => setHandoffRequest(null)} />}
     </div>
   )
 }

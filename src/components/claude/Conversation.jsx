@@ -1,4 +1,5 @@
 import { Fragment, memo, useMemo, useRef } from 'react'
+import '../shared/conversationLayout.css'
 import Markdown from '../shared/Markdown.jsx'
 import ToolCall from './ToolCall.jsx'
 import Thinking from '../shared/Thinking.jsx'
@@ -67,7 +68,7 @@ function AssistantMsg({ ev, threads, ctx, onFork }) {
             </div>
           )
         })}
-        <div className="mt-1 flex items-center gap-3 text-[11px] text-zinc-600">
+        <div className="conversation-message-meta mt-1 flex items-center gap-3 text-[11px] text-zinc-600">
           {ev.model && <span className="font-mono">{ev.model}</span>}
           {ev.usage && totalTokens(ev.usage) > 0 && (
             <span>
@@ -163,7 +164,7 @@ function Conversation({ data, subagentCtx = null, compact = false, onFork = null
   const threads = useMemo(() => (ctx ? buildThreadMap(timeline, subagentAdapter, ctx) : null), [timeline, ctx])
 
   return (
-    <div ref={rootRef} className={compact ? 'px-3 py-3' : 'mx-auto max-w-3xl px-4 py-6'}>
+    <div ref={rootRef} className={`conversation-content ${compact ? 'px-3 py-3' : 'mx-auto max-w-3xl px-4 py-6'}`}>
       <div className={`${compact ? 'mb-3 pb-3' : 'mb-5 pb-4'} border-b border-zinc-700/60`}>
         <h1 className={`${compact ? 'text-[14px]' : 'text-lg'} font-semibold text-zinc-100`}>{summary.title}</h1>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-zinc-500">

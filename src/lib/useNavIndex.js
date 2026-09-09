@@ -130,6 +130,8 @@ export default function useNavIndex(providers, { enabled = true } = {}) {
             id: s.id,
             title: s.title || (s.id ? String(s.id).slice(0, 8) : '(untitled)'),
             firstPrompt: s.firstPrompt || '',
+            lastUserPrompt: s.lastUserPrompt || '',
+            lastUserPromptTs: s.lastUserPromptTs || null,
             lastTs: s.lastTs || null,
             toolCalls: s.toolCalls || 0,
             userTurns: s.userTurns || 0,
@@ -197,5 +199,8 @@ export default function useNavIndex(providers, { enabled = true } = {}) {
   // snapshot; the live one wins)
   const labelOf = useCallback((provider, root, fallback = '') => scopes.find((s) => s.provider === provider && s.root === root)?.rootLabel || fallback, [scopes])
 
-  return { projects, roots, scopes, loading, refresh, loadSessions, sessionsFor, invalidate, labelOf }
+  // Read-only cache projection for search. Unlike sessionsFor, this never
+  // starts a fetch and never treats an unloaded project as an empty result.
+  const cachedSessions = useCallback(() => [...sessionCache.current.values()].flatMap((entry) => entry.data || []), [])
+  return { projects, roots, scopes, loading, refresh, loadSessions, sessionsFor, cachedSessions, invalidate, labelOf }
 }

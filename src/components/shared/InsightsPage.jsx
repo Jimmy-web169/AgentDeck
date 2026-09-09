@@ -376,16 +376,17 @@ function Heatmap({ grid }) {
 const toggleBtn = 'h-6 px-2 rounded-md border border-zinc-800 text-[11.5px] text-zinc-400 hover:text-zinc-100 hover:bg-ink-700'
 
 // ---------- page ----------
-export default function InsightsPage({ provider, root, rootLabel = '', providerLabel = '', onOpen }) {
+export default function InsightsPage({ provider, root, rootLabel = '', providerLabel = '', onOpen, data: suppliedData, embedded = false }) {
   usePrefs() // re-render when Preferences › Paths changes (shortPath reads it)
-  const [data, setData] = useState(null)
+  const [fetchedData, setData] = useState(null)
+  const data = suppliedData ?? fetchedData
   const [handoff, setHandoff] = useState(false) // AI hand-off dialog with the digest
   const [err, setErr] = useState(null)
   const [table, setTable] = useState(false)
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
-    if (!provider || !root) return
+    if (suppliedData !== undefined || !provider || !root) return
     let cancelled = false
     setData(null)
     setErr(null)
@@ -396,7 +397,7 @@ export default function InsightsPage({ provider, root, rootLabel = '', providerL
     return () => {
       cancelled = true
     }
-  }, [provider, root])
+  }, [provider, root, suppliedData])
 
   const v = useMemo(() => (data ? derive(data) : null), [data])
 
@@ -423,7 +424,7 @@ export default function InsightsPage({ provider, root, rootLabel = '', providerL
   const weekTitles = weekly.map((w) => `Week of ${w.weekStart} · ${plural(w.sessions, 'session')} · ${plural(w.prompts, 'prompt')} · ${plural(w.activeDays, 'active day')}${w.projects != null ? ` · ${plural(w.projects, 'project')}` : ''}`)
 
   return (
-    <div className="mx-auto max-w-6xl px-6 py-6 space-y-5">
+    <div className={`min-w-0 mx-auto max-w-6xl space-y-5 ${embedded ? '' : 'px-6 py-6'}`}>
       {/* 1 — hero */}
       <section className="rounded-xl border border-zinc-800 bg-ink-900 p-5">
         <div className="flex flex-wrap items-start gap-3">
@@ -615,11 +616,11 @@ export default function InsightsPage({ provider, root, rootLabel = '', providerL
         <button onClick={copy} className="px-3 py-1.5 rounded-md bg-ink-700 border border-zinc-700 text-[12px] text-zinc-200 hover:bg-ink-600">
           {copied ? '✓ copied' : 'Copy digest as Markdown'}
         </button>
-        <HandoffButton onClick={() => setHandoff(true)} label={`Ask ${providerLabel || 'the agent'} about it`} title="Open the CLI with this digest and a question about your habits" />
-        <span>Paste it into any agent session, or hand it over directly.</span>
+        {provider && root && <HandoffButton onClick={() => setHandoff(true)} label={`Ask ${providerLabel || 'the agent'} about it`} title="Open the CLI with this digest and a question about your habits" />}
+        <span>{provider && root ? 'Paste it into any agent session, or hand it over directly.' : 'Copy the combined digest into the agent session of your choice.'}</span>
         <span className="ml-auto text-zinc-600">A session counts on the day of its last activity.</span>
       </div>
-      {handoff && (
+      {handoff && provider && root && (
         <HandoffDialog
           api={createApi(provider)}
           providerId={provider}

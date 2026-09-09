@@ -1,8 +1,10 @@
 # AgentDeck — Data Model
 
-AgentDeck reads, read-only, the files a CLI coding agent already writes to
-disk. It never invents storage of its own; each **provider** maps that agent's
-on-disk layout into a small set of shared shapes the UI renders.
+AgentDeck reads the files a CLI coding agent already writes to disk; each
+**provider** maps that agent's on-disk layout into shared shapes. Native
+transcripts remain the source of conversation history. AgentDeck-owned
+configuration, dashboard references and reviewed context handoffs are stored
+separately; context snapshots do not overwrite provider-native transcripts.
 
 ## Shared contract
 
@@ -11,7 +13,7 @@ the full interface), so the frontend is layout-agnostic:
 
 - **Root** — a tracked config home: `{ id, label, dir, exists, …probe }`.
 - **Project** — a grouping of sessions: `{ slug, cwd, sessionCount, lastActivity }`.
-- **Session summary** — `{ id, title, firstPrompt, firstTs, lastTs, userTurns,
+- **Session summary** — `{ id, title, firstPrompt, lastUserPrompt, lastUserPromptTs, firstTs, lastTs, userTurns,
   assistantTurns, toolCalls, models, toolCounts, tokens, … }` (providers may add
   optional fields such as `cwd`, `contextWindow`, `lastTokenUsage`, `rateLimits`).
 - **Timeline event** — `{ kind: 'user' | 'assistant' | 'system', ts, parts: [{ kind:
@@ -22,6 +24,15 @@ the full interface), so the frontend is layout-agnostic:
 A session is addressed by an opaque `(slug?, id)` pair; the host never builds a
 filesystem path from a slug — it always asks the provider, which keeps path
 handling (and any traversal guard) inside the provider.
+
+`lastUserPrompt` is a whitespace-normalized preview (up to 140 characters plus
+an ellipsis) of the last recognized user question in native event order, not
+the session title or last assistant/tool activity. `lastUserPromptTs` is that
+question's native timestamp, or null when unavailable. Empty sessions use
+`''` / `null`. Known image/document-only user records may use an attachment
+placeholder; metadata-only records do not replace the previous question.
+Codex prefers event messages over duplicate response items; Antigravity follows
+`step_index`. Full question text remains available in the conversation timeline.
 
 ## Claude provider
 
@@ -56,3 +67,17 @@ rewrite `sessionId`; codex: truncate before the N-th user prompt, rewrite
 `codex resume <newId>` continues the branch in its terminal. The original
 transcript is never modified. Resource deletes go to the OS trash
 (recoverable). The server is localhost-only and never touches credentials.
+
+Host collaboration APIs (`/api/deck/*`) also persist user-initiated dashboard
+references and portable JSONL conversation exports. Exports are stored under
+`<configDir>/.agentdeck/handoffs/`; the first `handoff` record describes the format,
+origin project/provider, completeness and reading guidance without machine paths.
+Conversation records retain branch identity/parentage, and message records retain
+per-conversation ordering. Only visible user/assistant text is exported, including
+available subagent transcripts. Full text is not clipped to a recent-N window.
+The [file store](../server/deck/handoffStore.js) publishes immutable JSONL and
+keeps small, separate runtime launch receipts with exclusive, fsynced claims.
+There is no SQLite handoff store or staging/approval UI. Receipt files are local
+execution bookkeeping; a moved JSONL remains readable without them. Explicit
+send uses the source cwd, never a cwd inferred from portable metadata. Unknown
+launches are checked by exact identity, never automatically replayed.

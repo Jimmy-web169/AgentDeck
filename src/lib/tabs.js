@@ -3,14 +3,15 @@
 // A tab = { key, target }. `target` says where the tab is:
 //   { provider, root, rootLabel, slug, id, title, project, cwd, draft, view }
 // Everything is optional. No provider → Home: `view` picks the page
-// (activity, stats, insights, history, plugins, resources); the per-folder
-// pages use the sidebar's scope. A provider without a session shows that
+// (activity, stats, insights, history, plugins, resources); reports use their
+// own source filters. A provider without a session shows that
 // provider's app as it is. `draft` marks a not-yet-saved "new conversation".
 // `view` remembers which in-app tab (conversation / sub-agents / raw / memory /
 // config) the tab was on, so switching back lands where you left. Tabs persist
 // in localStorage.
 
 import { shortPath } from './paths.js'
+import { normalizeHomeScope, normalizeHomeSource } from './homeScope.js'
 
 export const TABS_KEY = 'agentdeck_tabs'
 export const RECENT_KEY = 'agentdeck_recent'
@@ -26,17 +27,20 @@ export const HOME_VIEWS = [
   { k: 'resources', label: 'Resources' },
 ]
 // Views that no longer exist, so old deep links (#/home/<view>) and persisted
-// tabs still land on Home. `folders` became FoldersDialog (the "+" next to
-// the folder chips).
-const LEGACY_VIEWS = { overview: 'activity', memory: 'activity', folders: 'activity' }
+// tabs still land on Home. Folder browsing lives in the sidebar; tracked
+// sources are managed with its "+" button.
+const LEGACY_VIEWS = { overview: 'activity', memory: 'activity', context: 'activity', dashboards: 'activity', folders: 'activity' }
 export const normalizeView = (v) => (HOME_VIEWS.some((x) => x.k === v) ? v : LEGACY_VIEWS[v] || 'activity')
 export const homeViewLabel = (k) => HOME_VIEWS.find((v) => v.k === normalizeView(k))?.label || ''
 
 export const newKey = () => Math.random().toString(36).slice(2, 10)
 
+export const isDeckTarget = (t) => t?.kind === 'dashboard' && !!t.dashboardId
+
 // identity of a target — what "the same place" means for switch-to-tab and
 // dedupe. The in-app view is deliberately NOT part of it.
 export const targetKey = (t) => {
+  if (isDeckTarget(t)) return `${t.kind}|${t.dashboardId}`
   if (!t?.provider) return ''
   const scope = `${t.provider}|${t.root || ''}`
   if (t.id) return `${scope}|session|${t.id}`
@@ -46,6 +50,7 @@ export const targetKey = (t) => {
 }
 
 export const sameTarget = (a, b) => {
+  if (isDeckTarget(a) || isDeckTarget(b)) return isDeckTarget(a) && isDeckTarget(b) && targetKey(a) === targetKey(b)
   if (a?.provider !== b?.provider || a?.root !== b?.root) return false
   if (a?.terminalKey && a.terminalKey === b?.terminalKey) return true
   if (a?.launchId && a.launchId === b?.launchId) return true
@@ -96,7 +101,7 @@ export function adoptTerminalsFor(target, entries) {
 export function dedupeTabs(tabs, activeKey) {
   const groups = []
   for (const tab of tabs) {
-    const known = tab.target?.provider && (tab.target.id || tab.target.launchId || tab.target.terminalKey)
+    const known = isDeckTarget(tab.target) || (tab.target?.provider && (tab.target.id || tab.target.launchId || tab.target.terminalKey))
     const matches = known ? groups.filter((g) => g.some((t) => sameTarget(t.target, tab.target))) : []
     if (!matches.length) groups.push([tab])
     else {
@@ -114,7 +119,7 @@ export function dedupeTabs(tabs, activeKey) {
     return { ...winner, target }
   })
 }
-export const isHome = (t) => !t?.provider
+export const isHome = (t) => !t?.provider && !isDeckTarget(t)
 export const isEmpty = isHome
 
 export const emptyTab = (target = null) => ({ key: newKey(), target })
@@ -122,8 +127,9 @@ export const emptyTab = (target = null) => ({ key: newKey(), target })
 // All entry points use the same navigation policy. Live terminals open beside
 // the current tab; every known alias focuses its existing tab instead.
 export function openTabState(state, target, { newTab = false } = {}) {
-  const stored = target ? Object.fromEntries(Object.entries(target).filter(([k, v]) => v !== undefined && !['newConversation', 'kind', 'at'].includes(k))) : { provider: null, view: 'activity' }
-  const existing = target?.provider && (target.id || target.draft || target.terminalKey)
+  if (target?.kind === 'folder') target = { provider: null, view: 'activity' }
+  const stored = target ? Object.fromEntries(Object.entries(target).filter(([k, v]) => v !== undefined && !['newConversation', 'at'].includes(k) && (k !== 'kind' || isDeckTarget(target)))) : { provider: null, view: 'activity' }
+  const existing = isDeckTarget(target) || (target?.provider && (target.id || target.draft || target.terminalKey))
     ? state.tabs.find((t) => sameTarget(t.target, target)) : null
   if (existing) {
     const merged = { ...existing.target, ...stored, view: target.view || existing.target.view }
@@ -140,7 +146,8 @@ export function openTabState(state, target, { newTab = false } = {}) {
 
 // What the strip prints for a tab: a primary (project) and secondary (session) part.
 export function tabLabel(target, providers = []) {
-  if (!target?.provider) return { primary: homeViewLabel(target?.view), secondary: '' }
+  if (isDeckTarget(target)) return { primary: target.title || 'Dashboard', secondary: 'Live tmux' }
+  if (!target?.provider) return { primary: homeViewLabel(target?.view), secondary: target?.homeSource ? `${providers.find((p) => p.id === target.homeSource.provider)?.label || target.homeSource.provider} / ${target.homeSource.rootLabel || target.homeSource.root}` : '' }
   const providerLabel = providers.find((p) => p.id === target.provider)?.label || target.provider
   const project = target.project || ''
   // a draft has no session yet: the project name on top, the folder it will land in below
@@ -159,7 +166,10 @@ export function loadTabs() {
       .filter((t) => t && typeof t === 'object')
       .map((t) => {
         let target = t.target && typeof t.target === 'object' ? t.target : null
-        if (target && !target.provider) target = { provider: null, view: normalizeView(target.view), focus: target.focus || null }
+        if (target?.kind === 'context' || target?.kind === 'folder') target = { provider: null, view: 'activity' }
+        if (target && isHome(target)) target = { provider: null, view: normalizeView(target.view), focus: target.focus || null,
+          ...(target.homeScope ? { homeScope: normalizeHomeScope(target.homeScope) } : {}),
+          ...(normalizeHomeSource(target.homeSource) ? { homeSource: normalizeHomeSource(target.homeSource) } : {}) }
         return { key: typeof t.key === 'string' && t.key ? t.key : newKey(), target }
       })
     if (!tabs.length) return null

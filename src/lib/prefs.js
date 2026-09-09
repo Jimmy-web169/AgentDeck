@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { normalizeColor } from './accent.js'
+import { normalizeHomeScope } from './homeScope.js'
 
 // User preferences — the knobs the Preferences popover exposes. Stored in
 // localStorage and applied to <html> as data attributes so plain CSS can react
@@ -17,6 +18,10 @@ export const DENSITIES = [
   { k: 'comfortable', label: 'Comfortable' },
   { k: 'compact', label: 'Compact' },
 ]
+export const SIDEBAR_MODES = [{ k: 'source', label: 'Provider / root' }, { k: 'folder', label: 'Folder mode' }]
+// 100% preserves the existing 16px root and all legacy UI text sizes.
+// Terminal viewers are separate documents and keep their own font settings.
+export const FONT_SIZES = [90, 100, 110, 125, 150].map((k) => ({ k, label: `${k}%` }))
 
 // inlineSubagents: sub-agent threads expand under the tool call that spawned
 // them in the Conversation view (off = the pre-2.0 view, Sub-agents tab only).
@@ -46,9 +51,8 @@ export const HOME_SESSIONS = [
   { k: 10, label: '10' },
   { k: 15, label: '15' },
 ]
-// recentProjectsBy: Home › Activity › Recent projects as one row per provider ×
-// tracked folder ('source') or one row per working folder across all of them ('folder').
-const DEFAULTS = { theme: 'graphite', density: 'comfortable', showWorkspaces: true, showPinned: true, showSuggestions: true, showFirstPrompt: true, inlineSubagents: true, providerColors: {}, customAccents: [], statusColors: {}, pathDepth: 2, recentProjectsBy: 'source', homeSessions: 10, homeProjects: 5 }
+// Recent projects follow sidebarMode; there is no independent display mode.
+const DEFAULTS = { theme: 'graphite', density: 'comfortable', fontSize: 100, sidebarMode: 'source', showUnavailableFolders: false, folderExcludedProviders: [], folderExcludedRoots: [], showWorkspaces: true, showPinned: true, showSuggestions: true, showLatestPrompt: true, inlineSubagents: true, providerColors: {}, customAccents: [], statusColors: {}, pathDepth: 2, homeSessions: 10, homeProjects: 5 }
 const MAX_SWATCHES = 24
 
 function load() {
@@ -61,10 +65,17 @@ function load() {
   } catch {}
   if (!THEMES.some((x) => x.k === prefs.theme)) prefs.theme = DEFAULTS.theme
   if (!DENSITIES.some((x) => x.k === prefs.density)) prefs.density = DEFAULTS.density
+  if (!SIDEBAR_MODES.some((x) => x.k === prefs.sidebarMode)) prefs.sidebarMode = DEFAULTS.sidebarMode
+  if (typeof prefs.showUnavailableFolders !== 'boolean') prefs.showUnavailableFolders = false
+  prefs.folderExcludedProviders = [...new Set((Array.isArray(prefs.folderExcludedProviders) ? prefs.folderExcludedProviders : []).filter((p) => typeof p === 'string' && p.length > 0))]
+  prefs.folderExcludedRoots = normalizeHomeScope({ excludedRoots: prefs.folderExcludedRoots }).excludedRoots || []
+  if (!FONT_SIZES.some((x) => x.k === prefs.fontSize)) prefs.fontSize = DEFAULTS.fontSize
+  delete prefs.showFirstPrompt // retired; keep the existing latest-question choice
+  if (typeof prefs.showLatestPrompt !== 'boolean') prefs.showLatestPrompt = DEFAULTS.showLatestPrompt
   if (!PATH_DEPTHS.some((x) => x.k === prefs.pathDepth)) prefs.pathDepth = DEFAULTS.pathDepth
   if (!HOME_SESSIONS.some((x) => x.k === prefs.homeSessions)) prefs.homeSessions = DEFAULTS.homeSessions
   if (!HOME_PROJECTS.some((x) => x.k === prefs.homeProjects)) prefs.homeProjects = DEFAULTS.homeProjects
-  if (prefs.recentProjectsBy !== 'source' && prefs.recentProjectsBy !== 'folder') prefs.recentProjectsBy = DEFAULTS.recentProjectsBy
+  delete prefs.recentProjectsBy
   // colours are stored as hex; legacy palette names from before still resolve
   const pc = prefs.providerColors && typeof prefs.providerColors === 'object' ? prefs.providerColors : {}
   prefs.providerColors = Object.fromEntries(
@@ -100,6 +111,7 @@ function apply() {
   const el = document.documentElement
   el.dataset.theme = prefs.theme
   el.dataset.density = prefs.density
+  el.style.fontSize = `${prefs.fontSize}%`
 }
 apply()
 
@@ -118,10 +130,28 @@ export function usePrefs() {
   return useSyncExternalStore(subscribe, getPrefs, getPrefs)
 }
 export function setPref(k, v) {
+  if (k === 'folderExcludedRoots') v = normalizeHomeScope({ excludedRoots: v }).excludedRoots || []
+  if (k === 'showUnavailableFolders' && typeof v !== 'boolean') return
+  if (k === 'folderExcludedProviders') {
+    if (!Array.isArray(v)) return
+    v = [...new Set(v.filter((p) => typeof p === 'string' && p.length > 0))]
+  }
+  if (k === 'sidebarMode' && !SIDEBAR_MODES.some((x) => x.k === v)) return
+  if (k === 'showFirstPrompt' || k === 'recentProjectsBy') return
+  if (k === 'fontSize' && !FONT_SIZES.some((x) => x.k === v)) return
   prefs = { ...prefs, [k]: v }
+  persistPrefs(k)
+}
+// Commit both filter levels together so readers never request an intermediate scope.
+export function setFolderFilter(value) {
+  const scope = normalizeHomeScope(value)
+  prefs = { ...prefs, folderExcludedProviders: scope.excluded, folderExcludedRoots: scope.excludedRoots || [] }
+  persistPrefs()
+}
+function persistPrefs(k) {
   try {
     localStorage.setItem(KEY, JSON.stringify(prefs))
-    if (k === 'theme') localStorage.setItem(THEME_KEY, v)
+    if (k === 'theme') localStorage.setItem(THEME_KEY, prefs.theme)
   } catch {}
   apply()
   emit()

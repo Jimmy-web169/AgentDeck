@@ -3,10 +3,15 @@ import { MOD } from './ShortcutHints.jsx'
 import { highlightChunks, matchFields } from '../../lib/fuzzy.js'
 import { fmtRelative } from '../../lib/format.js'
 import { targetKey, liveTarget } from '../../lib/tabs.js'
-import { isPinned, togglePin, usePins } from '../../lib/pins.js'
+import { isPinned, togglePin, usePins, pinsForMode, isFolderPin, pinKey, revealPinnedFolder } from '../../lib/pins.js'
+import useFolderCatalog from '../../lib/useFolderCatalog.js'
+import { resolveFolderPins } from '../../lib/folderTree.js'
+import { shortPath } from '../../lib/paths.js'
+import { FolderIcon } from './icons.jsx'
 import { providerColor, statusDot } from '../../lib/providerColors.js'
 import { liveProjectKey, liveSessionKey } from '../../lib/useLiveKeys.js'
 import { usePrefs } from '../../lib/prefs.js'
+import { sessionPreviews } from '../../lib/sessionPreviews.js'
 import { ChevronRightIcon, PinIcon, PlusIcon, SearchIcon } from './shellIcons.jsx'
 
 // Quick switcher (Ctrl+K): jump to any project or session across every
@@ -14,7 +19,7 @@ import { ChevronRightIcon, PinIcon, PlusIcon, SearchIcon } from './shellIcons.js
 //
 //   top level   projects + sessions matching the query (recent ones when empty)
 //   project     → / Tab drills into a project: its sessions, newest first, with
-//               the first prompt under each title so you can recognise one you
+//               a question preview under each title so you can recognise one you
 //               don't remember the name of. ← (caret at the start), Backspace
 //               (empty query) or Esc go back, landing on the project row you
 //               came from with your query restored.
@@ -68,12 +73,14 @@ const projectTarget = (p) => ({
 export function pinTargetOf(row) {
   const t = row?.target
   if (!t) return null
+  if (row.kind === 'folder') return t
   if (row.kind === 'project') return { provider: t.provider, root: t.root, rootLabel: t.rootLabel, slug: t.slug, cwd: t.cwd, project: t.name }
   if (row.kind === 'session') return { provider: t.provider, root: t.root, rootLabel: t.rootLabel, slug: t.slug, id: t.id, title: t.title, project: t.project, cwd: t.cwd }
   return null
 }
 
-export function buildGroups({ q, level, index, recent, pins, live, openTabs, providers, terminals = [], showPrompt = true }) {
+export function buildGroups({ q, level, index, recent, pins, live, openTabs, providers, terminals = [], showLatestPrompt = true, sidebarMode = 'source', pinnedFolders = [] }) {
+  pins = pinsForMode(pins, sidebarMode)
   const isLiveS = (t) => live.ids.has(liveSessionKey(t.provider, t.root, t.id))
   const isLiveP = (p) => live.slugs.has(liveProjectKey(p.provider, p.root, p.slug))
   const plabel = (id) => providers.find((p) => p.id === id)?.label || id
@@ -88,19 +95,23 @@ export function buildGroups({ q, level, index, recent, pins, live, openTabs, pro
     live: isLiveP(p),
     hits,
   })
-  const sessRow = (s, hits, project, metaTs) => ({
-    kind: 'session',
-    key: `s|${targetKey(s)}`,
-    target: { provider: s.provider, root: s.root, rootLabel: index.labelOf(s.provider, s.root, s.rootLabel), slug: s.slug, id: s.id, title: s.title, project: project || s.project || null, cwd: s.cwd || null },
-    primary: s.title || String(s.id || '').slice(0, 8),
-    secondary: showPrompt && s.firstPrompt && s.firstPrompt !== s.title ? s.firstPrompt : '',
-    context: [project || s.project, plabel(s.provider)].filter(Boolean).join(' · '),
-    meta: metaTs ? fmtRelative(metaTs) : '',
-    live: isLiveS(s),
-    open: openTabs.has(targetKey(s)),
-    oversized: !!s.oversized,
-    hits,
-  })
+  const sessRow = (s, hits, project, metaTs) => {
+    const preview = sessionPreviews(s, { showLatestPrompt })[0]
+    return {
+      kind: 'session',
+      key: `s|${targetKey(s)}`,
+      target: { provider: s.provider, root: s.root, rootLabel: index.labelOf(s.provider, s.root, s.rootLabel), slug: s.slug, id: s.id, title: s.title, project: project || s.project || null, cwd: s.cwd || null },
+      primary: s.title || String(s.id || '').slice(0, 8),
+      secondary: preview?.text || '',
+      secondaryHits: preview ? hits?.[preview.hitField] : undefined,
+      context: [project || s.project, plabel(s.provider)].filter(Boolean).join(' · '),
+      meta: metaTs ? fmtRelative(metaTs) : '',
+      live: isLiveS(s),
+      open: openTabs.has(targetKey(s)),
+      oversized: !!s.oversized,
+      hits,
+    }
+  }
   const findProject = (t) => index.projects.find((p) => p.provider === t.provider && p.root === t.root && p.slug === t.slug)
   const pinProjRow = (p) => {
     const hit = findProject(p)
@@ -131,7 +142,7 @@ export function buildGroups({ q, level, index, recent, pins, live, openTabs, pro
       let items
       if (q) {
         items = list
-          .map((s) => ({ s, m: matchFields(q, { title: s.title, prompt: s.firstPrompt }) }))
+          .map((s) => ({ s, m: matchFields(q, { title: s.title, latest: s.lastUserPrompt || '', prompt: s.firstPrompt }) }))
           .filter((x) => x.m)
           .sort(byScore)
           .map((x) => sessRow(x.s, x.m.hits, level.name, x.s.lastTs))
@@ -145,7 +156,7 @@ export function buildGroups({ q, level, index, recent, pins, live, openTabs, pro
   }
 
   if (!q) {
-    const pinned = pins.filter((p) => !runningKeys.has(targetKey(p))).map((p) => (p.id ? sessRow(p, null, p.project, null) : pinProjRow(p)))
+    const pinned = pins.filter((p) => isFolderPin(p) || !runningKeys.has(targetKey(p))).map((p) => isFolderPin(p) ? folderRow(p) : (p.id ? sessRow(p, null, p.project, null) : pinProjRow(p)))
     if (pinned.length) groups.push({ title: 'Pinned', rows: pinned })
     const pinnedKeys = new Set(pinned.map((r) => r.key))
     // recent = sessions only (projects have their own list right below)
@@ -161,6 +172,8 @@ export function buildGroups({ q, level, index, recent, pins, live, openTabs, pro
     return groups
   }
 
+  const folderMatches = pins.filter(isFolderPin).map((p) => ({ p, m: matchFields(q, { name: shortPath(p.cwd), path: p.cwd }) })).filter((x) => x.m).sort(byScore)
+  if (folderMatches.length) groups.push({ title: 'Pinned folders', rows: folderMatches.map(({ p, m }) => ({ ...folderRow(p), hits: m.hits })) })
   const pm = index.projects
     .map((p) => ({ p, m: matchFields(q, { name: p.name, path: p.path, root: p.rootLabel, provider: p.providerLabel }) }))
     .filter((x) => x.m)
@@ -172,6 +185,12 @@ export function buildGroups({ q, level, index, recent, pins, live, openTabs, pro
   // (fetched lazily; the switcher re-renders when they land)
   const cands = new Map()
   for (const t of recent) if (t.id) cands.set(targetKey(t), { s: t, project: t.project, ts: t.at })
+  // Search already-loaded lists even when the question does not match a project
+  // name. This is not a full-history scan and must not trigger one per keystroke.
+  for (const s of index.cachedSessions?.() || []) {
+    const p = findProject(s)
+    cands.set(targetKey(s), { s: { ...s, rootLabel: p?.rootLabel }, project: p?.name, ts: s.lastTs })
+  }
   for (const { p } of pm.slice(0, 3)) {
     const list = index.sessionsFor(p.provider, p.root, p.slug)
     if (!list) continue
@@ -179,13 +198,18 @@ export function buildGroups({ q, level, index, recent, pins, live, openTabs, pro
   }
   const sm = [...cands.values()]
     .filter((c) => !runningKeys.has(targetKey(c.s)))
-    .map((c) => ({ ...c, m: matchFields(q, { title: c.s.title, prompt: c.s.firstPrompt || '', project: c.project || '' }) }))
+    .map((c) => ({ ...c, m: matchFields(q, { title: c.s.title, latest: c.s.lastUserPrompt || '', prompt: c.s.firstPrompt || '', project: c.project || '' }) }))
     .filter((x) => x.m)
     .sort(byScore)
     .slice(0, MAX_SESSIONS)
   if (sm.length) groups.push({ title: 'Sessions', rows: sm.map((x) => sessRow(x.s, x.m.hits, x.project, x.ts)) })
-  if (!pm.length && !sm.length && !running.length) groups.push({ title: 'Results', rows: [{ kind: 'empty', key: 'empty', text: 'Nothing matches' }] })
+  if (!pm.length && !sm.length && !running.length && !folderMatches.length) groups.push({ title: 'Results', rows: [{ kind: 'empty', key: 'empty', text: 'Nothing matches' }] })
   return groups
+
+  function folderRow(p) {
+    const f = pinnedFolders.find((f) => f.id === p.folderId)
+    return { kind: 'folder', key: pinKey(p), target: p, primary: shortPath(p.cwd), secondary: p.cwd, context: f?.pinStatus || 'Show in sidebar' }
+  }
 }
 
 function Panel({ closing, onClose, providers, index, recent, live, openTabs, terminals = [], onPick, onNewConversation }) {
@@ -197,6 +221,8 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, ter
   const [cursor, setCursor] = useState({ top: 0, height: 0, visible: false })
   const pins = usePins()
   const prefs = usePrefs()
+  const pinCatalog = useFolderCatalog(prefs.sidebarMode === 'folder' && pins.some(isFolderPin), index.projects)
+  const pinnedFolders = pinCatalog.loading ? [] : resolveFolderPins(pins, pinCatalog.folders, { excludedProviders: prefs.folderExcludedProviders, excludedRoots: prefs.folderExcludedRoots, showUnavailable: prefs.showUnavailableFolders })
   const inputRef = useRef(null)
   const listRef = useRef(null)
   const rowEls = useRef([])
@@ -212,9 +238,9 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, ter
 
   const q = query.trim()
   const groups = useMemo(
-    () => buildGroups({ q, level, index, recent, pins, live, openTabs, providers, terminals, showPrompt: prefs.showFirstPrompt }),
+    () => buildGroups({ q, level, index, recent, pins, live, openTabs, providers, terminals, showLatestPrompt: prefs.showLatestPrompt, sidebarMode: prefs.sidebarMode, pinnedFolders }),
     // index is a fresh object whenever the shell re-renders (a session list landed)
-    [q, level, index, recent, pins, live, openTabs, providers, terminals, prefs.showFirstPrompt]
+    [q, level, index, recent, pins, live, openTabs, providers, terminals, prefs, pinCatalog.folders, pinCatalog.loading]
   )
   const flat = useMemo(() => groups.flatMap((g) => g.rows).filter((r) => r.kind !== 'loading' && r.kind !== 'empty'), [groups])
   const flatKeys = flat.map((r) => r.key).join('|')
@@ -269,6 +295,7 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, ter
 
   const act = async (row, { newTab = false } = {}) => {
     if (!row || busy) return
+    if (row.kind === 'folder') { revealPinnedFolder(row.target); onClose(); return }
     if (row.kind === 'terminal') return onPick(row.target, { newTab: true })
     if (row.kind === 'session') return onPick(row.target, { newTab })
     if (row.kind === 'new') return onNewConversation(row.target)
@@ -392,7 +419,7 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, ter
                         </span>
                       ) : (
                         <span className="w-4 flex items-center justify-center shrink-0">
-                          <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+                          {row.kind === 'folder' ? <FolderIcon className="w-3.5 h-3.5 text-zinc-500" /> : <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
                         </span>
                       )}
                       <div className="min-w-0 flex-1">
@@ -406,8 +433,8 @@ function Panel({ closing, onClose, providers, index, recent, live, openTabs, ter
                           {row.kind === 'project' && row.count != null && <span className="shrink-0 text-[11px] text-zinc-600">{row.count}</span>}
                         </div>
                         {row.secondary && (
-                          <div className="text-[11.5px] text-zinc-500 truncate">
-                            <Hl text={row.secondary} hits={row.hits?.prompt || row.hits?.path || row.hits?.root || row.hits?.provider} />
+                          <div className="flex items-baseline gap-2 text-[11.5px] text-zinc-500 min-w-0" title={row.secondary}>
+                            <Hl className="truncate" text={row.secondary} hits={row.kind === 'session' ? row.secondaryHits : row.hits?.path || row.hits?.root || row.hits?.provider} />
                           </div>
                         )}
                       </div>

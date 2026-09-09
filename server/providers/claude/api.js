@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import crypto from 'node:crypto'
+import { homeProjects, homeHistory } from '../../shared/homeQuery.js'
 import {
   rootsWithMeta,
   renameRoot,
@@ -39,6 +40,7 @@ import { inventory, readResource, writeResource, deleteResource } from './resour
 import { safeTrash } from '../../shared/trash.js'
 import { probeStatus, runProbe, acceptProbe } from '../../shared/formatProbe.js'
 import { writeBrief, composeBrief, seedPrompt } from '../../shared/handoff.js'
+import { handoffLaunch } from '../../deck/handoffStore.js'
 import { HOME as USER_HOME } from '../../shared/roots.js'
 import { withWatchersPaused } from '../../shared/watchGate.js'
 import { parseSkillsAdd, runSkillsAdd } from '../../shared/skills.js'
@@ -198,6 +200,7 @@ function getSession(q) {
   // snapshot, so the etag can never be newer than the body it describes
   const fp = fingerprintOf(file)
   const summary = { ...sessionSummary(file, id, fp) }
+  summary.cwd = readCwd(file)
   summary.hasSubagents = summary.hasSidechain || sessionHasSubagents(root.dir, slug, id)
   return {
     root: root.id,
@@ -312,6 +315,7 @@ const zeroTokens = () => zeroTokensShared(TOKEN_SPECIFIC)
 // breakdown via GET /api/sessions?root=&slug= (already per-session summaries).
 function getStats(q) {
   const root = resolveRoot(q.get('root'))
+  const selected = homeProjects(q), incomplete = []
   let sessions = 0
   let userTurns = 0
   let toolCalls = 0
@@ -320,6 +324,7 @@ function getStats(q) {
   const tokens = zeroTokens()
   const projects = []
   for (const slug of listProjectSlugs(root.dir)) {
+    if (selected && !selected.has(slug)) continue
     const files = sessionFiles(root.dir, slug)
     if (!files.length) continue
     const proj = { slug, cwd: null, sessions: files.length, subagentSessions: 0, userTurns: 0, toolCalls: 0, tokens: zeroTokens(), toolCounts: {}, models: new Set(), lastActivity: 0 }
@@ -333,6 +338,7 @@ function getStats(q) {
         () => sessionSummary(f.file, f.id, fp || undefined),
         (e) => oversizeStub(f.id, e) // counts as a session, contributes zeros
       )
+      if (s.oversized) incomplete.push({ slug, id: f.id, reason: 'Transcript too large; usage is unavailable' })
       const mtime = fp ? fp.mtimeMs : 0
       if (mtime > proj.lastActivity) {
         proj.lastActivity = mtime
@@ -360,12 +366,13 @@ function getStats(q) {
   // `fields` tells the UI which token fields every provider shares (add these up
   // across folders) and which are Claude's own
   // sub-agent transcripts are sidecar files (projects/*/*/subagents/), not sessions
-  return { root: root.id, projectCount: projects.length, sessions, subagentSessions: 0, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC) }
+  return { root: root.id, projectCount: projects.length, sessions, subagentSessions: 0, userTurns, toolCalls, toolCounts, modelCounts, tokens, projects, fields: tokenFields(TOKEN_SPECIFIC), ...(q.get('home') === '1' ? { incomplete } : {}) }
 }
 
 function getHistory(q) {
   const root = resolveRoot(q.get('root'))
   const out = []
+  let readError = null, malformed = 0
   try {
     for (const line of fs.readFileSync(path.join(root.dir, 'history.jsonl'), 'utf8').split('\n')) {
       const s = line.trim()
@@ -373,10 +380,10 @@ function getHistory(q) {
       try {
         const o = JSON.parse(s)
         out.push({ display: o.display || '', project: o.project || null, sessionId: o.sessionId || null, ts: o.timestamp || o.ts || null })
-      } catch {}
+      } catch { malformed++ }
     }
-  } catch {}
-  return { root: root.id, history: out.reverse().slice(0, 500) }
+  } catch (e) { readError = e.code === 'ENOENT' ? 'No prompt-history file recorded by this source' : e.message }
+  return { root: root.id, ...homeHistory(out, q, readError, malformed) }
 }
 
 function getMemory(q) {
@@ -618,7 +625,9 @@ async function postTerminal(_q, body) {
     briefFile = writeBrief(composeBrief({ ...body.brief, providerLabel: 'Claude Code', cwd }), { key })
     promptArgs = TERMINAL_CONFIG.promptArgs(seedPrompt(briefFile))
   }
-  const meta = { root: root.id, slug: body.slug || null, id: resumeId, launchId: identity.launchId, cwd, isNew: !resumeId, title: body.title || null }
+  const context = handoffLaunch(body, TERMINAL_CONFIG.id, root.id, cwd)
+  if (context) promptArgs = TERMINAL_CONFIG.promptArgs(context.prompt)
+  const meta = { root: root.id, slug: body.slug || null, id: resumeId, launchId: identity.launchId, cwd, isNew: !resumeId, title: body.title || null, ...context?.meta }
   const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, promptArgs, meta, config: TERMINAL_CONFIG })
   return { ok: true, key, brief: briefFile, ...res }
 }
@@ -760,9 +769,11 @@ export const dispatch = makeDispatch(ROUTES)
 // tracked folder (see server/shared/activity.js for the attribution rules).
 function getActivity(q) {
   const root = resolveRoot(q.get('root'))
+  const selected = homeProjects(q)
   const days = Number(q.get('days')) || 84
   const list = []
   for (const slug of listProjectSlugs(root.dir)) {
+    if (selected && !selected.has(slug)) continue
     const files = sessionFiles(root.dir, slug)
     if (!files.length) continue
     let cwd = null
@@ -776,8 +787,8 @@ function getActivity(q) {
         (e) => oversizeStub(f.id, e)
       )
       if (!cwd) cwd = readCwd(f.file)
-      list.push({ id: f.id, slug, cwd, title: s.title, firstTs: s.firstTs, lastTs: s.lastTs, userTurns: s.userTurns, toolCalls: s.toolCalls, tokens: s.tokens, models: s.models })
+      list.push({ id: f.id, slug, cwd, title: s.title, firstTs: s.firstTs, lastTs: s.lastTs, userTurns: s.userTurns, toolCalls: s.toolCalls, tokens: s.tokens, models: s.models, ...(q.get('home') === '1' ? { oversized: !!s.oversized } : {}) })
     }
   }
-  return { root: root.id, ...bucketActivity(list, { days }) }
+  return q.get('home') === '1' ? { root: root.id, records: list } : { root: root.id, ...bucketActivity(list, { days }) }
 }

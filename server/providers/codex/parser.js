@@ -252,6 +252,7 @@ export function summarize(records, id) {
 
   let title = null
   let firstPrompt = null
+  let lastUserPrompt = '', lastUserPromptTs = null
   let firstTs = null
   let lastTs = null
   let cwd = null
@@ -280,10 +281,12 @@ export function summarize(records, id) {
     } else if (group === 'event_msg') {
       if (kind === 'thread_name_updated' && body.thread_name) title = body.thread_name
       else if (kind === 'user_message') {
-        const t = cleanUserText(body.message)
+        const t = cleanUserText(body.message) || (body.images?.length || body.local_images?.length ? '(Image or attachment)' : '')
         if (t) {
           userTurns++
           if (!firstPrompt) firstPrompt = snippet(t)
+          lastUserPrompt = snippet(t)
+          lastUserPromptTs = ts || null
         }
       } else if (kind === 'agent_message') {
         assistantTurns++
@@ -308,10 +311,12 @@ export function summarize(records, id) {
       if (kind === 'message') {
         if (body.role === 'user') {
           if (hasEventUser) continue
-          const t = cleanUserText(textFromContent(body.content))
+          const t = cleanUserText(textFromContent(body.content)) || (Array.isArray(body.content) && body.content.some((p) => ['input_image', 'image', 'input_file'].includes(p?.type)) ? '(Image or attachment)' : '')
           if (t) {
             userTurns++
             if (!firstPrompt) firstPrompt = snippet(t)
+            lastUserPrompt = snippet(t)
+            lastUserPromptTs = ts || null
           }
         } else if (body.role === 'assistant') {
           if (hasEventAssistant) continue
@@ -329,6 +334,7 @@ export function summarize(records, id) {
     id,
     title: title || firstPrompt || '(untitled session)',
     firstPrompt: firstPrompt || '',
+    lastUserPrompt, lastUserPromptTs,
     firstTs,
     lastTs,
     cwd,

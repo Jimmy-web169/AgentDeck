@@ -6,11 +6,18 @@ import { useSyncExternalStore } from 'react'
 // id it pins a session, without one it pins the whole project.
 const KEY = 'agentdeck_pins'
 const MAX = 60
+export const isFolderPin = (p) => p?.kind === 'folder'
+const validFolderPin = (p) => isFolderPin(p) && typeof p.folderId === 'string' && !!p.folderId && typeof p.cwd === 'string' && !!p.cwd
+export const pinsForMode = (pins, mode) => pins.filter((p) => !isFolderPin(p) || mode === 'folder')
+export const folderPinTarget = (folder) => ({ kind: 'folder', folderId: folder.id, cwd: folder.cwd, name: folder.name || folder.cwd })
+export function revealPinnedFolder(pin) {
+  if (validFolderPin(pin)) window.dispatchEvent(new CustomEvent('agentdeck:reveal-folder', { detail: { folderId: pin.folderId } }))
+}
 
 function load() {
   try {
     const arr = JSON.parse(localStorage.getItem(KEY) || '[]')
-    return Array.isArray(arr) ? arr.filter((p) => p && p.provider && p.root && (p.slug || p.id)) : []
+    return Array.isArray(arr) ? arr.filter((p) => isFolderPin(p) ? validFolderPin(p) : p && p.provider && p.root && (p.slug || p.id)) : []
   } catch {
     return []
   }
@@ -39,7 +46,7 @@ function save(next) {
   emit()
 }
 
-export const pinKey = (t) => `${t?.provider || ''}|${t?.root || ''}|${t?.slug || ''}|${t?.id || ''}`
+export const pinKey = (t) => isFolderPin(t) ? JSON.stringify(['folder', t.folderId]) : `${t?.provider || ''}|${t?.root || ''}|${t?.slug || ''}|${t?.id || ''}`
 
 export const getPins = () => pins
 export const isPinned = (t) => {
@@ -48,13 +55,13 @@ export const isPinned = (t) => {
 }
 
 export function togglePin(t) {
-  if (!t?.provider || !t.root || !(t.slug || t.id)) return
+  if (isFolderPin(t) ? !validFolderPin(t) : !t?.provider || !t.root || !(t.slug || t.id)) return
   const k = pinKey(t)
   if (pins.some((p) => pinKey(p) === k)) {
     save(pins.filter((p) => pinKey(p) !== k))
     return false
   }
-  const entry = {
+  const entry = isFolderPin(t) ? { kind: 'folder', folderId: t.folderId, cwd: t.cwd, name: t.name || t.cwd, at: Date.now() } : {
     provider: t.provider,
     root: t.root,
     rootLabel: t.rootLabel || '',

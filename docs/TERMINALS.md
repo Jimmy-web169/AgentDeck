@@ -52,7 +52,8 @@ through `TERMINAL_CONFIG` in that provider's API module:
   // or null. files() lazily returns paths owned by this tmux process tree.
   resolveSession({ meta, files }) {},
   // Optional: validate an explicitly selected saved conversation in this root.
-  // Its presence enables the "Link saved conversation" fallback.
+  // Return cwd from the saved transcript, never from the request body.
+  // Its presence enables a repair fallback after delayed identification.
   resolveSavedSession({ root, id, slug }) {}
 }
 ```
@@ -60,8 +61,12 @@ through `TERMINAL_CONFIG` in that provider's API module:
 Adapters must not infer ownership from the newest transcript, a matching cwd,
 title, or modification time. Ambiguous or unavailable evidence returns `null`.
 An unbound terminal stays usable in Live sessions and the picker. Linking a
-saved conversation validates the provider/root and rejects a conversation that
-already has a different running terminal.
+saved conversation validates the provider/root and exact local working folder,
+rejects a conversation that already has a different running terminal, and cannot
+replace an already identified conversation. The UI hides manual repair beneath
+"Trouble detecting this conversation?" only after 20 seconds with a loaded,
+unidentified terminal. It offers "Match current conversation manually" with
+candidates from the current folder, never a folder picker.
 
 The shared pool owns launch locking, attach, End, metadata recovery and optional
 binding. Providers own arguments, data-root semantics and transcript discovery.

@@ -34,6 +34,9 @@ roots.antigravity.json
 probe.*.json
 # AI hand-off briefs (server/shared/handoff.js), written under the config dir like probe.*.json
 handoffs/
+# Portable conversation exports and tiny local delivery receipts (private).
+.agentdeck/
+dashboards/
 # .claude/ is local (settings.local.json, the maintainer's own skills) — except the
 # find-skills skill (canonical copy in skills/find-skills; this one is what Claude
 # Code loads) so any CLI can search the skills ecosystem during an AI hand-off;
@@ -48,3 +51,4 @@ tmp/
 
 # maintainer working notes for Claude — local only, like .claude/ (see README for public docs)
 CLAUDE.md
+/AGENTS.md

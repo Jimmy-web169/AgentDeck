@@ -8,6 +8,8 @@
 // Every segment is URI-encoded (codex slugs are absolute cwds, claude slugs
 // contain nothing worse than '-', but encode uniformly).
 
+import { normalizeHomeScope, normalizeHomeSource } from './homeScope.js'
+
 const enc = (s) => encodeURIComponent(String(s))
 const dec = (s) => {
   try {
@@ -18,9 +20,17 @@ const dec = (s) => {
 }
 
 export function toHash(target) {
+  if (target?.kind === 'folder') return '#/' // retired standalone folder view
+  if (target?.kind === 'context') return '#/' // retired SQLite views
+  if (target?.kind === 'dashboard' && target.dashboardId) return `#/dashboard/${enc(target.dashboardId)}`
   if (!target?.provider) {
     const v = target?.view
-    return v && v !== 'activity' && v !== 'overview' ? `#/home/${enc(v)}` : '#/'
+    const query = new URLSearchParams()
+    if (target?.homeScope) query.set('scope', JSON.stringify(normalizeHomeScope(target.homeScope)))
+    const source = normalizeHomeSource(target?.homeSource)
+    if (source) query.set('source', JSON.stringify(source))
+    const route = v && v !== 'activity' && v !== 'overview' ? `#/home/${enc(v)}` : '#/'
+    return `${route}${query.size ? `?${query}` : ''}`
   }
   const parts = [target.provider]
   if (target.root) {
@@ -49,8 +59,16 @@ export function fromHash(hash, knownProviders = []) {
     .split('/')
     .filter(Boolean)
     .map(dec)
-  if (!segs.length) return { provider: null } // Home (Activity)
-  if (segs[0] === 'home') return { provider: null, view: segs[1] || 'activity' }
+  if (!segs.length || segs[0] === 'home') {
+    const target = { provider: null, ...(segs.length ? { view: segs[1] || 'activity' } : {}) }
+    const query = new URLSearchParams(search)
+    try { if (query.has('scope')) target.homeScope = normalizeHomeScope(JSON.parse(query.get('scope'))) } catch {}
+    try { const source = normalizeHomeSource(JSON.parse(query.get('source'))); if (source) target.homeSource = source } catch {}
+    return target
+  }
+  if (segs[0] === 'folder') return { provider: null, view: 'activity' }
+  if (segs[0] === 'context') return { provider: null, view: 'activity' }
+  if (segs[0] === 'dashboard' && segs[1]) return { kind: 'dashboard', dashboardId: segs[1] }
   const [provider, root, slug, id] = segs
   if (knownProviders.length && !knownProviders.includes(provider)) return null
   const t = { provider }

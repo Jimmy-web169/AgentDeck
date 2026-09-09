@@ -97,6 +97,7 @@ export function summarize(records, id) {
   let assistantTurns = 0
   let toolCalls = 0
   let firstPrompt = ''
+  let lastUserPrompt = '', lastUserPromptTs = null
   const toolCounts = {}
   const models = new Set()
   for (const rec of [...records].sort((a, b) => (a.step_index ?? 0) - (b.step_index ?? 0))) {
@@ -107,7 +108,15 @@ export function summarize(records, id) {
     }
     if (rec.type === 'USER_INPUT') {
       userTurns++
-      if (!firstPrompt) firstPrompt = userText(rec.content)
+      const prompt = userText(rec.content)
+      if (!firstPrompt) firstPrompt = prompt
+      // A metadata-only USER_INPUT is not a new question. This native format
+      // does not provide a reliable non-text attachment marker here.
+      if (prompt) {
+        lastUserPrompt = prompt.replace(/\s+/g, ' ').trim()
+        if (lastUserPrompt.length > 140) lastUserPrompt = lastUserPrompt.slice(0, 140) + '…'
+        lastUserPromptTs = rec.created_at || null
+      }
       const m = modelLabel(rec.content)
       if (m) models.add(m)
     } else if (rec.type === 'PLANNER_RESPONSE') {
@@ -124,6 +133,7 @@ export function summarize(records, id) {
     id,
     title,
     firstPrompt,
+    lastUserPrompt, lastUserPromptTs,
     firstTs,
     lastTs,
     cwd: null, // from sqlite.js, merged in api.js

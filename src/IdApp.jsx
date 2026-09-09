@@ -3,13 +3,11 @@ import { MOD_WORD } from './components/shared/ShortcutHints.jsx'
 import RawView from './components/shared/RawView.jsx'
 import { ShortcutChips } from './components/shared/ShortcutHints.jsx'
 import ConversationPending from './components/shared/ConversationPending.jsx'
-import LiveSessionsPanel from './components/shared/LiveSessionsPanel.jsx'
 import InfoDot from './components/shared/InfoDot.jsx'
 import ErrorBoundary from './components/shared/ErrorBoundary.jsx'
-import useActiveSessions, { toManagerItems } from './lib/useActiveSessions.js'
-import { liveTarget } from './lib/tabs.js'
+import useActiveSessions from './lib/useActiveSessions.js'
 import useTerminalPanes from './lib/useTerminalPanes.js'
-import { mergeTerminalEntries, terminalFor, announceTerminalEnd } from './lib/terminalTarget.js'
+import { mergeTerminalEntries, terminalFor } from './lib/terminalTarget.js'
 import { ActivityIcon } from './components/shared/icons.jsx'
 import { projectName, shortPath } from './lib/paths.js'
 import { bumpSessionVersions, subscribeToPageResume } from './lib/liveSync.js'
@@ -42,7 +40,6 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
     const [conn, setConn] = useState('connecting')
     const [lastEvent, setLastEvent] = useState(0)
     const [error, setError] = useState(null)
-    const [showLive, setShowLive] = useState(false)
     const [termDraft, setTermDraft] = useState(null)
     const [terminals, setTerminals] = useState([])
     const [sessionVersions, setSessionVersions] = useState({})
@@ -223,8 +220,6 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
     }, [appActive, loadProjects, loadSessions, refetchActive])
 
     const activeSessions = useActiveSessions(providers, { enabled: appActive })
-    const liveCount = activeSessions.count
-    const managerItems = toManagerItems(activeSessions)
     const terminalEntries = mergeTerminalEntries(terminals, activeSessions.tmux)
     const terminalOf = (target) => terminalFor(terminalEntries, providerId, target)
     const runningTermKeys = new Set([...terminals.map((t) => t.key), ...activeSessions.tmux.map((t) => t.key).filter(Boolean)])
@@ -232,15 +227,6 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
     const terminalTarget = navigationTarget || (termDraft ? { ...termDraft, draft: true } : active ? { ...active, root, slug: openSlug } : null)
     const { panes: shownPanes, currentKey: curTermKey } = useTerminalPanes(providerId, terminalTarget, terminalEntries, openTargets)
 
-    const onManagerEnter = (it) => {
-      setShowLive(false)
-      onOpenSession?.(it.provider, liveTarget(it), { newTab: true })
-    }
-    const onManagerClose = (it) => {
-      fetch(`/api/${it.provider}/terminal?key=${encodeURIComponent(it.key)}`, { method: 'DELETE' })
-        .then((r) => { if (r.ok) announceTerminalEnd(it.provider, it.key); refreshTerminals() })
-        .catch(refreshTerminals)
-    }
 
     // open a session by its id (sub-agent links, the shell): fetch it, then sync
     // to its project (cwd)
@@ -492,17 +478,11 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
             <RateLimitsBar usage={usage?.rateLimits} ts={usage?.ts} />
             <InfoDot text={usageInfo} />
           </div>
-          {liveCount > 0 && (
-            <button onClick={() => setShowLive(true)} title="Manage running terminals" className="flex items-center gap-1.5 text-[12px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Live ({liveCount})
-            </button>
-          )}
           <a href={docsUrl} target="_blank" rel="noreferrer" className="text-[12px] text-zinc-500 hover:text-sky-400" title={docsTitle}>docs ↗</a>
           <div className="flex items-center gap-2 text-[12px]">
             <span className={`w-2 h-2 rounded-full ${conn === 'live' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
             <span className="text-zinc-500">
-              {conn === 'live' ? 'live' : 'reconnecting'}
+              {conn === 'live' ? 'connected' : 'reconnecting'}
               {sinceEvent != null && conn === 'live' ? ` · ${sinceEvent}s ago` : ''}
             </span>
           </div>
@@ -561,7 +541,6 @@ export default function makeIdApp({ providerId, api, Conversation, ResourcesView
           </div>
         )}
 
-        {showLive && <LiveSessionsPanel items={managerItems} providers={providers} title="Live sessions" onEnter={onManagerEnter} onClose={onManagerClose} onClosePanel={() => setShowLive(false)} />}
       </main>
       </ProviderApiContext.Provider>
     )

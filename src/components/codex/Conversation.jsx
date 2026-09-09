@@ -1,4 +1,5 @@
 import { Fragment, memo, useMemo, useRef } from 'react'
+import '../shared/conversationLayout.css'
 import Markdown from '../shared/Markdown.jsx'
 import EarlierBar from '../shared/EarlierBar.jsx'
 import { useEarlier } from '../../lib/useEarlier.js'
@@ -56,7 +57,7 @@ function AssistantMsg({ ev, threads, ctx, onFork }) {
             </div>
           )
         })}
-        <div className="mt-1 flex items-center gap-3 text-[11px] text-zinc-600">
+        <div className="conversation-message-meta mt-1 flex items-center gap-3 text-[11px] text-zinc-600">
           {ev.model && <span className="font-mono">{ev.model}</span>}
           {ev.ts && <span>{fmtTime(ev.ts)}</span>}
           {ev.parts.some((p) => p.kind === 'text') && <CopyButton text={() => assistantText(ev)} title="Copy this reply" />}
@@ -143,7 +144,7 @@ function Conversation({ data, onOpenSession, subagentCtx = null, compact = false
   const threads = useMemo(() => (ctx ? buildThreadMap(timeline, adapter, ctx) : null), [timeline, ctx, adapter])
 
   return (
-    <div ref={rootRef} className={compact ? 'px-3 py-3' : 'mx-auto max-w-3xl px-4 py-6'}>
+    <div ref={rootRef} className={`conversation-content ${compact ? 'px-3 py-3' : 'mx-auto max-w-3xl px-4 py-6'}`}>
       <div className={`${compact ? 'mb-3 pb-3' : 'mb-5 pb-4'} border-b border-zinc-700/60`}>
         <h1 className={`${compact ? 'text-[14px]' : 'text-lg'} font-semibold text-zinc-100`}>{summary.title}</h1>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-zinc-500">

@@ -10,6 +10,8 @@ import { registerWatchControl, restartWatchers } from './shared/watchGate.js'
 import { scheduleProbes, runAllProbes } from './shared/formatProbe.js'
 import { invalidate } from './shared/parseCache.js'
 import { configDir, isolatedConfig } from './shared/roots.js'
+import { dispatch as deckDispatch, invalidateDeck } from './deck/api.js'
+import { dashboards } from './deck/dashboards.js'
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -23,7 +25,7 @@ const API_RE = /^\/api\/([a-z0-9-]+)\/(.+)$/
 // ---- SSE ----
 const clients = new Set()
 function broadcast(event) {
-  if (event.type === 'change') noteTerminalChanges(event.changes || [])
+  if (event.type === 'change') { noteTerminalChanges(event.changes || []); invalidateDeck() }
   const payload = `data: ${JSON.stringify(event)}\n\n`
   for (const c of clients) {
     try {
@@ -185,7 +187,7 @@ const server = http.createServer(async (req, res) => {
 
   const m = url.pathname.match(API_RE)
   if (m) {
-    const provider = PROVIDERS[m[1]]
+    const provider = m[1] === 'deck' ? { dispatch: deckDispatch } : PROVIDERS[m[1]]
     if (!provider) {
       res.statusCode = 404
       res.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -198,6 +200,7 @@ const server = http.createServer(async (req, res) => {
     // tracked-folder changes -> re-arm watchers so live updates cover new roots
     // (via the gate: deferred if a delete currently holds the watchers paused)
     if (apiPath === '/api/roots' && req.method !== 'GET' && status < 400) {
+      invalidateDeck()
       await restartWatchers()
       setTimeout(() => runAllProbes(PROVIDERS), 500) // a newly tracked folder gets its baseline right away
     }
@@ -247,7 +250,7 @@ server.listen(PORT, '127.0.0.1', () => {
   scheduleProbes(PROVIDERS)
 })
 
-process.on('exit', () => stopAllTerminals())
+process.on('exit', () => { stopAllTerminals(); dashboards.closeFrontends() })
 for (const sig of ['SIGINT', 'SIGTERM']) {
   process.on(sig, () => {
     stopAllTerminals()
