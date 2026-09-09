@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import chokidar from 'chokidar'
 import { PROVIDERS } from './registry.js'
 import { isAllowedOrigin } from './shared/origin.js'
-import { stopAllTerminals } from './shared/terminal.js'
+import { stopAllTerminals, noteTerminalChanges } from './shared/terminal.js'
 import { registerWatchControl, restartWatchers } from './shared/watchGate.js'
 import { scheduleProbes, runAllProbes } from './shared/formatProbe.js'
 import { invalidate } from './shared/parseCache.js'
@@ -23,6 +23,7 @@ const API_RE = /^\/api\/([a-z0-9-]+)\/(.+)$/
 // ---- SSE ----
 const clients = new Set()
 function broadcast(event) {
+  if (event.type === 'change') noteTerminalChanges(event.changes || [])
   const payload = `data: ${JSON.stringify(event)}\n\n`
   for (const c of clients) {
     try {

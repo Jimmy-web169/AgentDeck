@@ -1,3 +1,4 @@
+import { liveTarget } from '../../lib/tabs.js'
 import { useEffect, useMemo, useState } from 'react'
 import useEscToClose from '../../lib/useEscToClose.js'
 import { MOD_WORD } from './ShortcutHints.jsx'
@@ -74,7 +75,7 @@ export default function HandoffDialog({ api, providerId, providerLabel, root, cw
       const res = await api.terminal(body)
       setDone(res)
       // the provider app shows the terminal for this target; the shell routes it like the Live panel does
-      window.dispatchEvent(new CustomEvent('agentdeck:open-terminal', { detail: { provider: providerId, root, slug: slug || null, cwd: cwd || null, title: body.title, kind: 'tmux', draft: true } }))
+      window.dispatchEvent(new CustomEvent('agentdeck:open-terminal', { detail: liveTarget({ ...res, provider: providerId, root, title: body.title }) }))
     } catch (e) {
       setErr(e.message)
     } finally {

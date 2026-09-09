@@ -1,3 +1,4 @@
+import { sameTarget, targetKey } from '../../lib/tabs.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createApi } from '../../api.js'
 import { fmtRelative } from '../../lib/format.js'
@@ -88,7 +89,7 @@ const sessionItem = (src, s) => ({ kind: 'session', ...src, id: s.id, title: s.t
 // first record exists. Clicking it focuses that tab.
 const draftsOf = (drafts, src) => (drafts || []).filter((d) => d.provider === src.provider && d.root === src.root && ((d.slug && d.slug === src.slug) || (d.cwd && d.cwd === src.cwd)))
 function DraftLine({ ctx, d, indent = 'pl-7' }) {
-  const active = ctx.activeTarget?.draft && ctx.activeTarget.provider === d.provider && ctx.activeTarget.root === d.root && (ctx.activeTarget.slug || ctx.activeTarget.cwd) === (d.slug || d.cwd)
+  const active = ctx.activeTarget?.draft && sameTarget(ctx.activeTarget, d)
   return (
     <button onClick={() => ctx.onOpenTarget(d)} title={`New conversation in ${d.cwd || d.slug} — nothing written yet`} className={`w-full text-left ${indent} pr-2 sb-row flex items-center gap-2 hover:bg-ink-700/50 ${active ? 'bg-sky-500/10 border-l-2 border-sky-500' : ''}`}>
       <span className="w-1.5 h-1.5 rounded-full shrink-0 border border-dashed border-zinc-500" />
@@ -207,7 +208,7 @@ function ProjectSessions({ ctx, src, indent = 'pl-9', keyPrefix }) {
   const shown = all ? lst : lst.slice(0, INLINE_SESSIONS)
   return (
     <>
-      {ghosts.map((d, i) => <DraftLine key={`draft-${i}`} ctx={ctx} d={d} indent={indent} />)}
+      {ghosts.map((d, i) => <DraftLine key={targetKey(d)} ctx={ctx} d={d} indent={indent} />)}
       {shown.map((s) => <SessionLine key={s.id} ctx={ctx} src={src} s={s} indent={indent} menuKey={`${keyPrefix}|${s.id}`} />)}
       {lst.length > INLINE_SESSIONS && (
         <button onClick={() => toggleKey(`${keyPrefix}|all`)} className={`${indent} pr-2 py-1 text-[11px] text-sky-400 hover:text-sky-300`}>
@@ -840,7 +841,7 @@ export default function AppSidebar({
                           )}
                         </div>
                       )}
-                      {draftsOf(drafts, src).map((d, i) => <DraftLine key={`draft-${i}`} ctx={ctx} d={d} />)}
+                      {draftsOf(drafts, src).map((d, i) => <DraftLine key={targetKey(d)} ctx={ctx} d={d} />)}
                       {sessions === null && <div className="px-7 py-2 text-[12px] text-zinc-600">loading…</div>}
                       {sessions && sessions.length === 0 && !draftsOf(drafts, src).length && <div className="px-7 py-2 text-[12px] text-zinc-600">no sessions yet</div>}
                       {list.map((s) => <SessionLine ctx={ctx} key={s.id} src={src} s={s} menuKey={`${mk}|${s.id}`} selectable={selectMode} />)}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createApi } from './api.js'
+import BackgroundTerminalNotice from './components/shared/BackgroundTerminalNotice.jsx'
 import HomeView from './components/shared/HomeView.jsx'
 import AppSidebar from './components/shared/AppSidebar.jsx'
 import TabStrip from './components/shared/TabStrip.jsx'
@@ -10,7 +11,7 @@ import { registerProviders } from './lib/providerColors.js'
 
 // per-provider accent classes (ac-<id>-dot / -text) are generated from prefs for this list
 registerProviders(PROVIDER_LIST)
-import { emptyTab, forgetRecent, isHome, loadRecent, loadTabs, normalizeView, pushRecent, sameTarget, saveTabs, targetKey } from './lib/tabs.js'
+import { terminalTabKeys, openTabState, adoptTerminalsFor, adoptTerminal, dedupeTabs, newDraft, liveTarget, emptyTab, forgetRecent, isHome, loadRecent, loadTabs, normalizeView, pushRecent, sameTarget, saveTabs, targetKey } from './lib/tabs.js'
 import { forgetPins } from './lib/pins.js'
 import { baseName } from './lib/paths.js'
 import { currentHash, fromHash, replaceHash, toHash } from './lib/route.js'
@@ -39,12 +40,11 @@ import useNavIndex from './lib/useNavIndex.js'
 //   app → shell   `onNavigate`: "I'm now showing this" (view change, new
 //                 conversation). The active tab follows.
 //
-// Closing a tab ends the terminal(s) running for its session, so a tmux
-// session never outlives the tab you were driving it from. A tab whose session
-// has a terminal running shows a red dot.
+// Tabs are views, not owners of terminal processes. Only an explicit End stops
+// a terminal. Live entry points focus or open a tab using stable identities.
 
 const PROVIDER_IDS = PROVIDER_LIST.map((p) => p.id)
-const identity = (t) => `${t?.root || ''}|${t?.slug || ''}|${t?.id || ''}|${t?.draft ? 'd' : ''}`
+const identity = targetKey
 const HOME = { provider: null, view: 'activity' }
 const SCOPE_KEY = 'agentdeck_scope'
 
@@ -84,36 +84,16 @@ const saveJson = (k, v) => {
   } catch {}
 }
 
-// End every terminal that belongs to a session / draft target (called when its
-// tab closes). Both the ttyd pool and the detached tmux list are consulted so
-// a terminal that outlived a server restart is ended too.
-async function endTerminalsFor(t) {
-  if (!t?.provider || !t.root || !(t.id || t.draft)) return
-  try {
-    const [live, pool] = await Promise.all([
-      fetch(`/api/${t.provider}/active-sessions`).then((r) => r.json()).catch(() => ({})),
-      fetch(`/api/${t.provider}/terminals`).then((r) => r.json()).catch(() => ({})),
-    ])
-    const entries = [...(live?.tmux || []).filter((x) => !x.provider || x.provider === t.provider), ...(pool?.terminals || [])]
-    const hit = (x) => {
-      if (x.root !== t.root) return false
-      if (t.id) return x.id === t.id
-      if (x.id) return false
-      return (t.slug && x.slug === t.slug) || (t.cwd && x.cwd === t.cwd)
-    }
-    const keys = [...new Set(entries.filter(hit).map((x) => x.key).filter(Boolean))]
-    await Promise.all(keys.map((k) => fetch(`/api/${t.provider}/terminal?key=${encodeURIComponent(k)}`, { method: 'DELETE' }).catch(() => {})))
-  } catch {
-    // best effort
-  }
-}
-
 export default function App() {
   const [state, setState] = useState(initialState)
   const stateRef = useRef(state)
   const [pendingOpen, setPendingOpen] = useState(null)
   const pendingRef = useRef(null)
+  const [closedRunning, setClosedRunning] = useState(null)
+  const dismissClosedRunning = useCallback(() => setClosedRunning(null), [])
   const [searchOpen, setSearchOpen] = useState(false)
+  const searchNewTab = useRef(false)
+  const liveTerminalsRef = useRef([])
   const [foldersOpen, setFoldersOpen] = useState(false) // FoldersDialog — the "+" next to the folder chips
   const [recent, setRecent] = useState(loadRecent)
   const [sticky, setSticky] = useState(() => loadJson(SCOPE_KEY, null)) // last scope picked while on Home
@@ -150,16 +130,50 @@ export default function App() {
   // project until the first record lands and the tab becomes a real session
   const drafts = useMemo(() => state.tabs.map((t) => t.target).filter((t) => t?.provider && t.draft), [state.tabs])
   const activeSessions = useActiveSessions(PROVIDER_LIST)
+  liveTerminalsRef.current = activeSessions.tmux
+  const adoptTerminals = useCallback((entries) => {
+    const cur = stateRef.current
+    const next = cur.tabs.map((tab) => {
+      const target = adoptTerminalsFor(tab.target, entries)
+      return JSON.stringify(target) === JSON.stringify(tab.target) ? tab : { ...tab, target }
+    })
+    const unique = dedupeTabs(next, cur.activeKey)
+    if (unique.length === cur.tabs.length && unique.every((t, i) => t === cur.tabs[i])) return
+    const before = cur.tabs.find((t) => t.key === cur.activeKey)?.target
+    const after = unique.find((t) => t.key === cur.activeKey)?.target
+    commit({ ...cur, tabs: unique })
+    if ((after?.id && before?.id !== after.id) || (after?.terminalKey && before?.terminalKey !== after.terminalKey)) issuePending(after)
+  }, [])
+  useEffect(() => adoptTerminals(activeSessions.tmux), [activeSessions.tmux, adoptTerminals])
+  useEffect(() => {
+    const h = (e) => e.detail?.key && adoptTerminals([e.detail])
+    const ended = (e) => {
+      const { provider, key } = e.detail || {}
+      if (!key) return
+      setClosedRunning((targets) => targets?.filter((t) => t.provider !== provider || t.terminalKey !== key) || null)
+      const cur = stateRef.current
+      const next = cur.tabs.map((tab) => {
+        const t = tab.target
+        if (t?.provider !== provider || t.terminalKey !== key) return tab
+        return { ...tab, target: { ...t, terminalKey: undefined, launchId: undefined, draft: false, title: t.id ? t.title : null } }
+      })
+      commit({ ...cur, tabs: next })
+      const after = next.find((t) => t.key === cur.activeKey)
+      if (after && after !== cur.tabs.find((t) => t.key === cur.activeKey)) issuePending(after.target)
+    }
+    window.addEventListener('agentdeck:terminal-ready', h)
+    window.addEventListener('agentdeck:terminal-ended', ended)
+    return () => {
+      window.removeEventListener('agentdeck:terminal-ready', h)
+      window.removeEventListener('agentdeck:terminal-ended', ended)
+    }
+  }, [adoptTerminals])
   // sessions / drafts with a terminal running right now (red dots)
   const termKeys = useMemo(() => {
-    const s = new Set()
+    const s = terminalTabKeys(activeSessions.tmux)
     for (const t of activeSessions.tmux) {
       if (!t.provider || !t.root) continue
       if (t.id) s.add(liveSessionKey(t.provider, t.root, t.id))
-      else {
-        if (t.slug) s.add(`${t.provider}|${t.root}|new|${t.slug}`)
-        if (t.cwd) s.add(`${t.provider}|${t.root}|new|${t.cwd}`)
-      }
     }
     return s
   }, [activeSessions.tmux])
@@ -207,24 +221,14 @@ export default function App() {
   // ---- tab operations ----
   const openTarget = useCallback((target, { newTab = false } = {}) => {
     const cur = stateRef.current
-    const stored = target ? { ...target, newConversation: undefined, kind: undefined, at: undefined } : { ...HOME }
-    const existing = target?.provider && target.id ? cur.tabs.find((t) => sameTarget(t.target, target)) : null
-    if (existing) {
-      commit({ ...cur, activeKey: existing.key })
-      issuePending({ ...existing.target, view: target.view || existing.target.view })
-      return
-    }
-    if (newTab || !cur.tabs.length) {
-      const t = emptyTab(stored)
-      const idx = cur.tabs.findIndex((x) => x.key === cur.activeKey)
-      const next = [...cur.tabs]
-      next.splice(idx + 1, 0, t)
-      commit({ tabs: next, activeKey: t.key })
-    } else {
-      commit({ ...cur, tabs: cur.tabs.map((t) => (t.key === cur.activeKey ? { ...t, target: stored } : t)) })
-    }
-    issuePending(target)
-    if (target?.provider) pushRecent(target)
+    if (target?.newConversation) { target = newDraft(target); newTab = true }
+    const terminal = target?.provider && liveTerminalsRef.current.find((t) => sameTarget(target, liveTarget(t)))
+    if (terminal) target = adoptTerminal(target, terminal)
+    const next = openTabState(cur, target, { newTab })
+    commit(next)
+    const selected = next.tabs.find((t) => t.key === next.activeKey)?.target
+    issuePending(selected?.provider ? { ...selected, newConversation: target?.newConversation } : null)
+    if (selected?.provider) pushRecent(selected)
   }, [])
 
   const setScope = useCallback((s) => {
@@ -269,11 +273,16 @@ export default function App() {
     issuePending(tab.target)
   }, [])
 
+  const notifyClosed = (closed) => {
+    const running = liveTerminalsRef.current.filter((entry) => closed.some((tab) => sameTarget(tab.target, liveTarget(entry)))).map(liveTarget)
+    if (running.length) setClosedRunning(running)
+  }
+
   const closeTab = useCallback((key) => {
     const cur = stateRef.current
     const idx = cur.tabs.findIndex((t) => t.key === key)
     if (idx === -1) return
-    const closing = cur.tabs[idx]
+    notifyClosed([cur.tabs[idx]])
     let tabs = cur.tabs.filter((t) => t.key !== key)
     let activeKey = cur.activeKey
     if (!tabs.length) tabs = [emptyTab({ ...HOME })]
@@ -283,32 +292,29 @@ export default function App() {
       issuePending(nxt.target)
     }
     commit({ tabs, activeKey })
-    if (closing.target?.provider && !tabs.some((t) => sameTarget(t.target, closing.target))) endTerminalsFor(closing.target)
   }, [])
 
   const closeOthers = useCallback((key) => {
     const cur = stateRef.current
     const keep = cur.tabs.find((t) => t.key === key)
     if (!keep) return
-    const gone = cur.tabs.filter((t) => t.key !== key)
+    notifyClosed(cur.tabs.filter((t) => t.key !== key))
     commit({ tabs: [keep], activeKey: key })
     if (cur.activeKey !== key) issuePending(keep.target)
-    for (const t of gone) if (t.target?.provider && !sameTarget(t.target, keep.target)) endTerminalsFor(t.target)
   }, [])
 
   const closeRight = useCallback((key) => {
     const cur = stateRef.current
     const idx = cur.tabs.findIndex((t) => t.key === key)
     if (idx === -1) return
+    notifyClosed(cur.tabs.slice(idx + 1))
     const tabs = cur.tabs.slice(0, idx + 1)
-    const gone = cur.tabs.slice(idx + 1)
     let activeKey = cur.activeKey
     if (!tabs.some((t) => t.key === activeKey)) {
       activeKey = key
       issuePending(tabs[idx].target)
     }
     commit({ tabs, activeKey })
-    for (const t of gone) if (t.target?.provider && !tabs.some((k) => sameTarget(k.target, t.target))) endTerminalsFor(t.target)
   }, [])
 
   const moveTab = useCallback((key, toIdx) => {
@@ -322,9 +328,9 @@ export default function App() {
   }, [])
 
   const newTab = useCallback(() => {
-    openTarget(null, { newTab: true })
+    searchNewTab.current = true
     setSearchOpen(true)
-  }, [openTarget])
+  }, [])
 
   const copyLink = useCallback((key) => {
     const tab = stateRef.current.tabs.find((t) => t.key === key)
@@ -343,9 +349,16 @@ export default function App() {
     const pend = pendingRef.current
     if (pend && pend.provider === providerId && identity(pend) !== identity(full)) return
     const prev = tab.target || {}
-    const next = { ...full, rootLabel: full.rootLabel || (prev.root === full.root ? prev.rootLabel : undefined) }
+    const keepTerminal = prev.root === full.root && ((prev.id && prev.id === full.id) || (prev.launchId && prev.launchId === full.launchId))
+    const next = { ...full, launchId: full.launchId || (keepTerminal ? prev.launchId : undefined), terminalKey: full.terminalKey || (keepTerminal ? prev.terminalKey : undefined), rootLabel: full.rootLabel || (prev.root === full.root ? prev.rootLabel : undefined) }
     if (!next.id && !next.draft && prev.id && prev.root === next.root && (!next.slug || next.slug === prev.slug)) return
     if (sameTarget(prev, next) && prev.title === next.title && prev.project === next.project && prev.rootLabel === next.rootLabel && prev.view === next.view) return
+    const duplicate = cur.tabs.find((t) => t.key !== tab.key && (next.id || next.launchId || next.terminalKey) && sameTarget(t.target, next))
+    if (duplicate) {
+      commit({ ...cur, activeKey: duplicate.key })
+      issuePending(duplicate.target)
+      return
+    }
     commit({ ...cur, tabs: cur.tabs.map((t) => (t.key === tab.key ? { ...t, target: next } : t)) })
     pushRecent(next)
   }, [openTarget])
@@ -422,6 +435,7 @@ export default function App() {
       const mod = e.ctrlKey || e.metaKey
       if (mod && !e.altKey && !e.shiftKey && (e.code === 'KeyK' || e.code === 'KeyP')) {
         e.preventDefault()
+        searchNewTab.current = false
         setSearchOpen((o) => !o)
         return
       }
@@ -469,7 +483,7 @@ export default function App() {
 
   const openTabKeys = useMemo(() => new Set(tabs.map((t) => targetKey(t.target)).filter(Boolean)), [tabs])
   const showHome = isHome(activeTarget)
-  const openSession = useCallback((providerId, target, opts) => openTarget({ provider: providerId, ...target }, opts), [openTarget])
+  const openSession = useCallback((providerId, target, opts) => openTarget({ provider: providerId, ...target }, target.kind === 'tmux' ? { ...opts, newTab: true } : opts), [openTarget])
   // a hand-off dialog (Config views, Insights) started a terminal: enter it the way the Live panel does
   useEffect(() => {
     const h = (e) => e.detail?.provider && openSession(e.detail.provider, e.detail)
@@ -491,7 +505,7 @@ export default function App() {
         onCloseRight={closeRight}
         onNew={newTab}
         onReorder={moveTab}
-        onSearch={() => setSearchOpen(true)}
+        onSearch={() => { searchNewTab.current = false; setSearchOpen(true) }}
         onHome={() => openHome()}
         onCopyLink={copyLink}
         sidebarCollapsed={collapsed}
@@ -535,33 +549,43 @@ export default function App() {
                   onOpenSession={openSession}
                   onNavigate={onNavigate}
                   pendingOpen={pendingOpen?.provider === p.id ? pendingOpen : null}
+                  navigationTarget={shown ? activeTarget : null}
+                  openTargets={tabs.map((t) => t.target).filter((t) => t?.provider === p.id)}
                   onConsumedPending={consumedPending}
                 />
               </div>
             )
           })}
           <div className="absolute inset-0" style={{ display: showHome ? 'block' : 'none' }}>
-            <HomeView providers={PROVIDER_LIST} visible={showHome} target={showHome ? activeTarget : null} scope={scope} onScope={onScope} index={index} live={live} termKeys={termKeys} onOpen={openSession} onNavigate={updateHome} onOpenHome={openHome} onManageFolders={() => setFoldersOpen(true)} onSearch={() => setSearchOpen(true)} />
+            <HomeView providers={PROVIDER_LIST} visible={showHome} target={showHome ? activeTarget : null} scope={scope} onScope={onScope} index={index} live={live} termKeys={termKeys} onOpen={openSession} onNavigate={updateHome} onOpenHome={openHome} onManageFolders={() => setFoldersOpen(true)} onSearch={() => { searchNewTab.current = false; setSearchOpen(true) }} />
           </div>
         </div>
       </div>
       <QuickSwitcher
         open={searchOpen}
-        onClose={() => setSearchOpen(false)}
+        onClose={() => { setSearchOpen(false); searchNewTab.current = false }}
         providers={PROVIDER_LIST}
         index={index}
         recent={recent}
         live={live}
         openTabs={openTabKeys}
+        terminals={activeSessions.tmux}
         onPick={(target, opts) => {
           setSearchOpen(false)
-          openTarget(target, opts)
+          openTarget(target, { ...opts, newTab: searchNewTab.current || opts?.newTab || target.kind === 'tmux' })
+          searchNewTab.current = false
         }}
         onNewConversation={(p) => {
           setSearchOpen(false)
+          searchNewTab.current = false
           openTarget({ provider: p.provider, root: p.root, rootLabel: p.rootLabel, slug: p.slug, cwd: p.cwd, project: p.name, draft: true, title: 'New conversation', newConversation: true })
         }}
       />
+      <BackgroundTerminalNotice targets={closedRunning} onDismiss={dismissClosedRunning} onReopen={() => {
+        if (closedRunning?.length === 1) openTarget(closedRunning[0], { newTab: true })
+        else { searchNewTab.current = true; setSearchOpen(true) }
+        dismissClosedRunning()
+      }} />
       <FoldersDialog open={foldersOpen} onClose={() => setFoldersOpen(false)} providers={PROVIDER_LIST} index={index} />
     </div>
   )

@@ -17,6 +17,7 @@ export default function useLiveKeys({ onChange } = {}) {
 
   useEffect(() => {
     const es = new EventSource('/events')
+    es.onopen = () => window.dispatchEvent(new CustomEvent('agentdeck:files-changed'))
     const expire = (set, k) =>
       setLive((p) => {
         if (!p[set].has(k)) return p
@@ -45,6 +46,7 @@ export default function useLiveKeys({ onChange } = {}) {
       if (msg.type !== 'change') return
       const changes = (msg.changes || []).filter((c) => c.provider && c.root)
       if (!changes.length) return
+      window.dispatchEvent(new CustomEvent('agentdeck:files-changed', { detail: changes }))
       onChangeRef.current?.(changes)
       setLive((prev) => {
         const ids = new Set(prev.ids)

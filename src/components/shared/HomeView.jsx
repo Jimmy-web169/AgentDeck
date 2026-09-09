@@ -1,3 +1,5 @@
+import { announceTerminalEnd } from '../../lib/terminalTarget.js'
+import { liveTarget } from '../../lib/tabs.js'
 import { useEffect, useMemo, useState } from 'react'
 import { fmtRelative } from '../../lib/format.js'
 import { baseName, shortPath } from '../../lib/paths.js'
@@ -260,7 +262,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
   const endItem = (it) => {
     if (!it.key || !it.provider) return
     setEnded((prev) => new Set(prev).add(it.key))
-    fetch(`/api/${it.provider}/terminal?key=${encodeURIComponent(it.key)}`, { method: 'DELETE' }).catch(() => {})
+    fetch(`/api/${it.provider}/terminal?key=${encodeURIComponent(it.key)}`, { method: 'DELETE' }).then((r) => { if (r.ok) announceTerminalEnd(it.provider, it.key) }).catch(() => {})
   }
   const shownLive = liveItems.filter((it) => !ended.has(it.key))
   const today = Date.now() - 24 * 3600 * 1000
@@ -275,7 +277,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
         <Section title="Live now" count={`${shownLive.length} running terminal${shownLive.length === 1 ? '' : 's'}`}>
           {shownLive.length === 0 ? (
             <Empty>
-              No running terminals. Open a session and press <span className="text-zinc-400">Open terminal</span> — it stays here until you End it or close its tab.
+              No running terminals. Open a session and press <span className="text-zinc-400">Open terminal</span> — it stays here until you End it.
             </Empty>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -295,7 +297,7 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }) {
                     </button>
                   )}
                   <div className="flex gap-2 mt-auto pt-1">
-                    <button onClick={() => onOpen(it.provider, { root: it.root, slug: it.slug, id: it.id, cwd: it.cwd, title: it.title, kind: 'tmux', draft: !it.id })} className="text-[12px] px-2.5 py-1 rounded bg-sky-500/20 text-sky-200 hover:bg-sky-500/30">Open</button>
+                    <button onClick={() => onOpen(it.provider, liveTarget(it), { newTab: true })} className="text-[12px] px-2.5 py-1 rounded bg-sky-500/20 text-sky-200 hover:bg-sky-500/30">Open</button>
                     <button onClick={() => endItem(it)} className="text-[12px] px-2.5 py-1 rounded bg-red-500/15 text-red-200 hover:bg-red-500/25">End</button>
                   </div>
                 </Panel>

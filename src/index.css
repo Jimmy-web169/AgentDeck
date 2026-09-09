@@ -388,22 +388,6 @@ body {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
-@keyframes tab-enter {
-  from {
-    max-width: 0;
-    min-width: 0;
-    opacity: 0;
-    padding-left: 0;
-    padding-right: 0;
-  }
-  to {
-    max-width: 220px;
-    opacity: 1;
-  }
-}
-.tab-enter {
-  animation: tab-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
 @keyframes qs-fade {
   from {
     opacity: 0;
@@ -481,7 +465,6 @@ body {
   animation: qs-chip 160ms ease-out both;
 }
 @media (prefers-reduced-motion: reduce) {
-  .tab-enter,
   .qs-backdrop,
   .qs-panel,
   .qs-closing .qs-backdrop,

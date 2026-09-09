@@ -39,7 +39,9 @@ import { makeDispatch } from '../../shared/dispatch.js'
 import { bucketActivity } from '../../shared/activity.js'
 import { openTool } from '../../shared/launch.js'
 import { getBrowse, getPickFolder } from '../../shared/browse.js'
-import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } from '../../shared/terminal.js'
+import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath, registerTerminalProvider, reattachTerminal } from '../../shared/terminal.js'
+import { terminalIdentity } from '../../shared/terminalIdentity.js'
+import { prepareAntigravityLaunch, resolveAntigravitySession, resolveSavedAntigravitySession } from './terminal.js'
 
 // Google Antigravity CLI (`agy`) — id-addressed like Codex: a session is a
 // conversation id, its project (workspace) is derived. The transcript gives
@@ -54,7 +56,11 @@ const TERMINAL_CONFIG = {
   resumeArgs: (id) => ['--conversation', id],
   promptArgs: (p) => ['-i', p], // `agy -i "<prompt>"` — seeded interactive (AI hand-off)
   checkOrigin: false,
+  prepareLaunch: prepareAntigravityLaunch,
+  resolveSession: resolveAntigravitySession,
+  resolveSavedSession: resolveSavedAntigravitySession,
 }
+registerTerminalProvider(TERMINAL_CONFIG)
 const TOKEN_SPECIFIC = ['reasoning']
 const zeroTokens = () => zeroTokensShared(TOKEN_SPECIFIC)
 
@@ -430,25 +436,24 @@ async function postOpen(_q, body) {
 async function postTerminal(_q, body) {
   if (!body?.root) throw httpErr(400, 'missing root')
   const root = resolveRoot(body.root)
+  const attached = await reattachTerminal({ body, root, config: TERMINAL_CONFIG })
+  if (attached) return { ok: true, ...attached }
   let cwd
-  let key
   let resumeId = null
   if (body.id) {
     if (!isSessionId(body.id)) throw httpErr(400, 'invalid session id')
     cwd = cwdForId(root.dir, body.id)
     resumeId = body.id
-    key = `${root.id}|${body.id}`
   } else if (body.cwd) {
     cwd = body.cwd
-    key = `${root.id}|new|${body.cwd}`
   } else if (body.slug && path.isAbsolute(body.slug)) {
     cwd = body.slug
-    key = `${root.id}|new|${body.slug}`
   } else if (body.brief) {
     cwd = USER_HOME // a hand-off with no folder (Insights) runs from the home directory
-    key = `${root.id}|new|${cwd}`
   } else throw httpErr(400, 'missing id or cwd')
-  if (!cwd || !fs.existsSync(cwd)) cwd = os.homedir()
+  if (!cwd || !fs.existsSync(cwd)) throw httpErr(404, 'The working directory is unavailable. Choose an existing folder.')
+  const identity = terminalIdentity(TERMINAL_CONFIG.id, root.id, { id: resumeId, launchId: body.launchId })
+  const key = identity.key
   // AI hand-off: the request + file + docs go into a brief file; the CLI starts
   // seeded with a one-line prompt that points at it (server/shared/handoff.js)
   let promptArgs = null
@@ -457,12 +462,12 @@ async function postTerminal(_q, body) {
     briefFile = writeBrief(composeBrief({ ...body.brief, providerLabel: 'Antigravity', cwd }), { key })
     promptArgs = TERMINAL_CONFIG.promptArgs(seedPrompt(briefFile))
   }
-  const meta = { root: root.id, slug: body.slug || null, id: resumeId, cwd, isNew: !resumeId, title: body.title || null }
+  const meta = { root: root.id, slug: body.slug || null, id: resumeId, launchId: identity.launchId, cwd, isNew: !resumeId, title: body.title || null }
   const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, promptArgs, meta, config: TERMINAL_CONFIG })
   return { ok: true, key, brief: briefFile, ...res }
 }
 const getTerminals = () => ({ terminals: listTerminals() })
-const deleteTerminal = async (q) => stopTerminal(q.get('key'))
+const deleteTerminal = async (q) => stopTerminal(q.get('key'), 'antigravity')
 const getLiveTerminals = () => ({ terminals: listLiveTmux() })
 const getActiveSessions = () => ({ tmux: listLiveTmux(), sdk: [] })
 

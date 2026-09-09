@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
+import { createLiveTerminalStore } from './liveTerminalStore.js'
 import { shortPath } from './paths.js'
+import { liveTarget } from './tabs.js'
 
 // Single source of truth for the unified "Live" view across the whole app: the
 // running tmux terminal sessions (real persistent background processes — the
@@ -8,30 +10,48 @@ import { shortPath } from './paths.js'
 // Dashboard read from this, so the count/list are always consistent regardless
 // of which provider is active. The tmux pool is global, so polling any one
 // provider's /active-sessions returns the complete cross-provider set.
+let probe = 'claude'
+let users = 0
+let cleanup = null
+const store = createLiveTerminalStore(async () => {
+  const response = await fetch(`/api/${probe}/active-sessions`)
+  if (!response.ok) throw new Error('Live sessions unavailable')
+  const data = await response.json()
+  return Array.isArray(data.tmux) ? data.tmux : []
+})
+
+function subscribe(listener, provider, intervalMs) {
+  probe = provider
+  const unsubscribe = store.subscribe(listener)
+  if (users++ === 0) {
+    const changed = () => store.schedule()
+    const ready = (e) => store.upsert(e.detail)
+    const ended = (e) => store.remove(e.detail?.key)
+    const visible = () => { if (document.visibilityState === 'visible') store.refresh() }
+    window.addEventListener('agentdeck:files-changed', changed)
+    window.addEventListener('agentdeck:terminal-ready', ready)
+    window.addEventListener('agentdeck:terminal-ended', ended)
+    window.addEventListener('focus', changed)
+    document.addEventListener('visibilitychange', visible)
+    const interval = setInterval(store.refresh, intervalMs)
+    cleanup = () => {
+      clearInterval(interval)
+      store.cancel()
+      window.removeEventListener('agentdeck:files-changed', changed)
+      window.removeEventListener('agentdeck:terminal-ready', ready)
+      window.removeEventListener('agentdeck:terminal-ended', ended)
+      window.removeEventListener('focus', changed)
+      document.removeEventListener('visibilitychange', visible)
+    }
+    store.refresh()
+  }
+  return () => { unsubscribe(); if (--users === 0) cleanup?.() }
+}
+
 export default function useActiveSessions(providers = [], { enabled = true, intervalMs = 4000 } = {}) {
-  const [tmux, setTmux] = useState([])
-
-  useEffect(() => {
-    if (!enabled || !providers.length) return
-    let cancelled = false
-    const probe = providers[0].id // any provider returns the whole shared set
-    const load = () => {
-      fetch(`/api/${probe}/active-sessions`)
-        .then((r) => r.json())
-        .then((d) => {
-          if (cancelled) return
-          setTmux(Array.isArray(d.tmux) ? d.tmux : [])
-        })
-        .catch(() => {})
-    }
-    load()
-    const t = setInterval(load, intervalMs)
-    return () => {
-      cancelled = true
-      clearInterval(t)
-    }
-  }, [enabled, providers, intervalMs])
-
+  const provider = providers[0]?.id
+  const listen = useCallback((fn) => enabled && provider ? subscribe(fn, provider, intervalMs) : () => {}, [enabled, provider, intervalMs])
+  const tmux = useSyncExternalStore(listen, store.getSnapshot, store.getSnapshot)
   return { tmux, count: tmux.length }
 }
 
@@ -39,6 +59,7 @@ export default function useActiveSessions(providers = [], { enabled = true, inte
 // / Dashboard render. Kept here so every caller agrees.
 export function toManagerItems({ tmux = [] }) {
   return tmux.map((t) => ({
+    ...liveTarget(t),
     key: t.key,
     kind: 'tmux',
     provider: t.provider,

@@ -48,7 +48,9 @@ import { getBrowse, getPickFolder } from '../../shared/browse.js'
 import { makeDispatch } from '../../shared/dispatch.js'
 import { forkLines } from './fork.js'
 import { bucketActivity } from '../../shared/activity.js'
-import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath } from '../../shared/terminal.js'
+import { startTerminal, stopTerminal, listTerminals, listLiveTmux, findOnPath, registerTerminalProvider, reattachTerminal } from '../../shared/terminal.js'
+import { terminalIdentity } from '../../shared/terminalIdentity.js'
+import { prepareClaudeLaunch, resolveClaudeSession, resolveSavedClaudeSession } from './terminal.js'
 
 const TERMINAL_CONFIG = {
   findBin: () => findOnPath(['claude'], [path.join(os.homedir(), '.local/bin/claude'), '/opt/homebrew/bin/claude', '/usr/local/bin/claude']),
@@ -58,7 +60,11 @@ const TERMINAL_CONFIG = {
   resumeArgs: (id) => ['--resume', id],
   promptArgs: (p) => [p], // `claude "<prompt>"` — interactive, seeded (AI hand-off)
   checkOrigin: false,
+  prepareLaunch: prepareClaudeLaunch,
+  resolveSession: resolveClaudeSession,
+  resolveSavedSession: resolveSavedClaudeSession,
 }
+registerTerminalProvider(TERMINAL_CONFIG)
 
 
 function httpErr(status, message) {
@@ -584,26 +590,25 @@ async function postOpen(_q, body) {
 async function postTerminal(_q, body) {
   if (!body?.root) throw httpErr(400, 'missing root')
   const root = resolveRoot(body.root)
+  const attached = await reattachTerminal({ body, root, config: TERMINAL_CONFIG })
+  if (attached) return { ok: true, ...attached }
   let cwd
-  let key
   let resumeId = null
   if (body.id && body.slug) {
     cwd = readCwd(findSessionFile(root.dir, body.slug, body.id)) // continue existing
     resumeId = body.id
-    key = `${root.id}|${body.slug}|${body.id}`
   } else if (body.cwd) {
     cwd = body.cwd // new conversation at an explicit path
-    key = `${root.id}|new|${body.cwd}`
   } else if (body.slug) {
     cwd = projectCwd(root.dir, body.slug) // new conversation under an existing project
-    key = `${root.id}|new|${body.slug}`
   } else if (body.brief) {
     cwd = USER_HOME // a hand-off with no folder (Insights) runs from the home directory
-    key = `${root.id}|new|${cwd}`
   } else {
     throw httpErr(400, 'missing slug/id or cwd')
   }
-  if (!cwd || !fs.existsSync(cwd)) cwd = root.dir
+  if (!cwd || !fs.existsSync(cwd)) throw httpErr(404, 'The working directory is unavailable. Choose an existing folder.')
+  const identity = terminalIdentity(TERMINAL_CONFIG.id, root.id, { id: resumeId, launchId: body.launchId })
+  const key = identity.key
   // CLAUDE_CONFIG_DIR = the session's tracked root → uses that account's login (the credential fix)
   // AI hand-off: the request + file + docs go into a brief file; the CLI starts
   // seeded with a one-line prompt that points at it (server/shared/handoff.js)
@@ -613,7 +618,7 @@ async function postTerminal(_q, body) {
     briefFile = writeBrief(composeBrief({ ...body.brief, providerLabel: 'Claude Code', cwd }), { key })
     promptArgs = TERMINAL_CONFIG.promptArgs(seedPrompt(briefFile))
   }
-  const meta = { root: root.id, slug: body.slug || null, id: resumeId, cwd, isNew: !resumeId, title: body.title || null }
+  const meta = { root: root.id, slug: body.slug || null, id: resumeId, launchId: identity.launchId, cwd, isNew: !resumeId, title: body.title || null }
   const res = await startTerminal({ key, cwd, configDir: root.dir, resumeId, promptArgs, meta, config: TERMINAL_CONFIG })
   return { ok: true, key, brief: briefFile, ...res }
 }
@@ -623,7 +628,7 @@ function getTerminals() {
 }
 
 async function deleteTerminal(q) {
-  return stopTerminal(q.get('key'))
+  return stopTerminal(q.get('key'), 'claude')
 }
 
 // All live AgentDeck tmux sessions on the box (cross-provider; the pool is shared).

@@ -30,14 +30,21 @@ export function toHash(target) {
       if (target.id && !target.draft) parts.push(target.id)
     }
   }
-  return `#/${parts.map(enc).join('/')}`
+  const query = new URLSearchParams()
+  if (target.launchId) query.set('launch', target.launchId)
+  if (target.terminalKey) query.set('terminal', target.terminalKey)
+  if (target.draft) query.set('draft', '1')
+  if (target.cwd && (target.draft || !target.slug)) query.set('cwd', target.cwd)
+  if (target.id && !target.slug) query.set('session', target.id)
+  return `#/${parts.map(enc).join('/')}${query.size ? `?${query}` : ''}`
 }
 
 // hash → partial target (no title/project — the app fills those in) or null
 export function fromHash(hash, knownProviders = []) {
   const h = String(hash || '')
   if (!h.startsWith('#/')) return null
-  const segs = h
+  const [route, search = ''] = h.split('?')
+  const segs = route
     .slice(2)
     .split('/')
     .filter(Boolean)
@@ -50,6 +57,12 @@ export function fromHash(hash, knownProviders = []) {
   if (root) t.root = root
   if (slug) t.slug = slug
   if (id) t.id = id
+  const query = new URLSearchParams(search)
+  if (query.get('launch')) t.launchId = query.get('launch')
+  if (query.get('terminal')) t.terminalKey = query.get('terminal')
+  if (query.get('cwd')) t.cwd = query.get('cwd')
+  if (query.get('session')) t.id = query.get('session')
+  if (query.get('draft') === '1') t.draft = true
   return t
 }
 

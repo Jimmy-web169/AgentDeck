@@ -36,14 +36,107 @@ export const newKey = () => Math.random().toString(36).slice(2, 10)
 
 // identity of a target — what "the same place" means for switch-to-tab and
 // dedupe. The in-app view is deliberately NOT part of it.
-export const targetKey = (t) =>
-  t?.provider ? `${t.provider}|${t.root || ''}|${t.slug || ''}|${t.id || ''}${t.draft ? '|draft' : ''}` : ''
+export const targetKey = (t) => {
+  if (!t?.provider) return ''
+  const scope = `${t.provider}|${t.root || ''}`
+  if (t.id) return `${scope}|session|${t.id}`
+  if (t.terminalKey) return `${scope}|terminal|${t.terminalKey}`
+  if (t.launchId) return `${scope}|launch|${t.launchId}`
+  return `${scope}|${t.draft ? 'draft' : 'project'}|${t.cwd || t.slug || ''}`
+}
 
-export const sameTarget = (a, b) => targetKey(a) === targetKey(b)
+export const sameTarget = (a, b) => {
+  if (a?.provider !== b?.provider || a?.root !== b?.root) return false
+  if (a?.terminalKey && a.terminalKey === b?.terminalKey) return true
+  if (a?.launchId && a.launchId === b?.launchId) return true
+  return targetKey(a) === targetKey(b)
+}
+
+export const newDraft = (target) => ({ ...target, draft: true, launchId: crypto.randomUUID() })
+
+export function liveTarget(t) {
+  return { provider: t.provider, root: t.root, slug: t.slug, id: t.id, cwd: t.cwd,
+    title: t.title, launchId: t.launchId, terminalKey: t.key || t.terminalKey,
+    draft: !t.id, kind: 'tmux' }
+}
+
+// Status follows exact identities, never a folder shared by several drafts.
+export function terminalTabKeys(terminals) {
+  const keys = new Set()
+  for (const terminal of terminals) {
+    const t = liveTarget(terminal)
+    if (!t.provider || !t.root) continue
+    if (t.id) keys.add(targetKey(t))
+    if (t.terminalKey) keys.add(targetKey({ ...t, id: null }))
+    if (t.launchId) keys.add(targetKey({ ...t, id: null, terminalKey: null }))
+  }
+  return keys
+}
+
+export function adoptTerminal(target, terminal) {
+  if (!target?.provider) return target
+  const legacy = target.draft && !target.launchId && !target.terminalKey && terminal.provider === target.provider && terminal.root === target.root &&
+    [target.cwd, target.slug].filter(Boolean).some((p) => terminal.key === `${target.root}|new|${p}`)
+  const requested = terminal.requestedTarget && sameTarget(target, { ...terminal.requestedTarget, provider: terminal.provider })
+  if (!legacy && !requested && !sameTarget(target, liveTarget(terminal))) return target
+  return { ...target, terminalKey: terminal.key, launchId: terminal.launchId || target.launchId,
+    id: terminal.id || target.id, slug: terminal.slug || target.slug, cwd: terminal.cwd || target.cwd,
+    title: (!target.id && terminal.id ? terminal.title : target.title) || target.title || terminal.title, draft: !(terminal.id || target.id) }
+}
+
+export function adoptTerminalsFor(target, entries) {
+  if (target?.draft && !target.launchId && !target.terminalKey) {
+    const matches = entries.filter((e) => adoptTerminal(target, e) !== target)
+    if (new Set(matches.map((e) => e.key)).size > 1) return target
+  }
+  return entries.reduce(adoptTerminal, target)
+}
+
+// Preserve the active tab when persisted/late-resolved aliases converge.
+export function dedupeTabs(tabs, activeKey) {
+  const groups = []
+  for (const tab of tabs) {
+    const known = tab.target?.provider && (tab.target.id || tab.target.launchId || tab.target.terminalKey)
+    const matches = known ? groups.filter((g) => g.some((t) => sameTarget(t.target, tab.target))) : []
+    if (!matches.length) groups.push([tab])
+    else {
+      // A newly learned alias can bridge two previously independent groups.
+      matches[0].push(...matches.slice(1).flat(), tab)
+      for (const group of matches.slice(1)) groups.splice(groups.indexOf(group), 1)
+    }
+  }
+  return groups.map((group) => {
+    if (group.length === 1) return group[0]
+    const winner = group.find((t) => t.key === activeKey) || group[0]
+    const defined = (t) => Object.fromEntries(Object.entries(t.target).filter(([, v]) => v !== undefined))
+    const target = Object.assign({}, ...group.map(defined), defined(winner))
+    if (target.id) target.draft = false
+    return { ...winner, target }
+  })
+}
 export const isHome = (t) => !t?.provider
 export const isEmpty = isHome
 
 export const emptyTab = (target = null) => ({ key: newKey(), target })
+
+// All entry points use the same navigation policy. Live terminals open beside
+// the current tab; every known alias focuses its existing tab instead.
+export function openTabState(state, target, { newTab = false } = {}) {
+  const stored = target ? Object.fromEntries(Object.entries(target).filter(([k, v]) => v !== undefined && !['newConversation', 'kind', 'at'].includes(k))) : { provider: null, view: 'activity' }
+  const existing = target?.provider && (target.id || target.draft || target.terminalKey)
+    ? state.tabs.find((t) => sameTarget(t.target, target)) : null
+  if (existing) {
+    const merged = { ...existing.target, ...stored, view: target.view || existing.target.view }
+    return { tabs: state.tabs.map((t) => t.key === existing.key ? { ...t, target: merged } : t), activeKey: existing.key }
+  }
+  if (newTab || target?.kind === 'tmux' || !state.tabs.length) {
+    const tab = emptyTab(stored)
+    const tabs = [...state.tabs]
+    tabs.splice(tabs.findIndex((t) => t.key === state.activeKey) + 1, 0, tab)
+    return { tabs, activeKey: tab.key }
+  }
+  return { ...state, tabs: state.tabs.map((t) => t.key === state.activeKey ? { ...t, target: stored } : t) }
+}
 
 // What the strip prints for a tab: a primary (project) and secondary (session) part.
 export function tabLabel(target, providers = []) {
@@ -71,7 +164,7 @@ export function loadTabs() {
       })
     if (!tabs.length) return null
     const activeKey = tabs.some((t) => t.key === raw.activeKey) ? raw.activeKey : tabs[0].key
-    return { tabs, activeKey }
+    return { tabs: dedupeTabs(tabs, activeKey), activeKey }
   } catch {
     return null
   }

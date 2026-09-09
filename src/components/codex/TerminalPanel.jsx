@@ -1,18 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { shortPath } from '../../lib/paths.js'
-import { useProviderApi, useProviderResume } from '../../lib/providerApi.js'
+import { useProviderApi, useProviderResume, useProviderId } from '../../lib/providerApi.js'
 import OpenAppButtons from '../shared/OpenAppButtons.jsx'
 import ResizeHandle from '../shared/ResizeHandle.jsx'
 import ContextMeter from './ContextMeter.jsx'
 import { getTermView, setTermView } from '../../lib/termView.js'
+import { terminalRequest, announceTerminal, announceTerminalEnd } from '../../lib/terminalTarget.js'
+import TerminalStatus from '../shared/TerminalStatus.jsx'
+import LinkConversationButton from '../shared/LinkConversationButton.jsx'
 
 // Terminal chat mode: embeds the real `codex` TUI (served by ttyd) below the
 // conversation. Continuing a session runs `codex resume <id>`; a new one runs
 // `codex`. The terminal lives server-side keyed by target, so it SURVIVES
 // navigation: on target change we reset and, if a terminal is already running
 // for the new target (runningKeys), auto-reattach to it instead of killing it.
-// It is only stopped by the explicit "stop ✕" or the Live-manager End.
-export default function TerminalPanel({ root, slug, cwd, id, title, isNew, contextSummary, runningKeys, onClose, onChange, onOpenTool }) {
+// It is only stopped by the explicit "End ✕" or the Live-manager End.
+export default function TerminalPanel({ paneKey, transcriptReady, root, slug, cwd, id, title, launchId, terminalKey, isNew, contextSummary, runningKeys, onClose, onChange, onOpenTool }) {
   const api = useProviderApi()
   const resume = useProviderResume()
   const [open, setOpen] = useState(false)
@@ -21,6 +24,8 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
   const [err, setErr] = useState(null)
   const [loading, setLoading] = useState(false)
   const [nonce, setNonce] = useState(0)
+  const [frameLoaded, setFrameLoaded] = useState(false)
+  const [canLink, setCanLink] = useState(false)
   const [view, setView] = useState('embedded') // 'embedded' | 'hidden' | 'popped' — persisted per key, survives navigation
   const wrapRef = useRef(null)
   const popoutRef = useRef(null)
@@ -33,27 +38,30 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
   useEffect(() => localStorage.setItem('cxm_termH', String(h)), [h])
 
   // server-side key for this target — must match server postTerminal()
-  const myKey = id ? `${root}|${id}` : cwd ? `${root}|new|${cwd}` : `${root}|new|${slug}`
+  const providerId = useProviderId()
+  const myKey = terminalKey || (launchId ? `${providerId}|${root}|launch|${launchId}` : id ? `${root}|${id}` : `${root}|new|${cwd || slug}`)
+  const requestSeq = useRef(0)
 
-  const start = () => {
-    if (loading) return
+  const start = (auto = false) => {
+    if (loading && auto !== true) return
+    const request = ++requestSeq.current
     autoKeyRef.current = myKey // mark this target handled (manual or auto) so the auto-reattach effect won't double-fire or reopen
     setLoading(true)
     setErr(null)
-    const body = { root, title }
-    if (id) body.id = id
-    else if (cwd) body.cwd = cwd
-    else if (slug) body.slug = slug
+    const body = terminalRequest({ root, slug, cwd, id, title, launchId, terminalKey })
     api
       .terminal(body)
       .then((d) => {
+        if (request !== requestSeq.current) return
         setUrl(d.url)
+        setCanLink(!!d.canBindSession)
         setKey(d.key)
         setOpen(true)
         onChange?.()
+        announceTerminal(providerId, { ...d, requestedTarget: { root, slug, cwd, id, launchId, terminalKey, draft: !!isNew } })
       })
-      .catch((e) => setErr(e.message))
-      .finally(() => setLoading(false))
+      .catch((e) => request === requestSeq.current && setErr(e.message))
+      .finally(() => request === requestSeq.current && setLoading(false))
   }
 
   // on target change: reset, then decide. If runningKeys already knows this
@@ -66,9 +74,26 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
     setErr(null)
     setView(getTermView(myKey) || 'embedded')
     autoKeyRef.current = null
-    if (runningKeys && runningKeys.has(myKey)) start()
+    if (terminalKey || (runningKeys && runningKeys.has(myKey))) start(true)
+    return () => { requestSeq.current++; setLoading(false) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [root, slug, cwd, id])
+  }, [paneKey || myKey])
+
+  // Transcript promotion must not reset this pane or its iframe.
+  useEffect(() => setFrameLoaded(false), [url, nonce])
+  useEffect(() => {
+    const ended = (e) => {
+      if (e.detail?.provider !== providerId || e.detail?.key !== key) return
+      requestSeq.current++
+      autoKeyRef.current = myKey
+      setLoading(false)
+      setOpen(false)
+      setUrl(null)
+      setKey(null)
+    }
+    window.addEventListener('agentdeck:terminal-ended', ended)
+    return () => window.removeEventListener('agentdeck:terminal-ended', ended)
+  }, [key, myKey])
 
   // Late reattach: the live-tmux list (runningKeys) loads asynchronously, so
   // entering a session cold from the project list mounts BEFORE it's known —
@@ -76,18 +101,20 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
   // only once per target (autoKeyRef) and only while nothing is open yet, so it
   // never reopens after the user closed or popped the terminal out. This is what
   // keeps the same session from being opened as a second terminal.
-  const isLive = !!(runningKeys && runningKeys.has(myKey))
+  const isLive = !!terminalKey || !!(runningKeys && runningKeys.has(myKey))
   useEffect(() => {
     // reattach even when hidden/popped so we hold a fresh url for show/focus; the
     // view state (not this effect) decides whether the iframe is actually rendered.
     if (autoKeyRef.current === myKey || open || url || loading) return
     if (isLive) start()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLive])
+  }, [isLive, terminalKey])
 
   // explicit end — kills the server-side ttyd
-  const stop = () => {
-    if (key) api.terminalStop(key).then(() => onChange?.()).catch(() => {})
+  const stop = async () => {
+    try { if (key) await api.terminalStop(key) } catch (e) { setErr(e.message); return }
+    requestSeq.current++
+    if (key) announceTerminalEnd(providerId, key)
     try { popoutRef.current?.close?.() } catch {}
     setTermView(myKey, null)
     setOpen(false)
@@ -121,7 +148,7 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
     return (
       <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex items-center gap-3">
         <button onClick={start} disabled={loading} className="shrink-0 text-[13px] px-3 py-1.5 rounded bg-sky-500/20 text-sky-200 hover:bg-sky-500/30 disabled:opacity-50">
-          {loading ? 'starting…' : isNew ? `▸ Open terminal in ${shortPath(cwd || slug)} (new conversation)` : '▸ Continue in a terminal'}
+          {loading ? (isLive ? 'Reconnecting to terminal…' : 'Starting terminal…') : isNew ? `▸ Open terminal in ${shortPath(cwd || slug)} (new conversation)` : '▸ Continue in a terminal'}
         </button>
         <OpenAppButtons onOpenTool={onOpenTool} />
         {err ? (
@@ -143,7 +170,7 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
         <span className="flex-1" />
         <button onClick={() => { try { const w = window.open(url, `agentdeck-term-${key || myKey}`); if (w) { popoutRef.current = w; w.focus() } } catch {} }} className="text-[12px] text-sky-300/90 hover:text-sky-200">focus tab</button>
         <button onClick={reEmbed} className="text-[12px] text-zinc-400 hover:text-zinc-200">⧉ re-embed</button>
-        <button onClick={stop} className="text-[12px] text-zinc-500 hover:text-red-300" title="Stop this terminal">stop ✕</button>
+        <button onClick={stop} className="text-[12px] text-zinc-500 hover:text-red-300" title="Stop this terminal">End ✕</button>
       </div>
     )
   }
@@ -157,7 +184,7 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
         <span className="flex-1" />
         <button onClick={reEmbed} className="text-[12px] text-sky-300/90 hover:text-sky-200">▸ show</button>
         <button onClick={popOut} className="text-[12px] text-zinc-400 hover:text-zinc-200">⤢ pop out</button>
-        <button onClick={stop} className="text-[12px] text-zinc-500 hover:text-red-300" title="Stop this terminal">stop ✕</button>
+        <button onClick={stop} className="text-[12px] text-zinc-500 hover:text-red-300" title="Stop this terminal">End ✕</button>
       </div>
     )
   }
@@ -171,14 +198,16 @@ export default function TerminalPanel({ root, slug, cwd, id, title, isNew, conte
         {err && <span className="text-red-300 truncate" title={err}>⚠ {err}</span>}
         <div className="flex-1" />
         <ContextMeter summary={contextSummary} label="ctx" />
+        {canLink && key && <LinkConversationButton api={api} provider={providerId} root={root} terminalKey={key} />}
         <OpenAppButtons onOpenTool={onOpenTool} className="mr-1" />
         <button onClick={popOut} className="text-zinc-500 hover:text-sky-300" title="Open in a new browser tab and collapse this panel">⤢ pop out</button>
-        <button onClick={() => setNonce((n) => n + 1)} className="text-zinc-500 hover:text-zinc-200 ml-1" title="reload">⟳</button>
+        <button onClick={() => { setFrameLoaded(false); setNonce((n) => n + 1) }} className="text-zinc-500 hover:text-zinc-200 ml-1" title="reload">⟳</button>
         <button onClick={hide} className="text-zinc-500 hover:text-zinc-200 ml-1" title="Hide this panel but keep the session running">▾ hide</button>
-        <button onClick={stop} className="text-zinc-500 hover:text-red-300 ml-1" title="Stop this terminal">stop ✕</button>
+        <button onClick={stop} className="text-zinc-500 hover:text-red-300 ml-1" title="Stop this terminal">End ✕</button>
       </div>
+      <TerminalStatus loading={loading} reconnecting={isLive} running={open && !!url} frameLoaded={frameLoaded} id={id} transcriptReady={transcriptReady} />
       <div className="flex-1 min-h-0 bg-black">
-        <iframe key={nonce} src={url} title="agent terminal" className="w-full h-full border-0" />
+        <iframe key={nonce} src={url} onLoad={() => setFrameLoaded(true)} title="agent terminal" className="w-full h-full border-0" />
       </div>
     </div>
   )

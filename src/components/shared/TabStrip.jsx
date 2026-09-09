@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { tabLabel } from '../../lib/tabs.js'
+import { useEffect, useRef, useState } from 'react'
+import { tabLabel, targetKey } from '../../lib/tabs.js'
 import { providerColor, statusDot } from '../../lib/providerColors.js'
 import { usePrefs } from '../../lib/prefs.js'
 import { liveSessionKey } from '../../lib/useLiveKeys.js'
@@ -11,8 +11,7 @@ import Preferences from './Preferences.jsx'
 // Chrome-style tab strip. Purely presentational: the shell owns the tab list.
 //  - click = activate, middle-click / × / Alt+W = close, drag = reorder,
 //    right-click = context menu, wheel = horizontal scroll
-//  - a new tab grows in (tab-enter); neighbours slide into place (FLIP) when a
-//    tab closes or moves
+//  - tab positions follow the tab array only; live updates never animate layout
 //  - the active tab carries its provider's color as a top bar; a session that
 //    is being written to right now pulses its dot green, one with a terminal
 //    running pulses it red
@@ -37,36 +36,9 @@ export default function TabStrip({
   usePrefs() // tab dots / bars follow Preferences › Colours
   const scrollRef = useRef(null)
   const els = useRef(new Map()) // key -> element
-  const lefts = useRef(new Map()) // key -> last measured left (for FLIP)
-  const seen = useRef(new Set(tabs.map((t) => t.key))) // tabs present on first paint don't animate in
   const dragKey = useRef(null)
   const [menu, setMenu] = useState(null) // { x, y, key }
   const [help, setHelp] = useState(false) // the "?" shortcuts popover
-
-  const measure = () => {
-    const next = new Map()
-    for (const [key, el] of els.current) if (el) next.set(key, el.getBoundingClientRect().left)
-    lefts.current = next
-  }
-
-  // FLIP: a tab whose slot moved (a neighbour closed / reorder) slides from its
-  // old position instead of jumping. Entering tabs animate via CSS instead.
-  useLayoutEffect(() => {
-    for (const [key, el] of els.current) {
-      if (!el) continue
-      const old = lefts.current.get(key)
-      const now = el.getBoundingClientRect().left
-      if (old == null || Math.abs(old - now) < 0.5 || el.classList.contains('tab-enter')) continue
-      el.style.transition = 'none'
-      el.style.transform = `translateX(${old - now}px)`
-      requestAnimationFrame(() => {
-        el.style.transition = 'transform 170ms cubic-bezier(.2,.8,.2,1)'
-        el.style.transform = ''
-      })
-    }
-    measure()
-    for (const t of tabs) seen.current.add(t.key)
-  })
 
   // keep the active tab in view
   useEffect(() => {
@@ -128,11 +100,7 @@ export default function TabStrip({
           const { primary, secondary } = tabLabel(t, providers)
           const color = providerColor(providers, t?.provider)
           const isLive = !!(t?.id && live?.ids?.has(liveSessionKey(t.provider, t.root, t.id)))
-          const hasTerm = !!(
-            t?.provider &&
-            (t.id ? termKeys?.has(liveSessionKey(t.provider, t.root, t.id)) : t.draft && (termKeys?.has(`${t.provider}|${t.root}|new|${t.slug}`) || termKeys?.has(`${t.provider}|${t.root}|new|${t.cwd}`)))
-          )
-          const entering = !seen.current.has(tab.key)
+          const hasTerm = !!(t?.provider && termKeys?.has(targetKey(t)))
           const dot = hasTerm ? statusDot('terminal') : isLive ? statusDot('writing') : t?.provider ? color.dot : 'bg-zinc-600'
           return (
             <div
@@ -158,11 +126,8 @@ export default function TabStrip({
                 e.preventDefault()
                 setMenu({ x: e.clientX, y: e.clientY, key: tab.key })
               }}
-              onAnimationEnd={measure}
               title={`${primary}${secondary ? ` · ${secondary}` : ''}${hasTerm ? '\nterminal running' : ''}${t?.cwd || t?.slug ? `\n${t.cwd || t.slug}` : ''}`}
-              className={`tab group relative flex items-center gap-2 h-8 pl-3 pr-1 min-w-[88px] max-w-[220px] flex-1 rounded-t-lg text-[12px] cursor-default overflow-hidden ${
-                entering ? 'tab-enter' : ''
-              } ${active ? 'bg-ink-700 text-zinc-100' : 'text-zinc-500 hover:bg-ink-800 hover:text-zinc-300'}`}
+              className={`tab group relative flex items-center gap-2 h-8 pl-3 pr-1 min-w-[88px] max-w-[220px] flex-1 rounded-t-lg text-[12px] cursor-default overflow-hidden ${active ? 'bg-ink-700 text-zinc-100' : 'text-zinc-500 hover:bg-ink-800 hover:text-zinc-300'}`}
               style={active ? { boxShadow: `inset 0 2px 0 ${color.bar}` } : undefined}
             >
               <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${dot}`} />
@@ -176,7 +141,7 @@ export default function TabStrip({
                   onClose(tab.key)
                 }}
                 onMouseDown={(e) => e.stopPropagation()}
-                title="Close tab  (Alt+W)"
+                title={hasTerm ? 'Close tab (Alt+W) · terminal keeps running' : 'Close tab (Alt+W)'}
                 className={`shrink-0 w-5 h-5 rounded flex items-center justify-center hover:bg-zinc-700/60 hover:text-zinc-100 ${
                   active ? 'text-zinc-400' : 'text-transparent group-hover:text-zinc-400'
                 }`}

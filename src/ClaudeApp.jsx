@@ -9,8 +9,12 @@ import Resources from './components/claude/Resources.jsx'
 import MemoryView from './components/claude/MemoryView.jsx'
 import { ShortcutChips } from './components/shared/ShortcutHints.jsx'
 import TerminalPanel from './components/claude/TerminalPanel.jsx'
+import ConversationPending from './components/shared/ConversationPending.jsx'
 import LiveSessionsPanel from './components/shared/LiveSessionsPanel.jsx'
 import useActiveSessions, { toManagerItems } from './lib/useActiveSessions.js'
+import { liveTarget } from './lib/tabs.js'
+import useTerminalPanes from './lib/useTerminalPanes.js'
+import { mergeTerminalEntries, terminalFor, announceTerminalEnd } from './lib/terminalTarget.js'
 import { ActivityIcon } from './components/shared/icons.jsx'
 import { projectName, shortPath } from './lib/paths.js'
 import RateLimitsBar from './components/claude/RateLimitsBar.jsx'
@@ -34,7 +38,7 @@ const SESSION_TABS = [
 ]
 const VIEWS = new Set(SESSION_TABS.map((t) => t.k))
 
-export default function App({ active: appActive = true, providers, scopes, onOpenHome, onOpenSession, pendingOpen, onConsumedPending, onNavigate }) {
+export default function App({ active: appActive = true, providers, scopes, onOpenHome, onOpenSession, pendingOpen, navigationTarget, openTargets, onConsumedPending, onNavigate }) {
   const [roots, setRoots] = useState([])
   const [root, setRoot] = useState(null)
   const [projects, setProjects] = useState([])
@@ -58,6 +62,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
 
   const rootRef = useRef(null)
   const activeRef = useRef(null)
+  const openSeq = useRef(0)
   const openSlugRef = useRef(null)
   const tabRef = useRef(tab)
   const termDraftRef = useRef(null)
@@ -79,17 +84,17 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
   // and jumping to the end
   const paneMemo = useRef(new Map())
   const restoreScroll = useRef(null)
-  const rememberPane = () => {
+  const rememberPane = (rememberRoot = rootRef.current) => {
     const a = activeRef.current
     if (!a) return
-    paneMemo.current.set(a.id, { scrollTop: mainRef.current?.scrollTop ?? 0, data: sessionDataRef.current })
+    paneMemo.current.set(`${rememberRoot}|${a.id}`, { scrollTop: mainRef.current?.scrollTop ?? 0, data: sessionDataRef.current })
   }
   useEffect(() => void (rootsRef.current = roots), [roots])
   useEffect(() => void (projectsRef.current = projects), [projects])
   useEffect(() => void (onNavigateRef.current = onNavigate), [onNavigate])
 
   // ---- shell sync: describe "where this app is" for the tab strip ----
-  const targetOf = useCallback(({ slug, id, title, draft, cwd, view } = {}) => {
+  const targetOf = useCallback(({ slug, id, title, draft, cwd, view, launchId, terminalKey } = {}) => {
     const r = rootRef.current
     const proj = slug ? projectsRef.current.find((p) => p.slug === slug) : null
     const c = cwd || proj?.cwd || null
@@ -101,7 +106,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
       title: title || null,
       project: slug || c ? projectName(c, slug) : null,
       cwd: c,
-      draft: !!draft,
+      draft: !!draft, launchId, terminalKey,
       view: view || tabRef.current || 'conversation',
     }
   }, [])
@@ -110,7 +115,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     const d = termDraftRef.current
     const a = activeRef.current
     const slug = openSlugRef.current
-    if (d) return { slug: d.slug, cwd: d.cwd, draft: true, title: d.title || 'New conversation', view }
+    if (d) return { ...d, draft: true, title: d.title || 'New conversation', view }
     if (a && slug) return { slug, id: a.id, title: a.title, view }
     return slug ? { slug, view } : { view }
   }, [])
@@ -158,12 +163,13 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     // re-shown by the shell (a tab switch) with the same folder: keep what's on
     // screen — only an actual folder change resets the selection below
     if (shownRootRef.current === root) return
+    rememberPane(shownRootRef.current)
     shownRootRef.current = root
+    openSeq.current++
     setOpenSlug(null)
     setSessions([])
     loadedSessionsFor.current = null
     sessionsReqId.current++
-    rememberPane()
     setActive(null)
     setSessionData(null)
     setSubagents(null)
@@ -197,11 +203,14 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
   }
 
   const selectSession = (s, { view } = {}) => {
+    const request = ++openSeq.current
+    setError(null)
     const v = view && VIEWS.has(view) ? view : 'conversation'
     rememberPane()
     setTermDraft(null)
+    activeRef.current = s
     setActive(s)
-    const memo = paneMemo.current.get(s.id)
+    const memo = paneMemo.current.get(`${root}|${s.id}`)
     if (memo?.data) {
       // seen before: show it exactly as it was, refresh quietly underneath
       setSessionData(memo.data)
@@ -217,7 +226,9 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     tabRef.current = v
     report({ slug: openSlug, id: s.id, title: s.title, view: v })
     if (s.oversized) return
-    api.session(root, openSlug, s.id).then((d) => setSessionData(d)).catch((e) => setError(e.message))
+    api.session(root, openSlug, s.id).then((d) => {
+      if (request === openSeq.current && rootRef.current === root) setSessionData(d)
+    }).catch((e) => { if (request === openSeq.current && rootRef.current === root) setError(e.message) })
   }
 
   const refetchActive = useCallback(() => {
@@ -225,7 +236,12 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     const r = rootRef.current
     const slug = openSlugRef.current
     if (!a || !slug) return
-    api.session(r, slug, a.id).then((d) => setSessionData(d)).catch(() => {})
+    const request = openSeq.current
+    api.session(r, slug, a.id).then((d) => {
+      if (request !== openSeq.current || rootRef.current !== r || activeRef.current?.id !== a.id) return
+      setSessionData(d)
+      setError(null)
+    }).catch(() => {})
     if (tabRef.current === 'subagents') api.subagents(r, slug, a.id).then((d) => setSubagents({ ...d, _for: a.id })).catch(() => {})
     if (tabRef.current === 'raw') api.raw(r, slug, a.id).then(setRaw).catch(() => {})
   }, [])
@@ -273,31 +289,20 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
   const activeSessions = useActiveSessions(providers, { enabled: appActive })
   const liveCount = activeSessions.count
   const managerItems = toManagerItems(activeSessions)
+  const terminalEntries = mergeTerminalEntries(terminals, activeSessions.tmux)
+  const terminalOf = (target) => terminalFor(terminalEntries, 'claude', target)
   const runningTermKeys = new Set([...terminals.map((t) => t.key), ...activeSessions.tmux.map((t) => t.key).filter(Boolean)])
-  const runningSig = [...runningTermKeys].sort().join('|')
-  // one TerminalPanel per session that has a terminal, kept mounted while it runs:
-  // switching tabs and coming back finds the same iframe instead of a reconnect.
-  // The open session always has a panel (collapsed until started).
-  const [termPanes, setTermPanes] = useState([])
-  const curTermKey = active && root && openSlug ? `${root}|${openSlug}|${active.id}` : null
-  useEffect(() => {
-    setTermPanes((ps) => {
-      const cur = curTermKey ? { key: curTermKey, root, slug: openSlug, id: active.id, title: active.title } : null
-      let next = ps.filter((p) => runningTermKeys.has(p.key) || (cur && p.key === cur.key))
-      if (cur && !next.some((p) => p.key === cur.key)) next = [...next, cur]
-      return next.length === ps.length && next.every((p, i) => p === ps[i]) ? ps : next
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runningSig, curTermKey])
-  const shownPanes = curTermKey && !termPanes.some((p) => p.key === curTermKey) ? [...termPanes, { key: curTermKey, root, slug: openSlug, id: active.id, title: active.title }] : termPanes
+  for (const t of terminalEntries) if (t.provider === 'claude' && t.id) runningTermKeys.add(`${t.root}|${t.slug}|${t.id}`)
+  const terminalTarget = navigationTarget || (termDraft ? { ...termDraft, draft: true } : active ? { ...active, root, slug: openSlug } : null)
+  const { panes: shownPanes, currentKey: curTermKey } = useTerminalPanes('claude', terminalTarget, terminalEntries, openTargets)
 
   const onManagerEnter = (it) => {
     setShowLive(false)
-    onOpenSession?.(it.provider, { root: it.root, slug: it.slug, id: it.id, cwd: it.cwd, title: it.title, kind: 'tmux', draft: !it.id })
+    onOpenSession?.(it.provider, liveTarget(it), { newTab: true })
   }
   const onManagerClose = (it) => {
     fetch(`/api/${it.provider}/terminal?key=${encodeURIComponent(it.key)}`, { method: 'DELETE' })
-      .then(refreshTerminals)
+      .then((r) => { if (r.ok) announceTerminalEnd(it.provider, it.key); refreshTerminals() })
       .catch(refreshTerminals)
   }
 
@@ -334,17 +339,18 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     //    tmux by the same key postTerminal used
     if (!pendingOpen.id && (pendingOpen.draft || pendingOpen.kind === 'tmux' || pendingOpen.newConversation) && (pendingOpen.slug || pendingOpen.cwd)) {
       if (pendingOpen.slug && openSlug !== pendingOpen.slug) openProject(pendingOpen.slug)
+      openSeq.current++
       rememberPane()
       setActive(null)
       setSessionData(null)
       setTermDraft(
         pendingOpen.slug
-          ? { root: pendingOpen.root, slug: pendingOpen.slug, cwd: pendingOpen.cwd || null, title: pendingOpen.title || 'New conversation' }
-          : { root: pendingOpen.root, cwd: pendingOpen.cwd, title: pendingOpen.title || 'New project' }
+          ? { launchId: pendingOpen.launchId, terminalKey: pendingOpen.terminalKey, root: pendingOpen.root, slug: pendingOpen.slug, cwd: pendingOpen.cwd || null, title: pendingOpen.title || 'New conversation' }
+          : { launchId: pendingOpen.launchId, terminalKey: pendingOpen.terminalKey, root: pendingOpen.root, cwd: pendingOpen.cwd, title: pendingOpen.title || 'New project' }
       )
       setTab('conversation')
       tabRef.current = 'conversation'
-      if (pendingOpen.newConversation) report({ slug: pendingOpen.slug, cwd: pendingOpen.cwd, draft: true, title: 'New conversation', view: 'conversation' })
+      if (pendingOpen.newConversation) report({ ...pendingOpen, draft: true, title: 'New conversation', view: 'conversation' })
       done()
       return
     }
@@ -357,6 +363,9 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     if (pendingOpen.id && active?.id !== pendingOpen.id) {
       const s = sessions.find((x) => x.id === pendingOpen.id)
       if (s) selectSession(s, { view })
+      // A freshly bound transcript can precede the cached project listing.
+      // The exact live identity is already validated by the provider adapter.
+      else if (pendingOpen.terminalKey) selectSession({ id: pendingOpen.id, title: pendingOpen.title }, { view })
       else if (loadedSessionsFor.current === `${root}|${openSlug}` && !loadingSessions) setError(`Session ${String(pendingOpen.id).slice(0, 8)}… is no longer in this project (trashed?)`)
       else return
     } else if (pendingOpen.id) {
@@ -367,6 +376,7 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
     } else {
       // a folder- or project-level tab shows no session
       if (activeRef.current || termDraftRef.current) {
+        openSeq.current++
         rememberPane()
         setActive(null)
         setSessionData(null)
@@ -562,30 +572,27 @@ export default function App({ active: appActive = true, providers, scopes, onOpe
       <ErrorBoundary label="this conversation" resetKey={`conv|${root}|${openSlug || ''}|${active?.id || ''}`}>
         <div className={tab === 'conversation' ? 'flex-1 min-h-0 flex flex-col' : 'hidden'}>
           <div ref={mainRef} onScroll={onMainScroll} className="flex-1 overflow-y-auto">
-              {termDraft ? (
-                <div className="h-full flex flex-col items-center justify-center gap-1.5 text-center px-4">
-                    <div className="text-zinc-400 text-sm">New conversation</div>
-                    <div className="text-[12px] font-mono text-zinc-500" title={termDraft.cwd || termDraft.slug}>{shortPath(termDraft.cwd || termDraft.slug, 0)}</div>
-                    <div className="text-[11.5px] text-zinc-600 mt-1">Nothing is written yet — open the terminal below to start; the session appears in the sidebar with its first record.</div>
-                  </div>
+              {termDraft || (active && !sessionData) || (navigationTarget && (navigationTarget.root !== root || (navigationTarget.id ? navigationTarget.id !== active?.id : navigationTarget.draft))) ? (
+                <ConversationPending target={terminalTarget} error={error} onRetry={refetchActive} />
               ) : sessionData ? (
                 <Conversation key={active?.id} data={sessionData} subagentCtx={subagentCtx} onFork={forkFromReply} />
               ) : (
                 <Empty active={active} />
               )}
             </div>
-            {termDraft ? (
-              <TerminalPanel root={termDraft.root} slug={termDraft.slug} cwd={termDraft.cwd} title={termDraft.title} isNew onClose={() => setTermDraft(null)} onChange={refreshTerminals} runningKeys={runningTermKeys} onOpenTool={(what) => api.open(termDraft.root, termDraft.slug || null, null, what, termDraft.cwd)} />
-            ) : (
-              shownPanes.map((p) => {
-                const isCur = p.key === curTermKey
-                return (
-                  <div key={p.key} className={isCur ? 'contents' : 'hidden'}>
-                    <TerminalPanel root={p.root} slug={p.slug} id={p.id} title={isCur ? active.title : p.title} contextUsed={isCur ? termCtxUsed : null} onChange={refreshTerminals} runningKeys={runningTermKeys} onOpenTool={(what) => api.open(p.root, p.slug, p.id, what)} />
-                  </div>
-                )
-              })
-            )}
+            {shownPanes.map((pane) => {
+              const p = pane.target
+              const isCur = pane.key === curTermKey
+              return (
+                <div key={pane.key} className={isCur ? 'contents' : 'hidden'}>
+                  <TerminalPanel {...p} paneKey={pane.key} isNew={!p.id} terminalKey={terminalOf(p)?.key || p.terminalKey}
+                    transcriptReady={isCur && !!sessionData && active?.id === p.id && root === p.root}
+                    contextUsed={isCur ? termCtxUsed : null}
+                    onClose={() => { if (!p.id) setTermDraft(null) }} onChange={refreshTerminals} runningKeys={runningTermKeys}
+                    onOpenTool={(what) => api.open(p.root, p.slug || null, p.id || null, what, p.cwd)} />
+                </div>
+              )
+            })}
         </div>
       </ErrorBoundary>
       {tab !== 'conversation' && (
