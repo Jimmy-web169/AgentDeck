@@ -77,6 +77,9 @@ All notable changes to AgentDeck are recorded here. The format follows
   note under Home › Activity's keyboard map is gone too.
 
 ### Changed
+- The test command includes all nested test suites without executing fixture
+  helpers; terminal discovery fixtures scope evidence to a single launch so
+  background polling cannot race manual-repair assertions.
 - Folder trees distinguish provider headings, quieter root labels and brighter
   session titles; an inset guide line separates session lists from source rows.
 - Stats values no longer truncate with an ellipsis. The existing metric cards

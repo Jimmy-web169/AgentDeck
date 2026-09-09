@@ -13,7 +13,7 @@
     "web": "vite",
     "build": "vite build",
     "start": "node server/index.js",
-    "test": "node --test",
+    "test": "node --test \"test/**/*.test.js\"",
     "check:providers": "node scripts/check-providers.mjs",
     "check:privacy": "node scripts/check-privacy.mjs",
     "check:spec": "node scripts/check-spec.mjs",

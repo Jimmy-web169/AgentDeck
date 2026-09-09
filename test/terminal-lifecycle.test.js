@@ -40,11 +40,12 @@ test('terminal survives frontend shutdown, attaches by exact key, persists bindi
     fs.rmSync(dir, { recursive: true, force: true })
   })
   let observed = null
+  let observedLaunch = null
   let discoveryCalls = 0
   const config = {
     id: 'fixture', title: 'fixture', envKey: 'FIXTURE_CONFIG_DIR',
     findBin: () => path.join(dir, 'fixture-cli'), resumeArgs: (id) => ['--resume', id],
-    resolveSession: ({ meta }) => { discoveryCalls++; return meta.id ? null : observed },
+    resolveSession: ({ meta }) => { discoveryCalls++; return meta.id || meta.launchId !== observedLaunch ? null : observed },
     resolveSavedSession: ({ id }) => ['saved-id', 'manual-id', 'other-folder', 'unknown-folder'].includes(id)
       ? { id, slug: dir, cwd: id === 'other-folder' ? os.tmpdir() : id === 'unknown-folder' ? null : dir } : null,
   }
@@ -86,6 +87,9 @@ test('terminal survives frontend shutdown, attaches by exact key, persists bindi
   // New tmux entry triggers provider discovery immediately, without a polling sleep.
   observed = { id: 'saved-id', slug: dir, cwd: dir }
   const second = terminalIdentity(config.id, 'account')
+  // Evidence belongs to this process, not the first terminal awaiting manual
+  // repair. Background polling must not bind both to the same mock transcript.
+  observedLaunch = second.launchId
   await pool.startTerminal({ ...options, ...second, meta: { ...options.meta, launchId: second.launchId } })
   const bound = pool.listLiveTmux().find((e) => e.key === second.key)
   assert.equal(bound.id, 'saved-id')
