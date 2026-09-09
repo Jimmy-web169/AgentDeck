@@ -77,6 +77,8 @@ All notable changes to AgentDeck are recorded here. The format follows
   note under Home › Activity's keyboard map is gone too.
 
 ### Changed
+- Unreleased pushes run checks without regenerating demos or moving tags;
+  release demos require a user-supplied brief describing that release's changes.
 - The test command includes all nested test suites without executing fixture
   helpers; terminal discovery fixtures scope evidence to a single launch so
   background polling cannot race manual-repair assertions.

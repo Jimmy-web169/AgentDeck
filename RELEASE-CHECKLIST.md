@@ -2,6 +2,16 @@
 
 Run top to bottom before tagging. Every step is a command or a yes/no check.
 
+For an ordinary **Unreleased commit/push**, run the gate and review the changed
+docs only. Do not regenerate demo material, bump versions, change release dates
+or create/move tags. Existing package versions and tags are not release intent.
+
+Before **every demo**, the user must describe what the current release includes.
+If that brief is missing, ask and pause before generating fixtures or assets;
+do not infer the scope from git history or a previous release's tour. The demo
+and version/tag sections below apply only to an explicitly requested release
+(or an explicit standalone demo with its current release brief).
+
 ## 1. Docs
 
 - [ ] `CHANGELOG.md` has a `## [x.y.z] - YYYY-MM-DD` section for this release
@@ -57,6 +67,8 @@ Runs `npm test` → `npm run build` → `npm run check:providers` → `npm run c
 
 ## 5. Demo on a clean data root
 
+- [ ] The user supplied this release's included changes and the selected
+      screenshots/tour beats reflect that brief. No automatic demo on Unreleased pushes.
 - [ ] The `demo` skill ran for this release (it is the last step of the
       `release` skill): fixture regenerated, every PNG under `demo/vX.Y/`
       reviewed for fictional data only, `tour.gif` plays and matches the UI,
@@ -65,8 +77,8 @@ Runs `npm test` → `npm run build` → `npm run check:providers` → `npm run c
 
 ## 6. Tag + GitHub release
 
-- [ ] `git tag -a vX.Y.Z -m "AgentDeck X.Y.Z"` on the release commit
-      (`git tag -f vX.Y.Z` while a pre-release tag is being moved), then
+- [ ] Only when explicitly requested: `git tag -a vX.Y.Z -m "AgentDeck X.Y.Z"`
+      on the release commit (moving an existing tag needs explicit approval), then
       `git push origin vX.Y.Z`. **The `release` skill is the pre-push gate:
       run it before every `git push origin`, never after.**
 - [ ] GitHub release for the tag: paste the CHANGELOG section as the notes,
