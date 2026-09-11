@@ -4,7 +4,7 @@
 #   3. checks for the `claude` and `codex` CLIs (needed to continue a conversation)
 # Safe to re-run; skips anything already present. Windows PowerShell 5.1 compatible.
 # Note: ttyd is NOT used on native Windows (its 1.7.7 release crashes at spawn,
-# tsl0922/ttyd#1292) — the browser terminal is served by server/shared/webterm.js.
+# tsl0922/ttyd#1292) — the browser terminal is served by server/shared/webterm.ts.
 
 function Say($msg)  { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Warn($msg) { Write-Host "[!] $msg" -ForegroundColor Yellow }
@@ -18,7 +18,7 @@ npm install
 if ($LASTEXITCODE -ne 0) { Warn "npm install failed - fix the error above before running the app." }
 
 # --- 2. psmux (tmux-compatible; only needed for Terminal mode persistence) ----
-# psmux ships a tmux.exe alias, which terminal.js discovers as `tmux`.
+# psmux ships a tmux.exe alias, which terminal.ts discovers as `tmux`.
 $psmuxPkgTmux = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\marlocarlo.psmux_Microsoft.Winget.Source_8wekyb3d8bbwe\tmux.exe'
 if ((Have 'tmux') -or (Test-Path $psmuxPkgTmux)) {
   Say "psmux/tmux already installed"

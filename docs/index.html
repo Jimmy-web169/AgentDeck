@@ -72,7 +72,9 @@
   .reqs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 22px; }
   @media (max-width: 860px) { .reqs { grid-template-columns: 1fr; } }
   footer { padding: 32px 0 48px; border-top: 1px solid rgb(var(--zinc-800)); font-size: 13px; color: rgb(var(--zinc-500)); }
+  /* biome-ignore lint/style/noDescendingSpecificity: Footer descendants do not overlap the higher-specificity hero and navigation selectors. */
   footer .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; }
+  /* biome-ignore lint/style/noDescendingSpecificity: Footer links do not overlap the higher-specificity hero and navigation selectors. */
   footer a { color: rgb(var(--zinc-400)); }
   /* phones: tighter rhythm, a shorter nav, single columns (the grids above already collapse at 860px) */
   @media (max-width: 700px) {
@@ -89,6 +91,7 @@
     .feature .text h3 { font-size: 15px; }
     .video { border-radius: 8px; box-shadow: 0 16px 40px rgba(0,0,0,0.45); }
     pre { font-size: 12px; padding: 12px; }
+    /* biome-ignore lint/style/noDescendingSpecificity: This responsive footer override follows its desktop declaration and does not overlap hero selectors. */
     footer .wrap { gap: 6px 16px; }
   }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
@@ -296,7 +299,7 @@ npm run dev        # → http://localhost:47842</code></pre>
 <script>
   // the version and release date live in site.json (the release skill bumps it)
   fetch('site.json', { cache: 'no-store' }).then((r) => r.json()).then((s) => {
-    if (s && s.version) document.querySelectorAll('[data-version]').forEach((el) => { el.textContent = s.version })
+    if (s?.version) document.querySelectorAll('[data-version]').forEach((el) => { el.textContent = s.version })
   }).catch(() => {})
 </script>
 </body>

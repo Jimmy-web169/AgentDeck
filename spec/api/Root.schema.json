@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "Root.schema.json",
+  "title": "Root",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "label": {
+      "type": "string"
+    },
+    "dir": {
+      "type": "string"
+    },
+    "exists": {
+      "type": "boolean"
+    }
+  },
+  "required": ["id", "label", "dir"],
+  "additionalProperties": true
+}

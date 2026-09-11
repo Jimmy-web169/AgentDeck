@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "SessionSummary.schema.json",
+  "title": "SessionSummary",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "title": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "firstPrompt": {
+      "type": "string"
+    },
+    "lastUserPrompt": {
+      "type": "string"
+    },
+    "lastUserPromptTs": {
+      "anyOf": [
+        {
+          "type": ["string", "number"]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "firstTs": {
+      "anyOf": [
+        {
+          "type": ["string", "number"]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lastTs": {
+      "anyOf": [
+        {
+          "type": ["string", "number"]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cwd": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "userTurns": {
+      "type": "number"
+    },
+    "assistantTurns": {
+      "type": "number"
+    },
+    "toolCalls": {
+      "type": "number"
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "toolCounts": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    },
+    "tokens": {
+      "type": "object",
+      "properties": {
+        "input": {
+          "type": "number"
+        },
+        "output": {
+          "type": "number"
+        },
+        "cacheRead": {
+          "type": "number"
+        },
+        "cacheCreate": {
+          "type": "number"
+        },
+        "total": {
+          "type": "number"
+        },
+        "reasoning": {
+          "type": "number"
+        }
+      },
+      "required": ["input", "output", "cacheRead", "total"],
+      "additionalProperties": true
+    },
+    "contextWindow": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "lastTokenUsage": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rateLimits": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "hasSubagents": {
+      "type": "boolean"
+    },
+    "isSubagent": {
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "id",
+    "firstPrompt",
+    "lastUserPrompt",
+    "lastUserPromptTs",
+    "firstTs",
+    "lastTs",
+    "userTurns",
+    "assistantTurns",
+    "toolCalls",
+    "models",
+    "toolCounts",
+    "tokens"
+  ],
+  "additionalProperties": true
+}

@@ -12,7 +12,7 @@ should be describable in this folder first and coded second.
 | `providers/claude.yaml` | Claude Code descriptor | validates; documentation only |
 | `providers/codex.yaml` | Codex descriptor | validates; documentation only |
 | `providers/antigravity.yaml` | Antigravity (`agy`) descriptor, from nine real runs; parser in `server/providers/antigravity/` | experimental; validates; fixture + golden |
-| `fixtures/<id>/` | Fictional raw sessions (from `scripts/demo/make-fixture.mjs`; hand-written from real record shapes for Antigravity) with the parser's golden output under `expected/` | claude, codex, antigravity |
+| `fixtures/<id>/` | Fictional raw sessions (from `scripts/demo/make-fixture.ts`; hand-written from real record shapes for Antigravity) with the parser's golden output under `expected/` | claude, codex, antigravity |
 
 Check everything (also part of `npm test` and `npm run release:check`):
 
@@ -33,7 +33,7 @@ does not mention fails the gate — that is what keeps the descriptor honest.
 1. **Descriptors as documentation, schema-validated** — done.
 2. **Conformance** — done (`check:spec`, above). Goldens are content-only (no
    mtimes or paths) so they are stable across machines.
-3. **Format-drift probe** — done (2026-09-08): `server/shared/formatProbe.js`
+3. **Format-drift probe** — done (2026-09-08): `server/shared/formatProbe.ts`
    runs each descriptor's `probe:` block over the newest files of every tracked
    root at startup / hourly / when a folder is added, compares with the
    descriptor and the baseline in `<configDir>/probe.<id>.json`, and flags the
@@ -46,5 +46,6 @@ does not mention fails the gate — that is what keeps the descriptor honest.
    SQLite sidecar, which is exactly the kind of case the rule language will
    have to cover — see `hooks:` in its descriptor for what stayed in code.
 
-The maintainer's discussion notes on how far to take the descriptor language
-(record grammar, examples, versioning) are local, in `tmp/`.
+The supported descriptor contract is defined by [provider.schema.json](provider.schema.json).
+[PROVIDER-SPEC.md §7](PROVIDER-SPEC.md#7-decisions-to-make-together) distinguishes
+the implemented conformance/probe checks from the proposed descriptor interpreter.

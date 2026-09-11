@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "Usage.schema.json",
+  "title": "Usage",
+  "type": "object",
+  "properties": {
+    "root": {
+      "type": "string"
+    },
+    "rateLimits": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sessionId": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ts": {
+      "type": ["number", "null"]
+    },
+    "contextWindow": {
+      "type": ["object", "null"],
+      "additionalProperties": true
+    },
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": true
+      }
+    }
+  },
+  "required": ["rateLimits", "sessionId", "ts"],
+  "additionalProperties": true
+}

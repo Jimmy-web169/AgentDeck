@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TerminalEntry.schema.json",
+  "title": "TerminalEntry",
+  "type": "object",
+  "properties": {
+    "key": {
+      "type": "string"
+    },
+    "provider": {
+      "type": "string"
+    },
+    "root": {
+      "type": "string"
+    },
+    "id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "slug": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "cwd": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "title": {
+      "type": ["string", "null"]
+    },
+    "launchId": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "port": {
+      "type": "number"
+    },
+    "pid": {
+      "type": "number"
+    },
+    "url": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "socket": {
+      "type": "string"
+    },
+    "attached": {
+      "type": "boolean"
+    },
+    "tmux": {
+      "type": "boolean"
+    },
+    "startedAt": {
+      "anyOf": [
+        {
+          "type": ["string", "number"]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["key"],
+  "additionalProperties": true
+}

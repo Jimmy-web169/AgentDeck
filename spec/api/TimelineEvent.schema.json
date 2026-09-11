@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "TimelineEvent.schema.json",
+  "title": "TimelineEvent",
+  "type": "object",
+  "properties": {
+    "kind": {
+      "enum": ["user", "assistant", "system", "attachment"]
+    },
+    "ts": {
+      "anyOf": [
+        {
+          "type": ["string", "number"]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "text": {
+      "type": "string"
+    },
+    "uuid": {
+      "type": "string"
+    },
+    "subtype": {
+      "type": ["string", "null"]
+    },
+    "model": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "usage": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "parts": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "text"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["kind", "text"],
+            "additionalProperties": true,
+            "title": "TextPart"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "thinking"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["kind", "text"],
+            "additionalProperties": true,
+            "title": "ThinkingPart"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "tool_call"
+              },
+              "id": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "name": {
+                "type": "string"
+              },
+              "input": {},
+              "result": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "content": {},
+                      "isError": {
+                        "type": "boolean"
+                      },
+                      "meta": {
+                        "anyOf": [
+                          {
+                            "type": "object",
+                            "properties": {},
+                            "required": [],
+                            "additionalProperties": true
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": true
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "isError": {
+                "type": "boolean"
+              }
+            },
+            "required": ["kind", "name"],
+            "additionalProperties": true,
+            "title": "ToolCallPart"
+          },
+          {
+            "title": "AdvisorPart",
+            "type": "object",
+            "properties": {
+              "kind": {
+                "const": "advisor"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["kind", "text"],
+            "additionalProperties": true
+          }
+        ]
+      }
+    }
+  },
+  "required": ["kind"],
+  "additionalProperties": true
+}

@@ -1,0 +1,98 @@
+// Windows regression coverage: The built-in node-pty web terminal used instead of ttyd on win32. Asserts the shared-pty contract the UI depends on: page served, first client spawns the pty, a late joiner (pop-out tab) gets the scrollback replay, **a client disconnect never kills the pty** (the pop-out bug), and a taken port fails loudly so the server never hands out a dead iframe URL.
+// Original test group: windows/webterm. Assertions retained during module-path migration.
+// webterm.js: the node-pty web terminal used instead of ttyd on native Windows.
+// Covers the contract the pop-out flow depends on: one shared pty, multiple
+// websocket clients, and a client disconnect NOT killing the pty.
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import WebSocket from 'ws'
+
+const WEBTERM = fileURLToPath(new URL('../../../server/shared/webterm.ts', import.meta.url))
+const PORT = 7779 // inside the pool range but high, to dodge dev servers
+
+// a long-lived interactive child that prints a marker, echoes stdin lines
+const CHILD = [process.execPath, '-e', "console.log('WEBTERM_READY');process.stdin.on('data',d=>process.stdout.write('echo:'+d));setTimeout(()=>{},600000)"]
+
+function connect(port: number) {
+  return new Promise<{ ws: WebSocket; output: string; closed: number | null }>((resolve, reject) => {
+    const ws = new WebSocket(`ws://127.0.0.1:${port}/ws`)
+    ws.binaryType = 'nodebuffer'
+    const client: { ws: WebSocket; output: string; closed: number | null } = { ws, output: '', closed: null }
+    ws.on('message', (d) => (client.output += d.toString('utf8')))
+    ws.on('close', (code) => (client.closed = code))
+    ws.on('open', () => {
+      ws.send(JSON.stringify({ t: 's', c: 100, r: 30 }))
+      resolve(client)
+    })
+    ws.on('error', reject)
+  })
+}
+
+const until = async (fn: () => unknown, ms = 5000) => {
+  const t0 = Date.now()
+  while (!fn()) {
+    if (Date.now() - t0 > ms) throw new Error('timeout waiting for condition')
+    await new Promise((r) => setTimeout(r, 50))
+  }
+}
+
+// @lydell/node-pty is a native module; on a platform without its prebuilt,
+// webterm.js cannot start at all — skip rather than fail the whole run.
+const hasPty = await import('@lydell/node-pty').then(
+  () => true,
+  () => false
+)
+const skip = !hasPty && '@lydell/node-pty native module unavailable on this platform'
+
+// poll until webterm answers on `port` — a fixed sleep flakes on slow CI runners
+const pageOf = async (port: number, ms = 8000) => {
+  const t0 = Date.now()
+  for (;;) {
+    try {
+      return await fetch(`http://127.0.0.1:${port}/`).then((r) => r.text())
+    } catch (e) {
+      if (Date.now() - t0 > ms) throw e
+      await new Promise((r) => setTimeout(r, 100))
+    }
+  }
+}
+
+test('serves the page, shares one pty across clients, survives a client closing', { skip }, async () => {
+  const proc = spawn(process.execPath, [WEBTERM, '-p', String(PORT), '-t', 'test', '--', ...CHILD], { stdio: 'ignore' })
+  try {
+    await until(() => proc.exitCode === null) // spawned
+
+    const page = await pageOf(PORT) // answers once it has bound
+    assert.match(page, /<title>test<\/title>/)
+    assert.match(page, /xterm/)
+
+    const a = await connect(PORT) // first client spawns the pty
+    await until(() => a.output.includes('WEBTERM_READY'))
+
+    const b = await connect(PORT) // late joiner gets the scrollback replay
+    await until(() => b.output.includes('WEBTERM_READY'))
+
+    a.ws.close() // pop-out: the iframe disconnects while the tab stays
+    await until(() => a.closed != null)
+
+    b.ws.send(JSON.stringify({ t: 'i', d: 'hello\r' })) // pty must still be alive (\r = Enter in a pty)
+    await until(() => b.output.includes('echo:hello'))
+    assert.equal(b.closed, null)
+  } finally {
+    proc.kill()
+  }
+})
+
+test('exits non-zero when the port is taken', { skip }, async () => {
+  const first = spawn(process.execPath, [WEBTERM, '-p', String(PORT + 1), '-t', 'x', '--', ...CHILD], { stdio: 'ignore' })
+  try {
+    await pageOf(PORT + 1) // first has bound
+    const second = spawn(process.execPath, [WEBTERM, '-p', String(PORT + 1), '-t', 'x', '--', ...CHILD], { stdio: 'ignore' })
+    const code = await new Promise((r) => second.on('exit', r))
+    assert.notEqual(code, 0)
+  } finally {
+    first.kill()
+  }
+})

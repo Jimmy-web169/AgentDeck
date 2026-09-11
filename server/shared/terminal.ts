@@ -1,0 +1,334 @@
+import { spawn, execFileSync } from 'node:child_process'
+import fs from 'node:fs'
+import { jsonRecord } from './json.ts'
+import type { Root } from '../../shared/types.d.ts'
+import type { TerminalMetadata, TerminalConfig, TerminalOptions, TerminalPoolEntry, StartResult, ReattachBody } from './terminalTypes.ts'
+import path from 'node:path'
+import crypto from 'node:crypto'
+import { fileURLToPath } from 'node:url'
+import { findTerminal } from './terminalIdentity.ts'
+import { createTerminalInventory } from './terminalInventory.ts'
+import { findTmux, findTtyd } from './terminalBinary.ts'
+export { findOnPath, resolveVendoredExe, findTmux, findTtyd } from './terminalBinary.ts'
+
+// Shared embedded-terminal pool. Runs a provider's real CLI TUI inside a ttyd
+// process (webterm.js, our node-pty stand-in, on native Windows) and serves it
+// to the browser. Keys include provider + root + launch/session identity.
+// Provider behavior is supplied by registered adapters (see docs/TERMINALS.md).
+// `checkOrigin` adds ttyd's -O flag (origin check) — providers opt in per their
+// embedding needs, so neither provider's original behavior changes.
+//
+// When tmux is available the CLI runs inside a named tmux session rather than as
+// ttyd's direct child. ttyd just attaches to it, so the session survives ttyd /
+// server teardown (it detaches instead of dying), can be attached from a real
+// terminal with `tmux attach -t <name>`, and re-attaches with full state when
+// reopened. End (stopTerminal) kills the tmux session; a server shutdown leaves
+// it alive on purpose.
+
+const MAX = 6 // concurrent embedded terminals
+const PORT_BASE = 7682
+const PORT_MAX = 7781
+const sessions = new Map<string, TerminalPoolEntry>() // key -> { proc, port, url, meta }
+const providers = new Map<string, TerminalConfig>()
+const opening = new Map<string, Promise<StartResult>>()
+export function registerTerminalProvider(config: TerminalConfig) {
+  providers.set(config.id, config)
+}
+const metadataOf = (value: TerminalMetadata = {}): TerminalMetadata =>
+  Object.fromEntries(
+    Object.entries(value).filter(([k]) => !['url', 'port', 'alive', 'tmux', 'tmuxName', 'attached', 'ok', 'reused', 'requestedTarget'].includes(k))
+  )
+let nextPort = PORT_BASE
+
+const IS_WIN = process.platform === 'win32'
+// On native Windows ttyd's latest release (1.7.7) crashes when spawning the CLI
+// (tsl0922/ttyd#1292), so the browser terminal is served by our own node-pty
+// based stand-in instead. tmux duties are covered by psmux's tmux.exe alias.
+const WEBTERM = fileURLToPath(new URL('./webterm.ts', import.meta.url))
+
+// A stable, collision-free tmux session name derived from the terminal key, so
+// reopening the same monitored session always re-attaches the same tmux session.
+function tmuxSessionName(key: string) {
+  return `agentdeck-${crypto.createHash('sha1').update(key).digest('hex').slice(0, 12)}`
+}
+
+function killTmuxSession(name: string) {
+  const tmux = findTmux()
+  if (!tmux) return
+  try {
+    execFileSync(tmux, ['kill-session', '-t', `=${name}`], { stdio: 'ignore', timeout: 2000 })
+  } catch {}
+}
+
+function pickPort() {
+  const used = new Set([...sessions.values()].map((s) => s.port))
+  for (let i = 0; i <= PORT_MAX - PORT_BASE; i++) {
+    const p = PORT_BASE + ((nextPort - PORT_BASE + i) % (PORT_MAX - PORT_BASE + 1))
+    if (!used.has(p)) {
+      nextPort = p + 1
+      return p
+    }
+  }
+  return null
+}
+
+function err(status: number, message: string) {
+  return Object.assign(new Error(message), { status })
+}
+
+// Start (or reuse) a ttyd terminal running the provider's CLI (optionally
+// resuming a session). Resolves only after ttyd has had a moment to bind, so a
+// bad binary / taken port fails loudly instead of handing the browser a dead iframe.
+export function startTerminal(options: TerminalOptions): Promise<StartResult> {
+  const { key } = options
+  const pending = opening.get(key)
+  if (pending) return pending
+  const promise = Promise.resolve()
+    .then(() => startTerminalOnce(options))
+    .finally(() => opening.delete(key))
+  opening.set(key, promise)
+  return promise
+}
+
+function startTerminalOnce({
+  key,
+  cwd,
+  configDir,
+  resumeId,
+  promptArgs = null,
+  meta = {},
+  config,
+  attach = null,
+}: TerminalOptions): StartResult | Promise<StartResult> {
+  meta = metadataOf(meta)
+  const existing = sessions.get(key)
+  if (existing?.proc && existing.proc.exitCode == null && !existing.proc.killed) {
+    if (meta) existing.meta = { ...existing.meta, ...meta }
+    return { key, ...existing.meta, url: existing.url, port: existing.port, reused: true }
+  }
+  if (sessions.size >= MAX) throw err(429, `Too many embedded terminals open (max ${MAX}). End one from Live sessions first.`)
+  const ttyd = IS_WIN ? null : findTtyd() // win32 uses the built-in webterm instead
+  if (!IS_WIN && !ttyd) throw err(404, 'ttyd not found — install it (e.g. `brew install ttyd`) to use terminal mode.')
+  const bin = attach ? null : config.findBin()
+  if (!attach && !bin) throw err(404, `${config.title} executable not found`)
+  const port = pickPort()
+  if (port == null) throw err(503, 'no free port for a terminal')
+
+  // resume an existing session, or start seeded with a prompt (AI hand-off), or plain
+  const prepared = (!attach && config.prepareLaunch ? config.prepareLaunch({ bin, key, cwd, configDir, resumeId, meta }) : null) || {}
+  meta = { ...meta, ...prepared.meta, provider: config.id, configDir, canBindSession: !!config.resolveSavedSession, startedAt: meta?.startedAt || Date.now() }
+  const cliArgs = [...(prepared.args || []), ...(resumeId ? config.resumeArgs(resumeId) : []), ...(promptArgs || [])]
+
+  // Claude marks child processes with CLAUDE_CODE_CHILD_SESSION / CLAUDECODE and
+  // — when it sees them (own env OR `tmux show-environment -g`) — silently stops
+  // writing transcripts to disk, which kills AgentDeck's whole read-the-jsonl
+  // model. A stale CLAUDE_CONFIG_DIR redirects them to another root entirely.
+  // Scrub every such marker so a terminal spawned from a claude-launched dev
+  // server (or a polluted tmux server) still behaves like a first-class session.
+  const env = { ...process.env }
+  for (const k of [
+    'CLAUDE_CODE_CHILD_SESSION',
+    'CLAUDECODE',
+    'CLAUDE_CODE_SESSION_ID',
+    'CLAUDE_CODE_ENTRYPOINT',
+    'CLAUDE_PID',
+    'CLAUDE_CONFIG_DIR',
+    'CODEX_HOME',
+  ]) {
+    delete env[k]
+  }
+  if (config.envKey) env[config.envKey] = configDir
+  Object.assign(env, prepared.env || {})
+
+  // Inside tmux when available (persistent, attachable); otherwise run the CLI
+  // directly (ttyd's child). Creation and exact attachment are separate;
+  // `-e` pins the tracked home's login env for first creation.
+  const tmux = findTmux()
+  let tmuxName: string | null = null
+  if (attach && !tmux) throw err(410, 'This terminal is no longer running.')
+  let command: string[]
+  if (tmux) {
+    tmuxName = attach?.tmuxName || tmuxSessionName(key)
+    // claude consults the tmux SERVER's global env (`show-environment -g`) for
+    // the child-session marker — pane env can't override that, so scrub the
+    // global itself. A leftover global marker is always pollution (a real child
+    // session carries it in its own process env), so unsetting is safe.
+    try {
+      execFileSync(tmux, ['set-environment', '-gu', 'CLAUDE_CODE_CHILD_SESSION'], { stdio: 'ignore', timeout: 2000 })
+    } catch {
+      // no tmux server yet (first session), or var already absent — both fine
+    }
+    // stash enough metadata on the tmux session itself (base64 JSON in a session
+    // env var) that listLiveTmux can rebuild the Live-now entry — including after
+    // a server restart, when the in-memory `sessions` map is gone.
+    const metaB64 = Buffer.from(
+      JSON.stringify({
+        ...meta,
+        key,
+        provider: config.id || config.title, // the registry id — clients key their live sets on it
+        root: meta?.root ?? null,
+        slug: meta?.slug ?? null,
+        id: meta?.id ?? null,
+        title: meta?.title ?? null,
+        cwd: cwd ?? null,
+        isNew: meta?.isNew ?? false,
+      })
+    ).toString('base64')
+    if (!attach) {
+      if (!bin) throw err(404, `${config.title} executable not found`)
+      const ns = ['new-session', '-d', '-s', tmuxName, '-e', `AGENTDECK_META=${metaB64}`]
+      if (config.envKey) ns.push('-e', `${config.envKey}=${configDir}`)
+      for (const [k, v] of Object.entries(prepared.env || {})) ns.push('-e', `${k}=${v}`)
+      if (cwd && fs.existsSync(cwd)) ns.push('-c', cwd)
+      ns.push('--', bin, ...cliArgs)
+      try {
+        execFileSync(tmux, ns, { env, stdio: 'pipe', timeout: 5000 })
+      } catch (e) {
+        throw err(502, `Could not create terminal: ${String(jsonRecord(e).stderr || jsonRecord(e).message).trim()}`)
+      }
+    } else {
+      try {
+        execFileSync(tmux, ['has-session', '-t', `=${tmuxName}`], { stdio: 'ignore', timeout: 2000 })
+      } catch {
+        throw err(410, 'This terminal has ended. Open a new conversation or resume its saved session.')
+      }
+    }
+    command = [tmux, 'attach-session', '-t', `=${tmuxName}`]
+  } else {
+    if (!bin) throw err(404, `${config.title} executable not found`)
+    command = [bin, ...cliArgs]
+  }
+
+  // Front-end serving the terminal page: ttyd where it works, webterm on win32.
+  // ttyd [opts] <command> [args]; -W writable, -i localhost-only, optional -O origin
+  // check. NB: -O is --check-origin; the lowercase -o is --once (accept one client,
+  // exit on disconnect) — using it broke "pop out", which disconnects the iframe to
+  // reconnect in a new tab, killing ttyd before the tab could attach.
+  const front = !ttyd
+    ? [process.execPath, WEBTERM, '-p', String(port), ...(config.checkOrigin ? ['-O'] : []), '-t', config.title, '--', ...command]
+    : [ttyd, '-p', String(port), '-i', '127.0.0.1', '-W', ...(config.checkOrigin ? ['-O'] : []), '-t', `titleFixed=${config.title}`, ...command]
+  const proc = spawn(front[0], front.slice(1), {
+    cwd: cwd && fs.existsSync(cwd) ? cwd : undefined,
+    env, // scrubbed above, with the tracked home's config dir pinned
+    stdio: 'ignore',
+  })
+  const entry = { proc, port, url: `http://localhost:${port}`, meta: meta || {}, tmuxName }
+  sessions.set(key, entry)
+  proc.on('exit', () => {
+    if (sessions.get(key) === entry) sessions.delete(key)
+  })
+  proc.on('error', () => {
+    if (sessions.get(key) === entry) sessions.delete(key)
+  })
+
+  return new Promise<StartResult>((resolve, reject) => {
+    let settled = false
+    const onEarlyExit = () => {
+      if (settled) return
+      settled = true
+      sessions.delete(key)
+      reject(err(502, 'terminal failed to start (ttyd/CLI exited immediately — check they are installed and the port is free).'))
+    }
+    proc.once('exit', onEarlyExit)
+    proc.once('error', onEarlyExit)
+    setTimeout(
+      () => {
+        if (settled) return
+        settled = true
+        proc.removeListener('exit', onEarlyExit)
+        proc.removeListener('error', onEarlyExit)
+        resolve({ key, ...meta, url: entry.url, port, reused: !!attach })
+      },
+      IS_WIN ? 700 : 350
+    ) // webterm is a node process — imports land before a bad bind fails
+  })
+}
+
+export function listTerminals() {
+  return [...sessions.entries()].map(([key, e]) => ({
+    key,
+    port: e.port,
+    url: e.url,
+    alive: e.proc?.exitCode == null && !e.proc?.killed,
+    tmux: !!e.tmuxName,
+    tmuxName: e.tmuxName || null,
+    ...e.meta,
+  }))
+}
+
+export async function reattachTerminal({ body, root, config }: { body: ReattachBody; root: Root; config: TerminalConfig }) {
+  if (body.bindSessionId && !body.terminalKey) throw err(400, 'Select a running terminal to link.')
+  const live = listLiveTmux()
+  const entries = [...live, ...listTerminals()]
+  const hit = findTerminal(entries, config.id, root.id, body)
+  if (!hit) {
+    if (body.terminalKey) throw err(410, 'This terminal has ended. Open a new conversation or resume its saved session.')
+    return null
+  }
+  if (body.bindSessionId) {
+    if (hit.id && hit.id !== body.bindSessionId) throw err(409, 'This terminal already has an identified conversation. Manual repair cannot replace it.')
+    if (!config.resolveSavedSession) throw err(400, 'This provider does not support linking saved conversations.')
+    const saved = config.resolveSavedSession({ root, id: body.bindSessionId, slug: body.slug })
+    if (!saved?.id) throw err(404, 'The selected conversation is not available in this data folder.')
+    const localFolder = (cwd: string | null | undefined) => {
+      if (!cwd || !path.isAbsolute(cwd)) return null
+      try {
+        return fs.realpathSync(cwd)
+      } catch {
+        return null
+      }
+    }
+    const folder = localFolder(hit.cwd)
+    if (!folder || localFolder(saved.cwd) !== folder) throw err(409, 'Only a conversation in this terminal’s current working folder can be linked.')
+    if (entries.some((e) => e.provider === config.id && e.root === root.id && e.id === saved.id && e.key !== hit.key))
+      throw err(409, 'That conversation already has a different running terminal.')
+    const bound = metadataOf({ ...hit, ...saved, isNew: false })
+    if (hit.tmuxName) {
+      const tmux = findTmux()
+      if (!tmux) throw err(410, 'This terminal is no longer running.')
+      execFileSync(tmux, ['set-environment', '-t', `=${hit.tmuxName}`, 'AGENTDECK_META', Buffer.from(JSON.stringify(bound)).toString('base64')], {
+        stdio: 'ignore',
+        timeout: 2000,
+      })
+    }
+    const entry = sessions.get(hit.key)
+    if (entry) entry.meta = { ...entry.meta, ...bound }
+    return { ...bound, key: hit.key, reused: true }
+  }
+  return startTerminal({ key: hit.key, cwd: hit.cwd, configDir: hit.configDir || root.dir, meta: hit, config, attach: hit })
+}
+
+const inventory = createTerminalInventory(providers, sessions)
+export const { observeTerminals, noteTerminalChanges, listLiveTmux } = inventory
+
+// End = really end it: kill the ttyd front-end AND the persistent tmux session
+// (whether or not a ttyd is currently attached to it).
+export function stopTerminal(key: string, provider: string | null = null) {
+  if (typeof key !== 'string' || !key) throw err(400, 'missing terminal key')
+  if (provider) {
+    const entry = [...listTerminals(), ...listLiveTmux()].find((e) => e.key === key)
+    if (entry && entry.provider !== provider) throw err(403, 'This terminal belongs to a different provider.')
+  }
+  const e = sessions.get(key)
+  if (e) {
+    try {
+      e.proc.kill()
+    } catch {}
+    sessions.delete(key)
+  }
+  killTmuxSession(tmuxSessionName(key))
+  inventory.forgetTerminal(tmuxSessionName(key))
+  return { stopped: !!e }
+}
+
+// Server shutdown: kill the ttyd front-ends only. Any tmux sessions stay alive
+// (detached) on purpose, so a restart — or `tmux attach` from a real terminal —
+// can pick them back up. Use stopTerminal (End) to actually end one.
+export function stopAllTerminals() {
+  for (const e of sessions.values()) {
+    try {
+      e.proc.kill()
+    } catch {}
+  }
+  sessions.clear()
+}

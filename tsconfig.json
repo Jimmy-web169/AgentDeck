@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "allowJs": false,
+    "noEmit": true,
+    "strict": true,
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "skipLibCheck": true
+  },
+  "include": [
+    "server/**/*.ts",
+    "shared/**/*.ts",
+    "shared/**/*.d.ts",
+    "src/api/**/*.ts",
+    "src/store/**/*.ts",
+    "src/providers/metadata.ts",
+    "src/providers/addressing.ts"
+  ]
+}

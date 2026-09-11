@@ -134,7 +134,7 @@ node --test test/tab-identity.test.js test/terminal-lifecycle.test.js \
 ```
 
 For manual UI testing in an environment that supports a browser/local server,
-`node scripts/test/session-preview.mjs` builds a standalone synthetic preview.
+`node scripts/test/session-preview.ts` builds a standalone synthetic preview.
 Its API and terminals are in-memory fixtures. It continuously emits updates to
 exercise the tab strip while opening, switching and closing tabs. Serve the
 printed preview directory with a local static server when file URLs are blocked.

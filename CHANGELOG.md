@@ -7,6 +7,50 @@ All notable changes to AgentDeck are recorded here. The format follows
 ## [Unreleased]
 
 ### Added
+- Home can be selected from the new-tab picker. Its project list follows the
+  sidebar mode: Source keeps provider projects separate; Folder combines each
+  physical folder's sources, respects sidebar filters, and offers source-specific
+  conversations without losing their account or session identities.
+- Complete TypeScript/TSX coverage for the UI, browser stores, tools, tests and
+  build configurations, extending the typed server and API layers. Four strict
+  projects reject JavaScript fallback and non-erasable syntax; architecture
+  checks prevent maintained modules from falling outside compiler coverage.
+  Native Node entry points retain the 22.18 minimum, and existing UI/API behavior
+  is covered by the same regression and synthetic snapshot checks.
+  Acceptance follow-up removes redundant JSDoc types and stale fixture paths,
+  covers non-config root modules in the compiler gate, and makes oversized-upload
+  integration tests wait for their dedicated client connections to close. SSE
+  cancellation tests avoid Node 22.18's self-canceling mock-interval behavior.
+- A shared SessionApp, TanStack Query data layer with one SSE invalidation owner,
+  and typed Zustand shell state in place of duplicate apps and window events.
+- Typed provider DATA contracts with shared route validation, normalized parser
+  outputs, native TypeScript server startup, and checked generated wire declarations.
+- An inactive provider scaffold and executable completeness checks for DATA,
+  frontend descriptors, registry entries and native/golden fixtures.
+- Explicit dry-run/apply state migration into `.agentdeck/`, with legacy fallback,
+  conflict checks, interrupted-copy recovery and preserved dashboard tmux identity.
+  Existing installations are not migrated automatically.
+- A maintained architecture guide and contributor verification/report workflow.
+- Independent review criteria for architecture work packages.
+- Raw Biome lint/format checks, strict TypeScript checking, and a declared
+  Node.js 22.18 minimum. The temporary lint migration ratchet is retired.
+- Synthetic API snapshots and isolated layout checks across three themes,
+  three widths, and Provider/Folder modes, with architecture regression guards.
+  Reference captures run their own tests, and browser disconnects or unanswered
+  DevTools commands fail explicitly instead of leaving verification stuck.
+- An injectable HTTP host with per-host SSE clients and watcher pause controls,
+  explicit shutdown, and integration tests for protocol and lifecycle behavior.
+  Watcher-close errors retain best-effort recovery without accepting events from
+  retired generations; uploads completing during shutdown receive 503 when their
+  connection is still available. Failed root discovery at startup or re-arm uses
+  bounded retries, canceled during shutdown. Shutdown also cancels a pending
+  address bind; oversized uploads never dispatch after their transport is destroyed.
+- Eleven shared API schemas with generated declarations, strict contract checks,
+  and centralized identity/hash helpers that retain existing persisted keys.
+- Module-aligned tests and shared fixture/render helpers, preserving existing
+  cases while adding real-provider HTTP and schema coverage.
+- A containerized Chromium/font environment for the mandatory Linux layout gate,
+  plus a CI test entry for the declared Node.js 22.18 minimum.
 - Outer folders have a matching ⋯ → Workspaces menu for dynamic whole-folder
   membership. Source identities and explicit project/session memberships are
   retained, duplicate display is suppressed, and removing a folder only ungroups it.
@@ -142,6 +186,10 @@ All notable changes to AgentDeck are recorded here. The format follows
   45 s tick or a page switch.
 
 ### Fixed
+- Static asset serving normalizes its root and rejects encoded traversal into
+  sibling directories whose names share the build directory prefix.
+- Failed SSE writes, including asynchronous callback/error signals, release the response and its ping timer while
+  other clients continue receiving broadcasts.
 - CI: `actions/checkout` and `setup-node` at v5 (the v4 releases run on the
   deprecated Node 20).
 - CI: the shared-route test builds its own config dir, so a runner without a

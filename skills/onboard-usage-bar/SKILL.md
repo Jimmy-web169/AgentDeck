@@ -108,15 +108,16 @@ rm -f "$CFG/rate-limits.json"   # remove the test snapshot; real data appears on
 ### 3B. Native Windows — install the Node wrapper
 
 Copy the canonical wrapper from the AgentDeck repo
-(`scripts/statusline-bridge.mjs`) to `CFG\cc-monitor-statusline-bridge.mjs`
-(or create it with that exact content). No chmod / jq needed.
+(`scripts/statusline-bridge.ts`) to `CFG\cc-monitor-statusline-bridge.mts`
+(or create it with that exact content). Use Node 22.18 or newer; the .mts
+extension preserves ESM when copied outside the repo. No chmod / jq needed.
 
 Back up `SETTINGS` to `SETTINGS.cc-monitor.bak`, then edit the JSON (create
 `{}` first if missing), setting — with `<B64>` = base64 of `ORIG` (empty string
 → no argument) and the real `CFG` path inlined:
 
 ```json
-{ "statusLine": { "type": "command", "command": "node \"C:\\Users\\me\\.claude\\cc-monitor-statusline-bridge.mjs\" <B64>" } }
+{ "statusLine": { "type": "command", "command": "node \"C:\\Users\\me\\.claude\\cc-monitor-statusline-bridge.mts\" <B64>" } }
 ```
 
 Preserve every other key in the file. Compute the base64 with Node if needed:
@@ -126,7 +127,7 @@ Verify (PowerShell):
 
 ```powershell
 '{"transcript_path":"C:/Users/me/.claude/projects/x/y.jsonl","session_id":"test","context_window":{"used_percentage":42},"rate_limits":{"five_hour":{"used_percentage":10}}}' |
-  node "$env:USERPROFILE\.claude\cc-monitor-statusline-bridge.mjs"
+  node "$env:USERPROFILE\.claude\cc-monitor-statusline-bridge.mts"
 Test-Path "$env:USERPROFILE\.claude\rate-limits.json"   # True = bridge works
 Remove-Item "$env:USERPROFILE\.claude\rate-limits.json" # remove the test snapshot
 ```
@@ -147,7 +148,7 @@ Remove-Item "$env:USERPROFILE\.claude\rate-limits.json" # remove the test snapsh
 ## Notes
 
 - This skill ships with AgentDeck; canonical copies of the wrappers live at
-  `scripts/statusline-bridge.sh` (bash) and `scripts/statusline-bridge.mjs`
+  `scripts/statusline-bridge.sh` (bash) and `scripts/statusline-bridge.ts`
   (Node, used on native Windows) in that repo.
 - `rate_limits` is only present for Claude.ai (Pro/Max) subscribers, and only
   after the first API response in a session.

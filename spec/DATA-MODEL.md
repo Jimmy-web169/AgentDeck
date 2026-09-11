@@ -8,18 +8,13 @@ separately; context snapshots do not overwrite provider-native transcripts.
 
 ## Shared contract
 
-Every provider's backend implements the same output shapes (see `README.md` for
-the full interface), so the frontend is layout-agnostic:
-
-- **Root** — a tracked config home: `{ id, label, dir, exists, …probe }`.
-- **Project** — a grouping of sessions: `{ slug, cwd, sessionCount, lastActivity }`.
-- **Session summary** — `{ id, title, firstPrompt, lastUserPrompt, lastUserPromptTs, firstTs, lastTs, userTurns,
-  assistantTurns, toolCalls, models, toolCounts, tokens, … }` (providers may add
-  optional fields such as `cwd`, `contextWindow`, `lastTokenUsage`, `rateLimits`).
-- **Timeline event** — `{ kind: 'user' | 'assistant' | 'system', ts, parts: [{ kind:
-  'text' | 'thinking' | 'tool_call', … }] }`.
-- **Sub-agent / child** — a session spawned by another, summarized the same way.
-- **Usage** — `{ rateLimits, sessionId, ts, contextWindow? }` when available.
+The authoritative cross-layer shapes are the eleven JSON Schema 2020-12
+contracts in [`spec/api/`](api/). [`shared/types.d.ts`](../shared/types.d.ts)
+is generated from them with `npm run gen:types`; do not edit declarations by hand.
+`npm run check:types` rejects stale declarations, and `npm run check:spec`
+validates parser output and committed goldens against the same contracts.
+Provider extensions remain permitted, while known fields and timeline-part
+variants are checked. Child sessions use the same summary contract.
 
 A session is addressed by an opaque `(slug?, id)` pair; the host never builds a
 filesystem path from a slug — it always asks the provider, which keeps path
@@ -75,7 +70,7 @@ origin project/provider, completeness and reading guidance without machine paths
 Conversation records retain branch identity/parentage, and message records retain
 per-conversation ordering. Only visible user/assistant text is exported, including
 available subagent transcripts. Full text is not clipped to a recent-N window.
-The [file store](../server/deck/handoffStore.js) publishes immutable JSONL and
+The [file store](../server/deck/handoffStore.ts) publishes immutable JSONL and
 keeps small, separate runtime launch receipts with exclusive, fsynced claims.
 There is no SQLite handoff store or staging/approval UI. Receipt files are local
 execution bookkeeping; a moved JSONL remains readable without them. Explicit

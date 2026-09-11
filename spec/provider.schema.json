@@ -24,9 +24,10 @@
         "update": { "$ref": "#/$defs/argv", "description": "the CLI's own updater, run by `make update`" },
         "resume": { "$ref": "#/$defs/argv", "description": "argv to reopen a session; `{id}` is substituted" },
         "new": { "$ref": "#/$defs/argv", "description": "argv to start a fresh session in `{cwd}`" },
-        "prompt": { "$ref": "#/$defs/argv", "description": "argv to start an interactive session seeded with a prompt; `{prompt}` is substituted (AI hand-off)" },
-        "prompt": { "$ref": "#/$defs/argv", "description": "argv to start an interactive session seeded with a prompt; `{prompt}` is substituted (AI hand-off)" },
-        "prompt": { "$ref": "#/$defs/argv", "description": "argv to start an interactive session seeded with a prompt; `{prompt}` is substituted (AI hand-off)" },
+        "prompt": {
+          "$ref": "#/$defs/argv",
+          "description": "argv to start an interactive session seeded with a prompt; `{prompt}` is substituted (AI hand-off)"
+        },
         "env_home": { "type": "string", "description": "env var that points the CLI at a data home (CLAUDE_CONFIG_DIR, CODEX_HOME)" },
         "check_origin": { "type": "boolean", "description": "whether the terminal bridge must verify the request origin for this CLI" }
       }
@@ -47,7 +48,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "from": { "enum": ["directory", "index", "transcript"], "description": "directory = one dir per project; index = a summaries file; transcript = group sessions by the cwd found in each file" },
+        "from": {
+          "enum": ["directory", "index", "transcript"],
+          "description": "directory = one dir per project; index = a summaries file; transcript = group sessions by the cwd found in each file"
+        },
         "glob": { "type": "string" },
         "slug": { "enum": ["dirname", "cwd", "id"], "description": "opaque to the UI; only `cwd` is compared across providers" },
         "cwd": { "$ref": "#/$defs/fieldRef" }
@@ -68,7 +72,11 @@
         "timestamp": { "$ref": "#/$defs/fieldRef" },
         "title": { "type": "array", "items": { "type": "string" }, "description": "ordered sources: named title records first, then `first_prompt`" },
         "head_bytes": { "type": "integer", "description": "how much of the file yields cwd/meta without a full read" },
-        "excludes": { "type": "array", "items": { "type": "string" }, "description": "globs of files that live beside sessions but are not sessions (sidecars)" }
+        "excludes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "globs of files that live beside sessions but are not sessions (sidecars)"
+        }
       }
     },
 
@@ -109,7 +117,11 @@
             }
           }
         },
-        "noise": { "type": "array", "items": { "type": "string" }, "description": "regexes / tag names stripped from user text (system-reminder wrappers, env blocks…)" }
+        "noise": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "regexes / tag names stripped from user text (system-reminder wrappers, env blocks…)"
+        }
       }
     },
 
@@ -118,7 +130,10 @@
       "required": ["input", "output", "total"],
       "additionalProperties": false,
       "properties": {
-        "source": { "enum": ["per_message", "cumulative_event"], "description": "per_message = sum over assistant messages; cumulative_event = take the last counter record" },
+        "source": {
+          "enum": ["per_message", "cumulative_event"],
+          "description": "per_message = sum over assistant messages; cumulative_event = take the last counter record"
+        },
         "input": { "type": ["string", "null"] },
         "output": { "type": ["string", "null"] },
         "cache_read": { "type": ["string", "null"] },
@@ -133,7 +148,10 @@
       "required": ["model"],
       "additionalProperties": false,
       "properties": {
-        "model": { "enum": ["none", "nested", "independent-sessions"], "description": "nested = sidecar files under the parent; independent-sessions = children are sessions linked by a parent id" },
+        "model": {
+          "enum": ["none", "nested", "independent-sessions"],
+          "description": "nested = sidecar files under the parent; independent-sessions = children are sessions linked by a parent id"
+        },
         "glob": { "type": "string" },
         "parent_link": { "$ref": "#/$defs/fieldRef" },
         "spawn_tool": { "type": "string", "description": "tool name in the parent transcript that starts a child" },
@@ -165,13 +183,28 @@
           "path": { "type": "string" },
           "format": { "enum": ["json", "toml", "yaml"] },
           "key": { "type": "string", "description": "container key (`mcpServers`, `mcp_servers`)" },
-          "transport": { "type": "object", "description": "how the file spells transports → normalized stdio|http|sse|ws", "additionalProperties": { "type": "string" } },
-          "fields": { "type": "object", "description": "file field → McpServer field (enabled_tools→toolAllow, serverUrl→url…)", "additionalProperties": { "type": "string" } }
+          "transport": {
+            "type": "object",
+            "description": "how the file spells transports → normalized stdio|http|sse|ws",
+            "additionalProperties": { "type": "string" }
+          },
+          "fields": {
+            "type": "object",
+            "description": "file field → McpServer field (enabled_tools→toolAllow, serverUrl→url…)",
+            "additionalProperties": { "type": "string" }
+          }
         }
       }
     },
 
-    "instructions": { "type": "array", "items": { "type": "object", "required": ["kind", "paths"], "properties": { "kind": { "type": "string" }, "paths": { "type": "array", "items": { "type": "string" } } } } },
+    "instructions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["kind", "paths"],
+        "properties": { "kind": { "type": "string" }, "paths": { "type": "array", "items": { "type": "string" } } }
+      }
+    },
     "skills": { "type": "object", "properties": { "paths": { "type": "array", "items": { "type": "string" } } } },
     "plugins": { "type": "object", "properties": { "path": { "type": "string" }, "format": { "type": "string" } } },
     "usage": {
@@ -185,20 +218,53 @@
         "reset_field": { "type": "string" }
       }
     },
-    "history": { "type": "object", "properties": { "path": { "type": "string" }, "fields": { "type": "object", "additionalProperties": { "type": "string" } } } },
+    "history": {
+      "type": "object",
+      "properties": { "path": { "type": "string" }, "fields": { "type": "object", "additionalProperties": { "type": "string" } } }
+    },
 
     "capabilities": {
       "type": "object",
       "description": "what the UI may show for this provider; every key is required so a gap is explicit",
-      "required": ["projects", "sessions", "timeline", "tool_calls", "subagents", "memory", "mcp", "skills", "plugins", "usage_limits", "context_meter", "resume", "new_session", "delete_session", "history", "ai_handoff"],
+      "required": [
+        "projects",
+        "sessions",
+        "timeline",
+        "tool_calls",
+        "subagents",
+        "memory",
+        "mcp",
+        "skills",
+        "plugins",
+        "usage_limits",
+        "context_meter",
+        "resume",
+        "new_session",
+        "delete_session",
+        "history",
+        "ai_handoff"
+      ],
       "additionalProperties": false,
       "properties": {
-        "projects": { "$ref": "#/$defs/cap" }, "sessions": { "$ref": "#/$defs/cap" }, "timeline": { "$ref": "#/$defs/cap" },
-        "tool_calls": { "$ref": "#/$defs/cap" }, "subagents": { "$ref": "#/$defs/cap" }, "memory": { "$ref": "#/$defs/cap" },
-        "mcp": { "$ref": "#/$defs/cap" }, "skills": { "$ref": "#/$defs/cap" }, "plugins": { "$ref": "#/$defs/cap" },
-        "usage_limits": { "$ref": "#/$defs/cap" }, "context_meter": { "$ref": "#/$defs/cap" }, "resume": { "$ref": "#/$defs/cap" },
-        "new_session": { "$ref": "#/$defs/cap" }, "delete_session": { "$ref": "#/$defs/cap" }, "history": { "$ref": "#/$defs/cap" },
-        "ai_handoff": { "$ref": "#/$defs/cap", "description": "AgentDeck can open the CLI seeded with a brief (request + file + official docs); needs cli.prompt" }
+        "projects": { "$ref": "#/$defs/cap" },
+        "sessions": { "$ref": "#/$defs/cap" },
+        "timeline": { "$ref": "#/$defs/cap" },
+        "tool_calls": { "$ref": "#/$defs/cap" },
+        "subagents": { "$ref": "#/$defs/cap" },
+        "memory": { "$ref": "#/$defs/cap" },
+        "mcp": { "$ref": "#/$defs/cap" },
+        "skills": { "$ref": "#/$defs/cap" },
+        "plugins": { "$ref": "#/$defs/cap" },
+        "usage_limits": { "$ref": "#/$defs/cap" },
+        "context_meter": { "$ref": "#/$defs/cap" },
+        "resume": { "$ref": "#/$defs/cap" },
+        "new_session": { "$ref": "#/$defs/cap" },
+        "delete_session": { "$ref": "#/$defs/cap" },
+        "history": { "$ref": "#/$defs/cap" },
+        "ai_handoff": {
+          "$ref": "#/$defs/cap",
+          "description": "AgentDeck can open the CLI seeded with a brief (request + file + official docs); needs cli.prompt"
+        }
       }
     },
 
@@ -208,9 +274,17 @@
       "required": ["sample", "required"],
       "additionalProperties": false,
       "properties": {
-        "sample": { "type": "object", "required": ["glob", "newest"], "properties": { "glob": { "type": "string" }, "newest": { "type": "integer" }, "head": { "type": "integer" }, "tail": { "type": "integer" } } },
+        "sample": {
+          "type": "object",
+          "required": ["glob", "newest"],
+          "properties": { "glob": { "type": "string" }, "newest": { "type": "integer" }, "head": { "type": "integer" }, "tail": { "type": "integer" } }
+        },
         "required": { "type": "array", "items": { "type": "string" }, "description": "dotted paths that must appear in at least one sampled record" },
-        "enums": { "type": "object", "additionalProperties": { "type": "array", "items": { "type": "string" } }, "description": "observed values must be a subset; a new value is `drift`" },
+        "enums": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } },
+          "description": "observed values must be a subset; a new value is `drift`"
+        },
         "types": { "type": "object", "additionalProperties": { "enum": ["string", "number", "boolean", "object", "array"] } },
         "sidecars": { "type": "array", "items": { "type": "string" } },
         "version_field": { "type": "string", "description": "a field carrying the CLI version, if records have one" }
@@ -246,7 +320,12 @@
       "type": "object",
       "properties": {
         "when": { "type": "object", "additionalProperties": true },
-        "text": { "type": "string" }, "id": { "type": "string" }, "name": { "type": "string" }, "input": { "type": "string" }, "output": { "type": "string" }, "is_error": { "type": "string" },
+        "text": { "type": "string" },
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "input": { "type": "string" },
+        "output": { "type": "string" },
+        "is_error": { "type": "string" },
         "note": { "type": "string" }
       }
     },

@@ -1,0 +1,34 @@
+import type { Target } from '../../shared/types.d.ts'
+import { terminalEntryKey } from '../../shared/identity.ts'
+import type { TerminalEntry } from '../../shared/types.js'
+import { shellActions } from '../store/index.ts'
+// Frontend consumers carry the server's key verbatim. Folder-based keys are
+// retained only as aliases for pre-migration panes; they never create identity.
+export function mergeTerminalEntries(pool: TerminalEntry[], live: TerminalEntry[]) {
+  // Live receives start/link events immediately; an older pool poll must not
+  // undo a newly learned conversation identity for the same terminal.
+  return [...new Map([...pool, ...live].map((t) => [terminalEntryKey(t.provider || '', t.root || '', t.key), t])).values()]
+}
+
+export function terminalFor(entries: TerminalEntry[], provider: string, target: Target) {
+  return entries.find(
+    (t) =>
+      t.provider === provider &&
+      t.root === target.root &&
+      (target.terminalKey ? t.key === target.terminalKey : target.launchId ? t.launchId === target.launchId : target.id && t.id === target.id)
+  )
+}
+
+export function terminalRequest({ root, slug, cwd, id, title, launchId, terminalKey }: Target) {
+  if (terminalKey) return { root, terminalKey }
+  if (id) return { root, slug, id, title }
+  return { root, slug, cwd, title, launchId, ...(!launchId ? { legacyDraft: true } : {}) }
+}
+
+export function announceTerminal(provider: string, terminal: TerminalEntry) {
+  shellActions.terminalReady({ ...terminal, provider })
+}
+
+export function announceTerminalEnd(provider: string, key: string) {
+  shellActions.terminalEnded(provider, key)
+}

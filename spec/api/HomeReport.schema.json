@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "HomeReport.schema.json",
+  "title": "HomeReport",
+  "type": "object",
+  "properties": {
+    "scope": {
+      "type": "object",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "provider": {
+                "type": "string"
+              },
+              "root": {
+                "type": "string"
+              },
+              "rootLabel": {
+                "type": "string"
+              }
+            },
+            "required": ["provider", "root"],
+            "additionalProperties": true
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": true
+          }
+        }
+      },
+      "required": ["sources", "errors"],
+      "additionalProperties": true
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "root": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": ["error"],
+        "additionalProperties": true
+      }
+    },
+    "notices": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["message"],
+        "additionalProperties": true
+      }
+    },
+    "capturedAt": {
+      "type": "number"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "root": {
+            "type": "string"
+          },
+          "rootLabel": {
+            "type": "string"
+          }
+        },
+        "required": ["provider", "root"],
+        "additionalProperties": true
+      }
+    },
+    "totals": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "coverage": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "folders": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": true
+      }
+    },
+    "activity": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": true
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": true
+      }
+    },
+    "nextCursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["scope", "errors", "notices", "capturedAt"],
+  "additionalProperties": true
+}

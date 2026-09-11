@@ -20,6 +20,9 @@
   --ink-600: 30 37 54;
   --ink-500: 40 49 72;
   --ink-400: 52 62 88;
+  /* The embedded terminal owns its palette. Every theme explicitly retains
+     the same black loading canvas independently of its other ink shades. */
+  --ink-terminal: 0 0 0;
   --white: 255 255 255;
   --zinc-100: 241 244 250;
   --zinc-200: 222 228 238;
@@ -78,7 +81,7 @@
   --pink-500: 236 72 153;
 }
 
-:root[data-theme='graphite'] {
+:root[data-theme="graphite"] {
   color-scheme: dark;
   /* Graphite — the neutral dark palette AgentDeck 1.x shipped with.
      ink-950 was previously undefined (bg-ink-950 fell through to the body's
@@ -90,6 +93,7 @@
   --ink-600: 42 42 42;
   --ink-500: 52 53 65;
   --ink-400: 63 63 70;
+  --ink-terminal: 0 0 0;
   --white: 255 255 255;
   --zinc-100: 244 244 245;
   --zinc-200: 228 228 231;
@@ -148,7 +152,7 @@
   --pink-500: 236 72 153;
 }
 
-:root[data-theme='light'] {
+:root[data-theme="light"] {
   color-scheme: light;
   /* mirrors the dark side: ink-950 tracks ink-800 (the body background) */
   --ink-950: 251 248 242;
@@ -158,6 +162,7 @@
   --ink-600: 235 226 204;
   --ink-500: 224 213 184;
   --ink-400: 214 201 163;
+  --ink-terminal: 0 0 0;
   --white: 38 37 33;
   --zinc-100: 38 37 33;
   --zinc-200: 52 50 44;
@@ -230,7 +235,7 @@
   --hljs-builtin: #ffa657;
   --hljs-tag: #7ee787;
 }
-:root[data-theme='light'] {
+:root[data-theme="light"] {
   --hljs-fg: #24292e;
   --hljs-comment: #6a737d;
   --hljs-keyword: #d73a49;
@@ -472,6 +477,7 @@ body {
   .qs-in-right,
   .qs-in-left,
   .qs-chip {
+    /* biome-ignore lint/complexity/noImportantStyles: The user's reduced-motion preference must override component animations. */
     animation: none !important;
   }
   .qs-cursor {
@@ -490,22 +496,22 @@ body {
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
 }
-:root[data-density='compact'] .sb-row {
+:root[data-density="compact"] .sb-row {
   padding-top: 0.125rem;
   padding-bottom: 0.125rem;
 }
-:root[data-density='compact'] .sb-row-lg {
+:root[data-density="compact"] .sb-row-lg {
   padding-top: 0.25rem;
   padding-bottom: 0.25rem;
 }
-:root[data-density='compact'] .sb-meta {
+:root[data-density="compact"] .sb-meta {
   display: none;
 }
 /* the meta line is gone in compact — a small "2h ago" stays at the end of the title row */
 .sb-time {
   display: none;
 }
-:root[data-density='compact'] .sb-time {
+:root[data-density="compact"] .sb-time {
   display: inline;
 }
 
@@ -518,7 +524,7 @@ body {
   --accent-l-text: 74%;
   --accent-l-bar: 60%;
 }
-:root[data-theme='light'] {
+:root[data-theme="light"] {
   --accent-l-dot: 44%;
   --accent-l-text: 36%;
   --accent-l-bar: 46%;

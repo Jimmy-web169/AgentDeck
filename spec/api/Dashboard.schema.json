@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "Dashboard.schema.json",
+  "title": "Dashboard",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "createdAt": {
+      "type": "number"
+    },
+    "endedAt": {
+      "type": "number"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "socket": {
+            "type": "string"
+          },
+          "session": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": ["key"],
+        "additionalProperties": true
+      }
+    },
+    "control": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["schemaVersion", "id", "name", "title", "createdAt", "sources", "control"],
+  "additionalProperties": true
+}

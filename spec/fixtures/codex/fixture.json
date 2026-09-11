@@ -1,6 +1,6 @@
 {
   "provider": "codex",
-  "origin": "scripts/demo/make-fixture.mjs --scenario single-project --seed 7 --now 2026-09-01T09:00:00Z --platform posix — fictional project /home/demo/code/orbit-api",
+  "origin": "scripts/demo/make-fixture.ts --scenario single-project --seed 7 --now 2026-09-01T09:00:00Z --platform posix — fictional project /home/demo/code/orbit-api",
   "sessions": [
     {
       "id": "3d5465c2-6ffd-76db-9962-51657f9592e0",

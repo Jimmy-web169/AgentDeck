@@ -34,7 +34,7 @@ already used in the code; renames are listed as decisions in §7.
 | `Stats` | `root, projectCount, sessions, subagentSessions, userTurns, assistantTurns, toolCalls, toolCounts{}, modelCounts{}, tokens, projects[{slug, cwd, sessions, userTurns, toolCalls, tokens, models[], lastActivity}]` | keys already aligned; populations and token math are not (§4) |
 | `Usage` | `rateLimits{windows[]}, ts(ms), sessionId?, contextWindow?` | one timestamp name |
 | `HistoryEntry` | `display, ts(ms), sessionId?, project?` | normalize `ts` to ms server-side |
-| `Activity` | output of `server/shared/activity.js` | already shared and unit-tested |
+| `Activity` | output of `server/shared/activity.ts` | already shared and unit-tested |
 
 ## 2. Descriptor layer (the protocol)
 
@@ -85,7 +85,7 @@ CRUD for its config kinds), `api.js` (`TERMINAL_CONFIG {findBin, title, envKey,
 resumeArgs, checkOrigin}`, a `ROUTES` map covering the 29 shared routes, one
 `fingerprintOf` per file before any read, `withOversizeFallback` on every list/stats
 handler, `export const dispatch = makeDispatch(ROUTES)`), one entry in
-`server/registry.js`, `roots.<id>.json`.
+`server/registry.ts`, `roots.<id>.json`.
 
 Shared routes (both providers today): `roots` (GET/POST/DELETE, `POST roots/label`),
 `projects`, `sessions`, `session`, `DELETE session`, `raw`, `subagents`, `stats`,
@@ -107,7 +107,7 @@ shell; keep it that way.
 
 ## 4. Known misalignments (work items)
 
-1. ~~Three total-token formulas disagree~~ **done 2026-09-07** — `server/shared/tokens.js`: the provider computes `tokens.total`; clients only fall back to the sum. Was: (`lib/format.js`, `shared/Stats.jsx`,
+1. ~~Three total-token formulas disagree~~ **done 2026-09-07** — `server/shared/tokens.ts`: the provider computes `tokens.total`; clients only fall back to the sum. Was: (`lib/format.js`, `shared/Stats.jsx`,
    `shared/activity.js`) whenever `total` is present or `reasoning` ≠ 0, i.e. always
    for codex. Fix: providers emit `tokens.total`; one helper reads only that.
 2. ~~Codex `getStats` mixes populations~~ **done 2026-09-08** — every provider's stats carry `sessions` (top-level) and `subagentSessions` (spawned children) per project and at the root; turns and tokens add up over both, so root = Σ projects (`test/provider-shapes.test.js`). Was: per-project `sessions` excludes
@@ -124,7 +124,7 @@ shell; keep it that way.
 5. ~~history / usage / roots / plugins vocabulary~~ **done 2026-09-08** — `history[]` = `{ display, project, sessionId, ts }` (ms) on every provider (codex resolves `project` from its rollout index); `usage` = `{ root, rateLimits, contextWindow, sessionId, ts }`; roots carry `hasSessions`; `plugins.marketplaces` = `[{ name, repo }]`. Was: `history.project` (claude) vs `history.sessionId` (codex), ISO vs ms `ts`;
    `usage.updatedAt` vs `ts`; `roots.hasProjects` vs `hasSessions`;
    `plugins.marketplaces` objects vs strings.
-6. ~~`GET /api/browse` and `pick-folder` are byte-identical copies~~ **done 2026-09-08** — `server/shared/browse.js`.
+6. ~~`GET /api/browse` and `pick-folder` are byte-identical copies~~ **done 2026-09-08** — `server/shared/browse.ts`.
 7. ~~Codex `getStats`/`getActivity` skip the fingerprint~~ **done 2026-09-08** — one `fingerprintOf` per file before the read, as claude does.
 8. Home aggregation **revised 2026-09-09** — Provider mode preserves native root-scoped pages; Folder mode aggregates registered roots using the sidebar's provider/root exclusions. Stats drills through folders and sources, or uses native detail directly for a single root. Insights retains the complete overview without extra folder dashboards; Plugins/Resources/History remain source-owned. See §9.
 
@@ -132,7 +132,7 @@ shell; keep it that way.
 
 Vendors change their on-disk formats without notice. The `probe:` block of each
 descriptor (`spec/providers/<id>.yaml`) says what to watch — **implemented
-2026-09-08** in `server/shared/formatProbe.js`, which reads that block at runtime:
+2026-09-08** in `server/shared/formatProbe.ts`, which reads that block at runtime:
 
 ```yaml
 probe:
@@ -178,13 +178,23 @@ Precedence when the same name appears twice: local > project > user > plugin.
 
 1. ~~Rename `tool_use` → `tool_call`~~ — done 2026-09-07 (the normalized part kind is `tool_call`; raw vendor types unchanged). (rename touched
    every Conversation/ToolCall component)
-2. ~~Sub-agents: one `children[]`~~ **done 2026-09-07** (`server/shared/children.js`; `groups[]` for workflow runs; provider lists kept so the UI is unchanged). Was: one `children[]` for both providers, with claude workflow runs as an
+2. ~~Sub-agents: one `children[]`~~ **done 2026-09-07** (`server/shared/children.ts`; `groups[]` for workflow runs; provider lists kept so the UI is unchanged). Was: one `children[]` for both providers, with claude workflow runs as an
    optional `groups[]` — agree?
 3. **decided 2026-09-07**: show the common fields first, then the provider's own, and the backend must say which is which (`fields` on `/api/stats`). Was: should the UI ever show provider-specific tiles (reasoning, cache create) or only
    non-zero fields of the common `Tokens`?
 4. **decided 2026-09-08**: no — a new optional key is `changed` (dialog + log only); `drift` = missing required key (< 50% of sampled records), unknown enum value, type change (chip badge). Was: is a new optional key worth a badge?
 5. **decided 2026-09-08**: yes — codex thread memories live under the same project Memory tab, marked read-only (`writable: false` in the payload). Was: expose codex thread memories under the same project tab (read-only) — yes?
 6. **decided 2026-09-08**: yes — conversations without a `cwd` sit in a "(no workspace)" bucket (`NO_CWD` in the provider's paths.js); a later probe may recover the cwd. Was: Antigravity's transcripts carry no `cwd`; do we accept a "no project" bucket?
+
+Descriptor-language boundary (discussion recorded 2026-09-07, implementation
+status checked 2026-09-10): YAML is the authoring format and JSON Schema is the
+machine contract. Fixture conformance and format probes are implemented; parsing
+still belongs to the provider's code. A closed grammar for matching, field
+emission, pairing and bounded derivations, with explicit named hooks for SQLite
+or other format-specific work, remains a proposal. No generic interpreter,
+arbitrary JavaScript expressions or persistent normalized transcript cache is
+approved by this document. Interpreter semantics and format-generation versioning
+need a separate design and tests across all supported providers before adoption.
 
 ## 7b. AI hand-off (implemented 2026-09-08)
 
@@ -193,7 +203,7 @@ starts the CLI interactive and seeded (`claude "<prompt>"`, `codex "<prompt>"`,
 `agy -i "<prompt>"`); `POST /api/terminal` with a `brief` object writes
 `<configDir>/handoffs/<id>.md` (request, kind, file, current content, official
 docs URL from the UI's docs map, how to work) and starts the terminal with a
-one-line prompt pointing at that file (`server/shared/handoff.js`). Capability
+one-line prompt pointing at that file (`server/shared/handoff.ts`). Capability
 `ai_handoff`. Entry points: the three Config views (current selection as
 context) and Insights (the digest as context).
 
@@ -232,15 +242,15 @@ establish real CLI transport compatibility; validate each adapter interactively.
 - Agent Skills — https://agentskills.io/ (shared by every vendor)
 - OpenTelemetry GenAI semantic conventions — https://opentelemetry.io/docs/specs/semconv/gen-ai/
 - deepseek-ai/deepseek-harness — plugin-per-concern harness; session log = append-only typed events with `seq`, messages derived
-- Research notes (local, git-ignored): `tmp/research/standards-2026-09.md`, `tmp/research/antigravity-*.md`; provider audit 2026-09-07 folded into §4
+- Provider behavior and known gaps: the maintained [provider descriptors](providers/) and the provider audit in §4. The September 2026 research informed vocabulary and adapter boundaries; packaging and telemetry conventions do not establish native transcript interchange.
 
 ## 9. Cross-source Home adapter
 
 The server registry may expose a `home` adapter for cross-source Home pages.
 This is distinct from the interactive history/handoff adapter and from the
 provider's native UI `homePages`. The shared service lives in
-`server/deck/home.js`; the reusable dispatch adapter is
-`server/deck/homeAdapter.js`. No provider ID switches belong in aggregation.
+`server/deck/home.ts`; the reusable dispatch adapter is
+`server/deck/homeAdapter.ts`. No provider ID switches belong in aggregation.
 
 The resolver supplies `{ provider, root, rootLabel, allProjects: true }` for
 each registered root. Folder catalog availability and sidebar filters are not

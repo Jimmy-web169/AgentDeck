@@ -1,0 +1,266 @@
+import { errorMessage } from '../../lib/errors.ts'
+import { useEffect, useState } from 'react'
+import { useMemory, useSaveMemory, useDeleteMemory } from '../../api/index.ts'
+import Markdown from '../shared/Markdown.tsx'
+import { shortPath } from '../../lib/paths.ts'
+import { usePrefs } from '../../lib/prefs.ts'
+
+// Claude stores memory PER PROJECT (projects/<slug>/memory/*.md). This view is
+// surfaced at folder(user) scope to match Codex's Memory view, so it lets you
+// pick a project and browse that project's memory. The underlying per-project
+// data model and `api.memory({ root, slug })` call are unchanged — only the entry
+// point moved here from the session tab bar.
+// `slug` pins the view to one project (the project-level Memory tab); without it
+// the view offers a project picker (Home).
+export default function MemoryView({
+  root,
+  projects = [],
+  slug: fixedSlug = null,
+}: {
+  root: string
+  projects?: import('../../../shared/types.d.ts').Project[]
+  slug?: string | null
+  cwd?: string | null
+}) {
+  usePrefs() // re-render when Preferences › Paths changes (shortPath reads it)
+  const [slug, setSlug] = useState(fixedSlug)
+  const memory = useMemory({ provider: 'claude', root: root || '', slug }, { enabled: !!slug })
+  const data = memory.data,
+    loading = memory.isFetching
+  const saveMemory = useSaveMemory('claude'),
+    deleteMemory = useDeleteMemory('claude')
+  const [editing, setEditing] = useState<string | null>(null) // file name in edit mode
+  const [draft, setDraft] = useState('')
+  const [confirmDel, setConfirmDel] = useState<string | null>(null) // file name pending delete confirmation
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [mutationError, setErr] = useState<string | null>(null)
+  const err = mutationError || memory.error?.message
+
+  // pinned to a project, follow it; otherwise default to the first project once
+  // projects arrive (or when the root changes)
+  useEffect(() => {
+    if (fixedSlug) {
+      setSlug(fixedSlug)
+      return
+    }
+    if (projects.some((p) => p.slug === slug)) return
+    setSlug(projects[0]?.slug || null)
+  }, [projects, slug, fixedSlug])
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Changing the account/project deliberately discards its local editor state.
+  useEffect(() => {
+    setEditing(null)
+    setConfirmDel(null)
+    setCreating(false)
+    setNewName('')
+    setErr(null)
+  }, [root, slug])
+
+  const save = async () => {
+    if (editing == null) return
+    setBusy(true)
+    setErr(null)
+    try {
+      await saveMemory.mutateAsync({ ref: { root, slug, name: editing, content: draft } })
+      setEditing(null)
+    } catch (e) {
+      setErr(e instanceof Error ? errorMessage(e) : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const del = async (name: string) => {
+    setBusy(true)
+    setErr(null)
+    try {
+      await deleteMemory.mutateAsync({ ref: { root, slug, name } })
+      setConfirmDel(null)
+      if (editing === name) setEditing(null)
+    } catch (e) {
+      setErr(e instanceof Error ? errorMessage(e) : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const create = async () => {
+    const name = newName.trim()
+    if (!name) return
+    const fname = name.endsWith('.md') ? name : `${name}.md`
+    // the write endpoint overwrites by design (that's how edit saves) — guard
+    // here so "+ new" can't silently blank an existing memory file
+    const exists = (fname === 'MEMORY.md' && data?.index != null) || data?.files?.some((f: { name: string }) => f.name === fname)
+    if (exists) {
+      setErr(`${fname} already exists — edit it instead`)
+      return
+    }
+    setBusy(true)
+    setErr(null)
+    try {
+      await saveMemory.mutateAsync({ ref: { root, slug, name: fname, content: '' } })
+      setCreating(false)
+      setNewName('')
+      setEditing(fname)
+      setDraft('')
+    } catch (e) {
+      setErr(e instanceof Error ? errorMessage(e) : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // shared header actions for a memory card (the MEMORY.md index card included)
+  const actions = (name: string, content: string) =>
+    editing === name ? (
+      <>
+        <button
+          type="button"
+          onClick={save}
+          disabled={busy}
+          className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-40"
+        >
+          Save
+        </button>
+        <button type="button" onClick={() => setEditing(null)} className="text-[11px] px-2 py-0.5 rounded bg-ink-600 text-zinc-300">
+          Cancel
+        </button>
+      </>
+    ) : confirmDel === name ? (
+      <>
+        <span className="text-[11px] text-red-300">trash?</span>
+        <button type="button" onClick={() => del(name)} disabled={busy} className="text-[11px] px-2 py-0.5 rounded bg-red-500/30 text-red-200">
+          yes
+        </button>
+        <button type="button" onClick={() => setConfirmDel(null)} className="text-[11px] px-2 py-0.5 rounded bg-ink-600 text-zinc-300">
+          no
+        </button>
+      </>
+    ) : (
+      <>
+        <button
+          type="button"
+          onClick={() => {
+            setEditing(name)
+            setDraft(content)
+            setConfirmDel(null)
+          }}
+          className="text-[11px] px-2 py-0.5 rounded bg-ink-700 text-zinc-400 hover:text-zinc-200"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => setConfirmDel(name)}
+          title="Move to the OS trash (recoverable)"
+          className="text-[11px] px-2 py-0.5 rounded bg-red-500/10 text-red-300 hover:bg-red-500/20"
+        >
+          Delete
+        </button>
+      </>
+    )
+
+  const editor = (
+    <textarea
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      spellCheck={false}
+      className="w-full h-64 bg-ink-900 text-zinc-200 font-mono text-[13px] leading-6 p-3 rounded border border-zinc-700 resize-y outline-none"
+    />
+  )
+
+  const { index, files } = data || {}
+  // index == null (not falsy): an existing-but-empty MEMORY.md still renders its card
+  const empty = data && index == null && (!files || files.length === 0)
+
+  return (
+    <div className="mx-auto max-w-3xl px-4 py-6 space-y-5">
+      {/* memory is stored per project — the picker only shows when no project is pinned */}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] uppercase tracking-wide text-zinc-500 shrink-0">{fixedSlug ? 'Project memory' : 'Project'}</span>
+        {fixedSlug ? (
+          <span className="flex-1 min-w-0 text-[12px] text-zinc-500 truncate">{`projects/…/memory/*.md · read by Claude at the start of every session in this project`}</span>
+        ) : (
+          <select
+            value={slug || ''}
+            onChange={(e) => setSlug(e.target.value)}
+            className="flex-1 min-w-0 bg-ink-700 border border-zinc-700 rounded px-2 py-1.5 text-[12px] text-zinc-300"
+          >
+            {projects.length === 0 && <option value="">no projects</option>}
+            {projects.map((p) => (
+              <option key={p.slug} value={p.slug} title={p.cwd || p.slug}>
+                {shortPath(p.cwd || p.slug)}
+              </option>
+            ))}
+          </select>
+        )}
+        {slug &&
+          (creating ? (
+            <span className="flex items-center gap-1 shrink-0">
+              <input
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && create()}
+                placeholder="file-name.md"
+                // biome-ignore lint/a11y/noAutofocus: Initial focus follows an explicit create, edit or handoff action.
+                autoFocus
+                className="w-40 bg-ink-700 border border-zinc-700 rounded px-2 py-1 text-[12px] text-zinc-200 placeholder-zinc-600"
+              />
+              <button
+                type="button"
+                onClick={create}
+                disabled={busy || !newName.trim()}
+                className="text-[11px] px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 hover:bg-emerald-500/30 disabled:opacity-40"
+              >
+                Create
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setCreating(false)
+                  setNewName('')
+                }}
+                className="text-[11px] px-2 py-1 rounded bg-ink-600 text-zinc-300"
+              >
+                ×
+              </button>
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCreating(true)}
+              className="shrink-0 text-[12px] px-2 py-1 rounded bg-ink-700 text-emerald-300/80 hover:text-emerald-200 border border-zinc-700"
+            >
+              + new
+            </button>
+          ))}
+      </div>
+
+      {err && <div className="text-[12px] text-red-300 bg-red-500/10 border border-red-500/30 rounded p-2">{err}</div>}
+
+      {loading && <div className="text-center text-zinc-600 py-10">Loading memory…</div>}
+      {!loading && empty && <div className="text-center text-zinc-600 py-10">This project has no memory yet.</div>}
+      {!loading && index != null && (
+        <div className="rounded-lg border border-zinc-800 bg-ink-900/40 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="text-[11px] uppercase tracking-wide text-zinc-500 flex-1">MEMORY.md (index)</div>
+            {actions('MEMORY.md', index)}
+          </div>
+          {editing === 'MEMORY.md' ? editor : <Markdown>{index}</Markdown>}
+        </div>
+      )}
+      {!loading &&
+        files?.map((f) => (
+          <div key={f.name} className="rounded-lg border border-zinc-800 bg-ink-700/40 p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="text-[12px] font-mono text-amber-200/80 flex-1 truncate">{f.name}</div>
+              {actions(f.name, f.content)}
+            </div>
+            {editing === f.name ? editor : <Markdown>{f.content}</Markdown>}
+          </div>
+        ))}
+    </div>
+  )
+}

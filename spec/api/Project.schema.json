@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "Project.schema.json",
+  "title": "Project",
+  "type": "object",
+  "properties": {
+    "slug": {
+      "type": "string"
+    },
+    "cwd": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sessionCount": {
+      "type": "number"
+    },
+    "lastActivity": {
+      "anyOf": [
+        {
+          "type": ["string", "number"]
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["slug", "cwd", "sessionCount", "lastActivity"],
+  "additionalProperties": true
+}

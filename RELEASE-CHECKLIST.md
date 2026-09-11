@@ -18,7 +18,7 @@ and version/tag sections below apply only to an explicitly requested release
       (Added / Changed / Fixed) and `package.json` `version` matches it.
 - [ ] Demo assets for this release exist in `demo/vX.Y/` — the screenshots
       `README.md` embeds plus `tour.gif` / `tour.mp4` — produced by the `demo`
-      skill (`scripts/demo/make-fixture.mjs` → side server on 47861 →
+      skill (`scripts/demo/make-fixture.ts` → side server on 47861 →
       `shoot.mjs` → `record.mjs`) from the synthetic data root, never from a
       real home. Keep the file names the README links to; earlier releases'
       folders stay untouched.
@@ -27,8 +27,16 @@ and version/tag sections below apply only to an explicitly requested release
 
 ## 2. Gate: `npm run release:check`
 
-Runs `npm test` → `npm run build` → `npm run check:providers` → `npm run check:privacy`
-→ `npm run check:spec`. All five must pass on the release machine.
+Runs lint and type checking, then `npm test` → `npm run build` →
+`npm run check:providers` → `npm run check:privacy` → `npm run check:spec`.
+All checks must pass on the release machine.
+
+- `check:layout -- --sheet` — after the build finishes, run the full synthetic
+  scene matrix across Midnight, Graphite and Paper at 1440, 1180 and 900 pixels.
+  No new hard violations or failed scene-readiness checks are allowed. Inspect
+  the generated contact sheet for visual issues that geometry cannot prove.
+  Do not rebuild while the capture server is running: replacing static assets
+  during navigation invalidates the result. Use `--fast` for the local loop.
 
 - `check:spec` — every `spec/providers/*.yaml` validates, every fixture session in
   `spec/fixtures/` parses to its committed golden, and each descriptor describes

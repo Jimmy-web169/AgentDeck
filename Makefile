@@ -24,7 +24,7 @@ init: ## one-shot setup (npm install + ttyd + codex check)
 # keep every provider CLI current before the servers start — each CLI runs its
 # own updater; failures only warn (set AGENTDECK_SKIP_UPDATE=1 to skip offline)
 update: ## update every tracked provider CLI
-	@node scripts/update-providers.mjs
+	@node scripts/update-providers.ts
 
 all: stop update ## update provider CLIs, then backend + frontend together (hot reload)
 	@test -d node_modules || { echo "Dependencies not installed — run 'make init' first."; exit 1; }
@@ -47,4 +47,4 @@ install: ## install dependencies
 # free the API port first so `make all` / `make be` never hit EADDRINUSE.
 # Uses a Node helper (not lsof) so it works on Windows too, where lsof is absent.
 stop: ## kill whatever is listening on the API port
-	@node scripts/free-ports.mjs $(PORT)
+	@node scripts/free-ports.ts $(PORT)

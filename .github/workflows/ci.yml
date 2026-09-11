@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   test:
-    name: ${{ matrix.os }}
+    name: ${{ matrix.os }} (Node ${{ matrix.node }})
     strategy:
       fail-fast: false
       matrix:
@@ -19,17 +19,31 @@ jobs:
         # native-Windows ones (webterm/node-pty, .cmd handling, PATH extension
         # discovery), macos the arm64 node-pty prebuilt + BSD userland.
         os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ['22.20.0']
+        include:
+          - os: ubuntu-latest
+            node: '22.18.0'
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      - run: npm run lint
+      - run: npm run check:types
       - run: npm test
       - run: npm run build
       # the provider contract: descriptors valid, fixtures parse to their goldens
       - run: npm run check:spec
       # nothing personal in the tree (home paths, e-mails, key-looking strings)
       - run: npm run check:privacy
+
+  layout:
+    name: Fixture layout (Debian, Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build --platform linux/amd64 -f scripts/layout.Dockerfile -t agentdeck-layout .
+      - run: docker run --rm --platform linux/amd64 -v "$PWD:/work" agentdeck-layout sh -c 'npm ci && npm run build && npm run check:layout -- --fast'

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "Handoff.schema.json",
+  "title": "Handoff",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "filename": {
+      "type": "string"
+    },
+    "file": {
+      "type": "string"
+    },
+    "bytes": {
+      "type": "number"
+    },
+    "history": {
+      "type": "object",
+      "properties": {
+        "complete": {
+          "type": "boolean"
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "conversationId": { "type": "string" },
+              "parentConversationId": { "type": "string" },
+              "sourceSessionId": { "type": "string" },
+              "status": { "type": "number" }
+            },
+            "required": ["code"],
+            "additionalProperties": true
+          }
+        },
+        "conversations": {
+          "type": "number"
+        },
+        "messages": {
+          "type": "number"
+        }
+      },
+      "required": ["complete", "warnings", "conversations", "messages"],
+      "additionalProperties": true
+    },
+    "state": {
+      "enum": ["exported", "dispatching", "launched", "unknown"]
+    },
+    "terminal": {
+      "anyOf": [
+        {
+          "$ref": "TerminalEntry.schema.json"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "target": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "provider": {
+              "type": "string"
+            },
+            "root": {
+              "type": "string"
+            },
+            "rootLabel": {
+              "type": "string"
+            }
+          },
+          "required": ["provider", "root"],
+          "additionalProperties": true
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": ["id", "filename", "file", "bytes", "history", "state", "terminal", "error", "target"],
+  "additionalProperties": true
+}

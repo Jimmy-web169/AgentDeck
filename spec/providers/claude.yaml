@@ -120,7 +120,7 @@ plugins:
   path: "plugins/installed_plugins.json"
   format: json
 usage:
-  source: status_line_bridge                          # Claude never writes limits to disk; scripts/statusline-bridge.mjs does
+  source: status_line_bridge                          # Claude never writes limits to disk; scripts/statusline-bridge.ts does
   path: "rate-limits.json"
   windows: [five_hour, seven_day]
   pct_field: used_percentage
