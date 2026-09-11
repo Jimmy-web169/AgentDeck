@@ -6,6 +6,64 @@
   overflow-wrap: anywhere;
 }
 
+.conversation-navigation-anchor {
+  position: sticky;
+  top: 12px;
+  height: 0;
+  z-index: 20;
+}
+.conversation-navigation {
+  position: absolute;
+  right: -8px;
+  top: 0;
+  opacity: 0.25;
+  transition: opacity 150ms;
+}
+.conversation-navigation:hover,
+.conversation-navigation:focus-within,
+.conversation-navigation:has([aria-expanded="true"]) {
+  opacity: 1;
+}
+.conversation-navigation-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+.conversation-navigation-button:hover,
+.conversation-navigation-button:focus-visible {
+  background: rgb(var(--ink-600));
+}
+@media (hover: none) {
+  .conversation-navigation {
+    opacity: 0.8;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .conversation-navigation {
+    transition: none;
+  }
+}
+.conversation-panes.is-split {
+  flex-direction: column;
+}
+.subagent-explorer {
+  flex: 1;
+  border-top-width: 1px;
+}
+@media (min-width: 1280px) {
+  .conversation-panes.is-split {
+    flex-direction: row;
+  }
+  .subagent-explorer {
+    flex: 0 0 42%;
+    border-top-width: 0;
+    border-left-width: 1px;
+  }
+}
+
 /* break-word does not reduce min-content width. Long URLs, IDs and opaque
    advisor payloads must also participate in intrinsic sizing and wrap. */
 .conversation-content .md,

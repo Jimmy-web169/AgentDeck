@@ -1,0 +1,20 @@
+# Allow only build/runtime inputs. In particular, never send tmp, provider
+# homes, .agentdeck, .git, local credentials or host node_modules to the builder.
+**
+!package.json
+!package-lock.json
+!index.html
+!*.config.ts
+!tsconfig*.json
+!scripts/
+!scripts/postcss-font-units.ts
+!scripts/container.ts
+!src/
+!src/**
+!shared/
+!shared/**
+!server/
+!server/**
+!spec/
+!spec/providers/
+!spec/providers/**

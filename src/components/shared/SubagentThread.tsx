@@ -54,7 +54,7 @@ import { fmtTokens } from '../../lib/format.ts'
 // Nested sub-agents (a child spawning its own) render the header only — no
 // recursion — which is what `ctx.depth >= 1` means here.
 
-const STATUS_DOT: Record<string, string> = {
+export const STATUS_DOT: Record<string, string> = {
   done: 'bg-emerald-400',
   running: 'bg-amber-400 animate-pulse',
   starting: 'bg-sky-400 animate-pulse',

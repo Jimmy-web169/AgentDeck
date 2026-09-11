@@ -9,6 +9,9 @@ import { dashboards } from './deck/dashboards.ts'
 
 const PORT = Number(process.env.AGENTDECK_PORT || 47841)
 const DEV_UI_PORT = Number(process.env.AGENTDECK_WEB_PORT || 47842)
+// Docker bridge publishing requires an explicit non-loopback bind inside the
+// container. Local starts keep the existing loopback-only default.
+const HOST = process.env.AGENTDECK_HOST?.trim() || '127.0.0.1'
 // Provider imports are declarative; process-owned terminal registration begins here.
 for (const provider of Object.values(PROVIDERS)) {
   if (provider.terminal) registerTerminalProvider(provider.terminal)
@@ -25,17 +28,20 @@ let stopProbes = () => {}
 host.server.on('error', (error) => {
   if ('code' in error && error.code === 'EADDRINUSE') {
     console.error(`\n  Port ${PORT} is already in use.`)
-    console.error('  Free it with:  npm run stop   (or: make stop)\n')
+    console.error('  Choose another AGENTDECK_PORT, or stop only the instance you intend to replace.\n')
     process.exit(1)
   }
   throw error
 })
 
-host.server.listen(PORT, '127.0.0.1', () => {
-  console.log(`\n  AgentDeck API  →  http://localhost:${PORT}  (127.0.0.1 only)`)
+host.server.listen(PORT, HOST, () => {
+  const address = host.server.address()
+  const port = address && typeof address === 'object' ? address.port : PORT
+  const boundHost = address && typeof address === 'object' ? address.address : HOST
+  console.log(`\n  AgentDeck API  →  http://localhost:${port}  (bind: ${boundHost})`)
   console.log(`  providers: ${Object.keys(PROVIDERS).join(', ')}`)
   if (isolatedConfig()) console.log(`  config dir: ${configDir()}  (AGENTDECK_CONFIG_DIR — default roots are NOT added)`)
-  console.log(`  dev UI: http://localhost:${DEV_UI_PORT}\n`)
+  if (process.env.NODE_ENV !== 'production') console.log(`  dev UI: http://localhost:${DEV_UI_PORT}\n`)
   stopProbes = scheduleProbes(PROVIDERS)
 })
 

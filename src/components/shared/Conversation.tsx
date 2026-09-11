@@ -30,11 +30,12 @@ import Thinking from './Thinking.tsx'
 import SubagentThread from './SubagentThread.tsx'
 import { BotIcon } from './icons.tsx'
 import { fmtTime } from '../../lib/format.ts'
-import { Fragment, useMemo, useRef } from 'react'
+import { Fragment, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import './conversationLayout.css'
 import EarlierBar from './EarlierBar.tsx'
 import CopyButton from './CopyButton.tsx'
-import { useEarlier } from '../../lib/useEarlier.ts'
+import { scrollParentOf, useEarlier } from '../../lib/useEarlier.ts'
+import ConversationNavigator from './ConversationNavigator.tsx'
 
 export function UserMsg({ ev }: { ev: ConversationEvent }) {
   return (
@@ -65,6 +66,7 @@ export function SystemMsg({ ev }: { ev: ConversationEvent }) {
 export default function Conversation({
   data,
   compact = false,
+  active = true,
   onFork = null,
   headerExtras,
   headerRelations,
@@ -90,9 +92,36 @@ export default function Conversation({
     return ends
   }, [timeline])
   const rootRef = useRef<HTMLDivElement>(null)
-  const { startIdx, visible, showEarlier, topRef, chunk } = useEarlier(timeline, rootRef, { memoKey: summary?.id })
+  const { startIdx, visible, showEarlier, topRef, chunk, reveal } = useEarlier(timeline, rootRef, { memoKey: summary?.id })
+  const [jump, setJump] = useState<{ index: number | 'top' | 'bottom' } | null>(null)
+  const navigate = (index: number | 'top' | 'bottom') => {
+    if (index !== 'bottom') reveal(index === 'top' ? 0 : index)
+    setJump({ index })
+  }
+  useLayoutEffect(() => {
+    if (!jump || !active) return
+    const root = rootRef.current
+    const pane = scrollParentOf(root)
+    if (!root || !pane) return
+    if (jump.index === 'top') pane.scrollTop = 0
+    else if (jump.index === 'bottom') pane.scrollTop = pane.scrollHeight
+    else {
+      const target = [...root.querySelectorAll<HTMLElement>(`[data-conversation-index="${jump.index}"]`)].find(
+        (element) => element.closest('.conversation-content') === root
+      )
+      if (!target) return
+      pane.scrollTop += target.getBoundingClientRect().top - pane.getBoundingClientRect().top - 16
+      target.tabIndex = -1
+      target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true })
+      target.focus({ preventScroll: true })
+    }
+    // Update the pane's bottom-follow intent before a ResizeObserver fires.
+    pane.dispatchEvent(new Event('scroll'))
+    setJump(null)
+  }, [jump, active])
   return (
     <div ref={rootRef} className={`conversation-content ${compact ? 'px-3 py-3' : 'mx-auto max-w-3xl px-4 py-6'}`}>
+      {active && !compact && <ConversationNavigator timeline={timeline} onJump={navigate} />}
       <div className={`${compact ? 'mb-3 pb-3' : 'mb-5 pb-4'} border-b border-zinc-700/60`}>
         <h1 className={`${compact ? 'text-[14px]' : 'text-lg'} font-semibold text-zinc-100`}>{summary.title}</h1>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-zinc-500">
@@ -117,7 +146,20 @@ export default function Conversation({
           onAll={() => showEarlier(true)}
           topRef={topRef}
         />
-        {visible.map((event, index) => renderEvent(event, startIdx + index, onFork && turnEnds.has(startIdx + index) ? onFork : undefined))}
+        {visible.map((event, index) => {
+          const row = renderEvent(event, startIdx + index, onFork && turnEnds.has(startIdx + index) ? onFork : undefined)
+          if (row == null || typeof row === 'boolean') return null
+          return (
+            <div
+              // biome-ignore lint/suspicious/noArrayIndexKey: Transcript ordinals are stable as events append and earlier chunks are revealed.
+              key={startIdx + index}
+              data-conversation-index={startIdx + index}
+              className="outline-none focus-visible:ring-1 focus-visible:ring-zinc-500 rounded"
+            >
+              {row}
+            </div>
+          )
+        })}
         {timeline.length === 0 && <div className="text-center text-zinc-600 py-10">No renderable events in this session.</div>}
       </div>
     </div>

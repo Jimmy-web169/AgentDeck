@@ -311,6 +311,126 @@ make stop        # free the API port (47841)
 make             # (no target) list everything
 ```
 
+### Container (alongside local development)
+
+The production image serves the built UI and API together. Docker and Docker
+Compose are not required for local development; these targets need Docker only.
+
+```bash
+make container-build
+make container-up       # http://localhost:47861; local 47841/47842 stay untouched
+make container-status
+make container-logs     # Ctrl+C stops following logs, not the container
+make container-stop    # stop the named container; retain its state
+make container-down    # stop/remove the named container; retain its state volume
+```
+
+After `container-stop`, use `docker start agentdeck-container` to resume it.
+After rebuilding, use `container-down` then `container-up` to recreate it.
+An existing container name or occupied port fails; these targets never kill a
+host listener or update host provider CLIs. `CONTAINER_PORT` defaults to **47861**
+and rejects 47841, 47842 and the configured local `PORT`. The image's internal
+47841 is published only on **127.0.0.1**. Do not use host networking or publish it
+to the LAN: AgentDeck is a local tool without remote-user authentication.
+
+```bash
+make container-up CONTAINER_PORT=47862
+# Independent instances also need distinct names and state volumes:
+make container-up CONTAINER_PORT=47863 CONTAINER_NAME=agentdeck-second \
+  CONTAINER_STATE_VOLUME=agentdeck-second-state
+```
+
+The image runs as the unprivileged `node` user. A fresh container intentionally
+has no tracked provider roots: its config base is `/data`, and the named volume
+`agentdeck-container-state` holds `/data/.agentdeck` (roots, probes, dashboards,
+handoffs and other AgentDeck state). It does not reuse the checkout's private
+state or automatically mount provider homes. Removing a container preserves the
+volume; deleting that volume is a separate, destructive operator action.
+
+To reuse your existing local setup without entering roots again:
+
+```bash
+make container-plan       # inspect the exact config files and source mounts
+make container-import     # copy once; refuses any nonempty state volume
+make container-up-local   # mount imported roots read-only at their original paths
+```
+
+Run these from the checkout, or set `AGENTDECK_CONFIG_DIR` to your existing
+configuration base. Import copies the active roots/probe JSON files and saved
+dashboards/handoffs, including supported legacy locations, into the container
+volume. IDs, labels, paths and file bytes are preserved. Runtime PIDs, sockets,
+caches and provider credentials are not copied. This is a one-time snapshot:
+later settings changes are independent; host transcript updates remain visible
+through the source mounts. Import only supports a new/empty volume, regular
+state files and at most 64 MiB of state. Missing roots fail visibly. Inspect the
+plan before import; it never modifies the source configuration.
+
+After recreation use **`container-up-local` again** to retain those mounts.
+`container-up` remains the clean, manually configured mode. `container-up-local`
+uses its recorded sources rather than `CONTAINER_RUN_ARGS`. Additional project
+directories can be supplied as a JSON array (same absolute path on both sides):
+
+```bash
+make container-up-local CONTAINER_PROJECT_DIRS='["/absolute/path/to/project"]'
+```
+
+| State or behavior | Local-to-container behavior |
+| --- | --- |
+| Tracked roots, IDs and labels | Imported unchanged; same-path read-only mounts avoid reconfiguration |
+| New container settings and dashboard records | Persist in the named volume across stop/remove/recreate |
+| Live provider transcripts | Read from the host; source edits/deletes/forks are blocked by read-only mounts |
+| Project resources/artifacts | Need the project's original absolute path mounted too; transcript cwd alone is not a mount |
+| Existing handoff exports | Bytes are retained, but their original host/base identity remains foreign; local-origin resume guards are not bypassed |
+| Existing terminals/dashboard processes | Host PIDs and tmux sessions cannot transfer into the Linux container |
+| Browser preferences, pins, workspaces and tabs | Stored in browser localStorage, not server JSON; port 47861 has a separate origin and does not inherit port 47842's settings |
+
+Directly sharing writable local state is possible with custom bind mounts, but
+it introduces concurrent writers and does not solve browser-origin or terminal
+isolation. The supplied import workflow therefore keeps application state
+independent while reusing source data.
+
+`CONTAINER_HOSTNAME` defaults to the state volume's name and is passed explicitly
+to Docker. Keep that hostname and the `/data` config base stable when reusing a
+volume: handoff records include them in their local-origin identity. Changing a
+container's name is safe if its volume and hostname remain the same. Manual
+`docker run` commands must also preserve `--hostname`; Docker's generated hostname
+changes on recreation. If a custom volume name is unsuitable as a hostname, set
+an explicit valid `CONTAINER_HOSTNAME` and retain it for subsequent runs.
+
+To browse existing transcripts, explicitly mount a provider-format export or
+provider data directory, then add its **container path** as a tracked root in the
+UI. For example, replace the source path below with an existing directory:
+
+```bash
+make container-up \
+  CONTAINER_RUN_ARGS='--mount type=bind,src=/absolute/provider-export,dst=/sources/claude,readonly'
+# Add /sources/claude as a Claude root in AgentDeck.
+```
+
+Read-only mounts allow browsing; edits/deletes/forks targeting those mounts will
+fail. For intentional management, mount a dedicated writable copy instead. The
+container user must be able to read mounted files (and write a writable copy);
+on Linux, check its UID/GID permissions. Never bake credentials into the image.
+Recorded project cwd values still refer to their original paths: mount projects
+at those same absolute paths if you need their resources. Changing a mount path
+does not migrate identities or make a host path available inside the container.
+
+**Scope:** this image supports the history/configuration dashboard and management
+of explicitly writable data. It does not install provider CLIs or ttyd, forward
+the separate terminal ports, or attach to host tmux sessions. Interactive agent
+launch/resume, AI handoff execution and terminal dashboards require the local
+installation. Container-native interactive terminals need a separate transport
+and provider-environment setup; publishing the main API port alone cannot enable
+them. The UI is shared with local mode and still exposes those actions, which
+report unavailable executables in this image.
+
+`CONTAINER_IMAGE` defaults to `agentdeck:local`. The Dockerfile uses the maintained
+Node 22 Debian image and installs dependencies from `package-lock.json`; it keeps
+build tools and private local files out of the runtime image. To fix the base to
+an approved tag or digest, use `docker build --build-arg NODE_IMAGE=<image> -t
+agentdeck:local .`. The separate `scripts/layout.Dockerfile` is only the pinned
+browser-test environment, not this application image.
+
 ### Prefer raw npm?
 
 ```bash
@@ -322,8 +442,9 @@ npm run build && npm start   # single-process production server serving dist/
 | Variable | Default | Description |
 | --- | --- | --- |
 | `AGENTDECK_PORT` | `47841` | API / SSE / WebSocket server port |
+| `AGENTDECK_HOST` | `127.0.0.1` | Bind address. The Docker image explicitly uses `0.0.0.0` internally; publish its host port on loopback only. |
 | `AGENTDECK_WEB_PORT` | `47842` | Vite dev-server port |
-| `AGENTDECK_CONFIG_DIR` | repo root | Directory holding the `roots.<provider>.json` files. When set, only the folders listed there are tracked — the real `~/.claude` / `~/.codex` are never added. Used by the demo fixture. |
+| `AGENTDECK_CONFIG_DIR` | repo root | Base for `.agentdeck/` state, with existing legacy paths still supported. When set, only explicitly tracked roots are used; real provider homes are never added automatically. Docker uses `/data`. |
 
 ## Optional: usage-limit meters for Claude
 

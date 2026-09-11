@@ -9,7 +9,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 export const INITIAL_TAIL = 40
 export const EARLIER_CHUNK = 40
 
-function scrollParentOf(el: HTMLElement | null) {
+export function scrollParentOf(el: HTMLElement | null) {
   let n = el?.parentElement
   while (n && n !== document.body) {
     const o = getComputedStyle(n).overflowY
@@ -73,5 +73,9 @@ export function useEarlier<T>(
   }, [startIdx, rootRef, showEarlier])
 
   const visible = startIdx > 0 ? timeline.slice(startIdx) : timeline
-  return { startIdx, visible, showEarlier, topRef, chunk }
+  const reveal = (index: number) => {
+    anchor.current = null
+    setStartIdx((current) => Math.min(current, Math.max(0, index)))
+  }
+  return { startIdx, visible, showEarlier, topRef, chunk, reveal }
 }

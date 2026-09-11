@@ -36,7 +36,14 @@ export function useSessionFlow(options: Options) {
     if (!options.active || !selection.id || !data.session.isSuccess) return
     enrich({ root: selection.root, id: selection.id, slug: data.ref.slug, title, cwd, project: name, rootLabel })
   }, [options.active, selection.root, selection.id, data.session.isSuccess, data.ref.slug, title, cwd, name, rootLabel, enrich])
-  const pane = useSessionPane({ provider: options.provider, root: selection.root, id: selection.id, view: selection.view, data: data.session.data })
+  const pane = useSessionPane({
+    provider: options.provider,
+    root: selection.root,
+    id: selection.id,
+    view: selection.view,
+    data: data.session.data,
+    active: options.active,
+  })
   const connection = useConnectionStatus(options.provider)
   const error = nav.error || data.session.error?.message || data.sessions.error?.message || nav.roots.error?.message || null
   return { nav, data, pane, connection, oversized, error }

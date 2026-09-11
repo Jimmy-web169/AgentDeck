@@ -110,7 +110,10 @@ export function probeLayout() {
     if (text && box.width === 0 && box.height > 0) report('zero-width-text', element, { text: text.slice(0, 80) })
     if ((box.right > innerWidth + 1 || box.left < -1) && !scrollAncestor(element))
       report('off-viewport', element, { left: box.left, right: box.right, viewport: innerWidth })
-    const parent = element.parentElement
+    // display: contents has no layout box; measure against the nearest actual
+    // parent box, otherwise valid persistent terminal wrappers appear to escape.
+    let parent = element.parentElement
+    while (parent && getComputedStyle(parent).display === 'contents') parent = parent.parentElement
     if (parent && css.position !== 'absolute' && css.position !== 'fixed') {
       const parentCss = getComputedStyle(parent),
         p = parent.getBoundingClientRect()
@@ -133,7 +136,8 @@ export function probeLayout() {
         const a = luminance(blend(fg, bg)),
           b = luminance(bg),
           contrast = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
-        if (contrast < 4.5) report('text-contrast', element, { ratio: Math.round(contrast * 100) / 100, foreground: css.color, background: bg })
+        if (contrast < 4.5)
+          report('text-contrast', element, { ratio: Math.round(contrast * 100) / 100, foreground: css.color, background: bg, text: text.slice(0, 160) })
       }
     }
   }

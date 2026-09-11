@@ -94,6 +94,7 @@ function Conversation({ data, subagentCtx = null, compact = false, onFork = null
     <SharedConversation
       data={data}
       compact={compact}
+      active={active}
       onFork={onFork}
       headerExtras={
         <>

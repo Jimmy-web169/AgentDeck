@@ -10,7 +10,11 @@ covers development; [spec/](spec/README.md) owns provider formats and contracts.
 
 AgentDeck is one local Node process and one React application. Node 22.18 or
 newer runs the TypeScript server directly, without a server build. Vite builds
-the browser application. The HTTP host binds to localhost.
+the browser application. The HTTP host binds to localhost by default.
+`AGENTDECK_HOST` allows an explicit container bridge bind; the production Docker
+workflow publishes that listener only on host loopback, on a separate port.
+Container state uses `/data/.agentdeck` in a named volume. Keep the container
+hostname and config base stable when reusing it: handoff origin includes both.
 
 | Owner | Responsibility |
 | --- | --- |
@@ -78,6 +82,7 @@ All new AgentDeck state uses the configured base's `.agentdeck/` directory:
 | Dashboard records | `dashboards/` |
 | Briefs and portable conversation exports | `handoffs/` |
 | Machine-local handoff launch receipts | `runtime/handoffs/` |
+| Imported container source mount list | `runtime/container-sources.json` |
 
 `server/shared/state.ts` retains legacy roots/probe files and handoff/dashboard
 directories until explicit migration. A current owner takes precedence; an

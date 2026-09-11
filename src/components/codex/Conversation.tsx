@@ -77,6 +77,7 @@ function Conversation({ data, onOpenSession, subagentCtx = null, compact = false
     <SharedConversation
       data={data}
       compact={compact}
+      active={active}
       onFork={onFork}
       headerExtras={
         <>

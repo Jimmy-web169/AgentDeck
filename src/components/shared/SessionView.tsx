@@ -70,9 +70,12 @@ import ConversationPending from './ConversationPending.tsx'
 import InfoDot from './InfoDot.tsx'
 import ErrorBoundary from './ErrorBoundary.tsx'
 import { ActivityIcon } from './icons.tsx'
+import { useState } from 'react'
+import SubagentExplorer from './SubagentExplorer.tsx'
 
 // Shared session layout preserves mounted conversations and terminal panes.
 export default function SessionView(ctx: SessionViewContext) {
+  const [multiView, setMultiView] = useState(false)
   const {
     api,
     SESSION_TABS,
@@ -144,6 +147,17 @@ export default function SessionView(ctx: SessionViewContext) {
               </button>
             ))}
           </div>
+          {tab === 'conversation' && subagentCtx && sessionData && (
+            <button
+              type="button"
+              aria-pressed={multiView}
+              onClick={() => setMultiView(!multiView)}
+              title="Watch the main conversation and subagents together"
+              className={`text-[12px] px-2.5 py-1.5 rounded-md border ${multiView ? 'border-sky-500/50 bg-sky-500/10 text-zinc-200' : 'border-zinc-700 text-zinc-400 hover:text-zinc-100'}`}
+            >
+              ◫ Multi-view
+            </button>
+          )}
           <div className="flex-1" />
           <div className="flex items-center gap-1.5">
             <RateLimitsBar usage={usage?.rateLimits} ts={usage?.ts} />
@@ -171,27 +185,41 @@ export default function SessionView(ctx: SessionViewContext) {
         )}
 
         {/* the conversation stays mounted (hidden) while another tab shows, so its
-            scroll position and expanded threads are exactly where the reader left them */}
+            expanded threads stay mounted; returning to Conversation shows latest */}
         <ErrorBoundary label="this conversation" resetKey={conversationBoundaryKey(root || '', active?.id || '', nestedSubagents ? openSlug || '' : undefined)}>
           <div className={tab === 'conversation' ? 'flex-1 min-h-0 flex flex-col' : 'hidden'}>
-            <div ref={mainRef} onScroll={onMainScroll} className="flex-1 overflow-y-auto">
-              {termDraft ||
-              (active && !active.oversized && !sessionData) ||
-              (navigationTarget && (navigationTarget.root !== root || (navigationTarget.id ? navigationTarget.id !== active?.id : navigationTarget.draft))) ? (
-                <ConversationPending target={terminalTarget} error={error} onRetry={refetchActive} />
-              ) : active?.oversized ? (
-                <Empty active={active} streamLabel={emptyStreamLabel} />
-              ) : sessionData ? (
-                <Conversation
-                  key={active?.id}
-                  data={sessionData}
-                  active={appActive}
-                  onOpenSession={openSessionById}
-                  subagentCtx={subagentCtx}
-                  onFork={canFork ? forkFromReply : null}
+            <div className={`conversation-panes flex-1 min-h-0 min-w-0 flex ${multiView && subagentCtx ? 'is-split' : ''}`}>
+              <section ref={mainRef} onScroll={onMainScroll} aria-label="Main transcript" className="flex-1 min-h-0 min-w-0 overflow-y-auto">
+                {termDraft ||
+                (active && !active.oversized && !sessionData) ||
+                (navigationTarget &&
+                  (navigationTarget.root !== root || (navigationTarget.id ? navigationTarget.id !== active?.id : navigationTarget.draft))) ? (
+                  <ConversationPending target={terminalTarget} error={error} onRetry={refetchActive} />
+                ) : active?.oversized ? (
+                  <Empty active={active} streamLabel={emptyStreamLabel} />
+                ) : sessionData ? (
+                  <Conversation
+                    key={active?.id}
+                    data={sessionData}
+                    active={appActive && tab === 'conversation'}
+                    onOpenSession={openSessionById}
+                    subagentCtx={subagentCtx}
+                    onFork={canFork ? forkFromReply : null}
+                  />
+                ) : (
+                  <Empty active={active} streamLabel={emptyStreamLabel} />
+                )}
+              </section>
+              {multiView && subagentCtx && (
+                <SubagentExplorer
+                  key={conversationBoundaryKey(root || '', active?.id || '', openSlug || '')}
+                  provider={providerId}
+                  ctx={subagentCtx}
+                  nested={nestedSubagents}
+                  active={appActive && tab === 'conversation'}
+                  Conversation={Conversation}
+                  onClose={() => setMultiView(false)}
                 />
-              ) : (
-                <Empty active={active} streamLabel={emptyStreamLabel} />
               )}
             </div>
             {shownPanes.map((pane) => {

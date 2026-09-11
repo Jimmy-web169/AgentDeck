@@ -82,6 +82,24 @@ export function getCheckOnlyScenes(H = 900): Scene[] {
       { name: 'empty-home', hash: '#/', seed: 'base', h: H, scenario: 'empty' },
       { name: 'error-root', hash: '#/', seed: 'base', h: H, scenario: 'error' },
       { name: 'long-content', hash: '#/', seed: 'full', h: H, scenario: 'stress' },
+      ...(['claude', 'codex', 'antigravity'] as const).map((provider) => ({
+        name: `multi-view-${provider}`,
+        hash: (fx: Fixture) => sessionHash(fx.target(provider === 'claude' ? fx.claudeStar : provider === 'codex' ? fx.codexStar : fx.agyStar)),
+        seed: 'full',
+        h: H,
+        scenario: 'folders',
+        act: async (cdp: Cdp) => {
+          const pane = `[...document.querySelectorAll('[aria-label="Main transcript"]')].find(element => element.clientHeight > 0)`
+          if (!(await cdp.waitFor(`${pane}?.querySelector('.conversation-content') != null`))) throw Error('Main transcript did not load')
+          await cdp.eval(`${pane}.closest('main').querySelector('button[title="Watch the main conversation and subagents together"]').click()`)
+          if (
+            !(await cdp.waitFor(
+              `!!document.querySelector('[aria-label="Subagent multi-view"]') && !document.querySelector('[aria-label="Subagent multi-view"]').innerText.includes('Loading')`
+            ))
+          )
+            throw Error('Subagent pane did not load')
+        },
+      })),
       {
         name: 'long-conversation',
         hash: (fx) => sessionHash(fx.target(fx.claudeStar)),
