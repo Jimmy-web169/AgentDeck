@@ -32,6 +32,12 @@ const scenes = [...getScenes(), ...getCheckOnlyScenes()].filter((scene) => scene
 export const layoutIssueKey = (row: Pick<LayoutRow, 'scene' | 'theme' | 'width'>, violation: Pick<LayoutViolation, 'rule' | 'selector'>) =>
   createHash('sha256').update(`${row.scene}|${row.theme}|${row.width}|${violation.rule}|${violation.selector}`).digest('hex')
 
+// Geometry rules read glyph metrics, which differ per platform, so those
+// findings only speak for the operating systems that recorded them. Contrast
+// is computed from colours alone: the same element yields the same ratio on
+// every renderer, so one platform's capture speaks for the rest.
+const platformAgnosticRules = new Set(['text-contrast'])
+
 export function knownLayoutIssue(
   baseline: LayoutBaseline,
   row: Pick<LayoutRow, 'scene' | 'theme' | 'width'>,
@@ -41,7 +47,9 @@ export function knownLayoutIssue(
   if (violation.rule === 'scene-not-ready') return false
   if (!(baseline.platforms || ['darwin']).includes(platform)) return false
   const key = layoutIssueKey(row, violation)
-  return !!baseline.known[key] && (!baseline.exclusive?.[key] || baseline.exclusive[key].includes(platform))
+  if (!baseline.known[key]) return false
+  const exclusive = baseline.exclusive?.[key]
+  return !exclusive || platformAgnosticRules.has(violation.rule) || exclusive.includes(platform)
 }
 
 export async function waitForSettledScene(

@@ -206,8 +206,12 @@ privacy and parser contracts. There is no lint allowance baseline.
 `npm run snapshot -- --label <label>` captures API responses and scene fingerprints
 against synthetic fixtures under `tmp/`. `npm run check:layout` covers three
 themes, three widths and Provider/Folder modes. Layout and text differences
-must be explained; automated checks supplement visual inspection. Reference
-copies can run their original JavaScript or current TypeScript bootstrap.
+must be explained; automated checks supplement visual inspection. Its baseline
+in `scripts/layout-baseline.json` records which platforms observed each finding:
+geometry rules read glyph metrics and stay scoped to those platforms, while a
+contrast ratio is computed from colours alone, so one platform's capture speaks
+for the rest. Reference copies can run their original JavaScript or current
+TypeScript bootstrap.
 Snapshot requires `AGENTDECK_CONFIG_DIR` pointing to a generated fixture;
 see CONTRIBUTING for setup.
 

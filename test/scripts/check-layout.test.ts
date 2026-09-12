@@ -56,6 +56,24 @@ test('layout baselines do not allow platform-specific findings on another operat
   assert.equal(knownLayoutIssue({ ...baseline, exclusive: {} }, row, violation, 'darwin'), true)
 })
 
+test('a contrast capture speaks for every platform; a geometry capture does not', () => {
+  const row = { scene: 'session-conversation', theme: 'midnight', width: 1440 }
+  const contrast = { rule: 'text-contrast', selector: 'main > span' }
+  const clipping = { rule: 'horizontal-clipping', selector: 'main > span' }
+  const baseline: LayoutBaseline = {
+    platforms: ['darwin', 'linux'],
+    known: { [layoutIssueKey(row, contrast)]: 'WP-5', [layoutIssueKey(row, clipping)]: 'WP-5' },
+    exclusive: { [layoutIssueKey(row, contrast)]: ['darwin'], [layoutIssueKey(row, clipping)]: ['darwin'] },
+  }
+  assert.equal(knownLayoutIssue(baseline, row, contrast, 'darwin'), true)
+  assert.equal(knownLayoutIssue(baseline, row, contrast, 'linux'), true)
+  assert.equal(knownLayoutIssue(baseline, row, clipping, 'darwin'), true)
+  assert.equal(knownLayoutIssue(baseline, row, clipping, 'linux'), false)
+  // an unrecorded contrast finding is still new, and an unlisted platform stays unfiltered
+  assert.equal(knownLayoutIssue(baseline, row, { ...contrast, selector: 'main > em' }, 'linux'), false)
+  assert.equal(knownLayoutIssue(baseline, row, contrast, 'win32'), false)
+})
+
 test('layout readiness failures are never baselined and legacy captures belong only to darwin', () => {
   const row = { scene: 'stats', theme: 'light', width: 900 }
   const violation = { rule: 'scene-not-ready', selector: 'document' }

@@ -52,6 +52,10 @@ Use five gates for behavior-preserving refactors and substantial changes:
 Capture before changing the runtime and preserve the reference. Snapshots run
 the captured runtime's own tests and use synthetic data. Never normalize away
 an unexplained difference or update a baseline merely to make a check pass.
+G4 runs on Linux in CI against a baseline whose entries name the platforms that
+observed them, so a Windows or macOS pass is not evidence for that job; a
+geometry finding recorded elsewhere still counts as new there, while a contrast
+finding does not.
 Test counts distinguish passed, skipped and failed cases; a skipped test is
 not a pass. The historical minimum is 247 tests / 244 passes / 3 skips, and
 later checkpoints must account for their additional cases too.

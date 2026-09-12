@@ -37,6 +37,15 @@ All notable changes to AgentDeck are recorded here. The format follows
   precedence over duplicate terminal/recent entries and retain source identities.
 
 ### Fixed
+- The layout gate no longer reports a recorded contrast finding as new because
+  another operating system recorded it. A baseline entry carries the platforms
+  that observed it, which is right for geometry rules — glyph metrics differ per
+  renderer — but a contrast ratio is computed from colours alone, so the same
+  element yields the same ratio everywhere. The Debian CI job failed from its
+  first run on 249 `text-contrast` findings the baseline already accepted under
+  macOS, all in the conversation and sub-agent scenes whose baseline had been
+  recaptured only there. The run still reports the same 1886 violations; only
+  the already-accepted 249 stop counting as new.
 - Every start path now checks that `node_modules` matches `package.json` and the
   lockfile and installs what is missing, instead of only testing that the
   directory exists. A pull that added a dependency used to leave the tree
