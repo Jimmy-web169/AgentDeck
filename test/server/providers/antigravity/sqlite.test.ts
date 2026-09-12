@@ -67,7 +67,14 @@ describe('antigravity/antigravity/sqlite', async () => {
       'C:\\Users\\demo\\code\\orbit-api',
       'drive-letter URIs decode as Windows paths on every platform'
     )
-    if (process.platform !== 'win32') assert.equal(uriToPath('file:///home/demo/code/orbit-api'), '/home/demo/code/orbit-api')
+    // Windows used to reject a rootless URI (ERR_INVALID_FILE_URL_PATH) and hand back
+    // the raw URI, which reached the handoff store as a cwd of "file:///home/...".
+    assert.equal(uriToPath('file:///home/demo/code/orbit-api'), '/home/demo/code/orbit-api', 'rootless URIs decode as posix paths on every platform')
+    // A URI with a host is the one shape left to the platform: posix parsing rejects it.
+    assert.equal(
+      uriToPath('file://wsl.localhost/Ubuntu/home/demo'),
+      process.platform === 'win32' ? String.raw`\\wsl.localhost\Ubuntu\home\demo` : 'file://wsl.localhost/Ubuntu/home/demo'
+    )
     assert.equal(uriToPath(null), null)
     assert.equal(uriToPath('/already/a/path'), '/already/a/path')
   })

@@ -37,13 +37,21 @@ All notable changes to AgentDeck are recorded here. The format follows
   precedence over duplicate terminal/recent entries and retain source identities.
 
 ### Fixed
-- `make all`, `make be`, `make fe` and `make build` now check that
-  `node_modules` matches `package.json` and the lockfile, and install what is
-  missing, instead of only testing that the directory exists. A pull that added
-  a dependency used to leave the tree half-installed: the servers started and
-  Vite reported itself ready, then every page failed on "Failed to resolve
-  import". New target `make deps` (`npm run check:deps`) runs the same check on
-  its own; a tree that is absent entirely is still sent to `make init`.
+- Every start path now checks that `node_modules` matches `package.json` and the
+  lockfile and installs what is missing, instead of only testing that the
+  directory exists. A pull that added a dependency used to leave the tree
+  half-installed: the servers started and Vite reported itself ready, then every
+  page failed on "Failed to resolve import". The guard runs from the npm
+  pre-hooks, so `npm run dev` — the native-Windows route — is covered exactly
+  like `make all`, and it stays silent on a healthy tree. New: `make deps` and
+  `npm run check:deps` run the check on its own; a tree that is absent entirely
+  is still sent to `make init`.
+- Antigravity sessions exported on Windows recorded a working folder of
+  `file:///home/...` instead of the path itself. A rootless `file://` URI was
+  decoded in the platform's own mode, which Windows rejects, and the raw URI was
+  handed back. The URI's shape now decides: drive-letter as a Windows path,
+  rootless as a posix path, and only a URI carrying a host is left to the
+  platform — so a home copied between machines reads the same on both.
 
 ### Removed
 - The unreleased application Docker image, container Make targets and settings
