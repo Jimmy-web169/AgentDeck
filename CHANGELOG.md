@@ -10,22 +10,29 @@ All notable changes to AgentDeck are recorded here. The format follows
 - Returning to a conversation now opens at the latest message instead of
   restoring an older remembered scroll position. While reading an active
   conversation, live appends still preserve an intentionally older position.
+- Conversation navigation floats transparently along the full right edge of
+  each transcript pane without reducing its width. Evenly spaced question ticks
+  follow your reading position; brushing one shows the question's opening in the
+  margin beside the messages, dwelling unfolds it in place, and clicking it jumps
+  there. Two arrows step between questions and run to the first or latest message
+  when held or Shift-clicked.
+- The empty new-tab picker lists Home, Being written, Running terminals, then
+  Recent sessions before pinned items and projects. Writing sessions take
+  precedence over duplicate terminal/recent entries and retain source identities.
+
+### Removed
+- The unreleased application Docker image, container Make targets and settings
+  import helper. AgentDeck runs locally with the installed provider CLIs; existing
+  container volumes are retained. The Linux layout-test image remains in CI.
 
 ### Added
-- A shared conversation navigator with first/latest arrows and a user-prompt
-  index that can reveal older, initially unloaded messages. Opening or returning
+- A shared conversation navigator with question ticks and hold-to-edge arrows
+  that can reveal older, initially unloaded messages. Opening or returning
   to a conversation now shows its latest messages; live updates preserve an
   active reader's position when reading earlier history.
 - Conversation multi-view keeps the main transcript mounted alongside a
   selectable subagent list and independently scrolling child transcript. Narrow
   windows stack both panes; the same UI supports nested and independent agents.
-- Container settings preview/import and same-path read-only source mounts reuse
-  existing root IDs without reconfiguration. One-time imports refuse nonempty
-  volumes and keep subsequent container state independent of the local app.
-- A production Dockerfile and isolated container Make targets, serving the built
-  dashboard on host loopback port 47861 with a separate persistent state volume.
-  The server's bind address is configurable; local startup remains loopback-only.
-  Provider data mounts are explicit, and interactive host terminals remain local.
 - Home can be selected from the new-tab picker. Its project list follows the
   sidebar mode: Source keeps provider projects separate; Folder combines each
   physical folder's sources, respects sidebar filters, and offers source-specific

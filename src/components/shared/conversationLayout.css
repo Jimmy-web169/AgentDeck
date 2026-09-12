@@ -6,43 +6,224 @@
   overflow-wrap: anywhere;
 }
 
-.conversation-navigation-anchor {
-  position: sticky;
-  top: 12px;
-  height: 0;
-  z-index: 20;
-}
+/* The rail overlays the pane's right edge without taking transcript width.
+   No track, no capsule, no bubble, no side label, no ellipsis: evenly spaced
+   ticks, a neutral mark for the reading position, and the question itself
+   appearing in the tick's own row. Brushing is pale and still; dwelling clears
+   the strip and the chosen tick's magnification is its exit, so only the
+   question remains and clicking it jumps. */
 .conversation-navigation {
-  position: absolute;
-  right: -8px;
-  top: 0;
-  opacity: 0.25;
-  transition: opacity 150ms;
-}
-.conversation-navigation:hover,
-.conversation-navigation:focus-within,
-.conversation-navigation:has([aria-expanded="true"]) {
-  opacity: 1;
+  position: fixed;
+  z-index: 20;
+  width: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  --conversation-ambient: 0.16;
+  --conversation-amp: 2.4;
+  --conversation-hold: 420ms;
 }
 .conversation-navigation-button {
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--conversation-button-size);
+  height: var(--conversation-button-size);
+  flex: 0 0 var(--conversation-button-size);
+  min-height: 0;
+  margin: 4px 0;
   border-radius: 8px;
+  color: rgb(var(--zinc-300));
+  opacity: calc(var(--conversation-ambient) + 0.18);
+  transition:
+    opacity 170ms ease,
+    color 170ms ease;
+  touch-action: none;
+  user-select: none;
 }
 .conversation-navigation-button:hover,
 .conversation-navigation-button:focus-visible {
-  background: rgb(var(--ink-600));
+  opacity: 1;
+  color: rgb(var(--zinc-100));
+}
+.conversation-navigation-button:disabled {
+  opacity: 0.12;
+  cursor: default;
+}
+.conversation-navigation-button svg {
+  position: relative;
+  z-index: 1;
+}
+/* Fills over exactly the hold threshold, so the gesture is visible before it
+   commits and a quick click can never reach the edge by accident. */
+.conversation-navigation-charge {
+  position: absolute;
+  inset: 2px;
+  border-radius: 7px;
+  background: rgb(var(--sky-300) / 0.22);
+  box-shadow: inset 0 0 0 1px rgb(var(--sky-300) / 0.45);
+  transform: scale(0.35);
+  opacity: 0;
+  transition:
+    transform var(--conversation-hold) linear,
+    opacity 120ms ease;
+}
+.conversation-navigation-button.is-holding .conversation-navigation-charge {
+  transform: scale(1);
+  opacity: 1;
+}
+/* Overflow stays visible so the question can reach into the gutter; the
+   strip's ends dissolve through per-tick opacity instead of being clipped. */
+.conversation-navigation-dots {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+}
+.conversation-navigation-strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  will-change: transform;
+}
+.conversation-navigation-dot {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  min-height: 0;
+  --conversation-edge: 0;
+}
+/* Off-rail ticks leave the accessibility tree and the layout, not only the eye. */
+.conversation-navigation-dot.is-off {
+  visibility: hidden;
+  pointer-events: none;
+}
+.conversation-navigation-tick {
+  display: block;
+  width: 10px;
+  height: 1.5px;
+  border-radius: 1px;
+  background: rgb(var(--zinc-300));
+  opacity: calc(var(--conversation-ambient) * var(--conversation-edge));
+  /* Staggered on purpose: the strip clears first, then the chosen tick grows
+     as it hands over to the text. Changing everything at once reads as a pop. */
+  transition:
+    transform 420ms cubic-bezier(0.22, 1, 0.36, 1) 66ms,
+    opacity 330ms ease,
+    background-color 350ms ease 66ms;
+}
+.conversation-navigation-dot.is-hover .conversation-navigation-tick {
+  opacity: calc(0.75 * var(--conversation-edge));
+  background: rgb(var(--zinc-200));
+}
+/* The reading position is a neutral bright mark; colour belongs to the pointer. */
+.conversation-navigation-dot[aria-current] .conversation-navigation-tick {
+  width: 15px;
+  background: rgb(var(--zinc-100));
+  opacity: calc(0.72 * var(--conversation-edge));
+}
+/* While one question is being read the whole strip leaves, including the
+   chosen tick: its magnification is the exit, and only the text remains. */
+.conversation-navigation-dots.is-focus .conversation-navigation-tick {
+  opacity: 0;
+}
+.conversation-navigation-dot.is-dwell .conversation-navigation-tick {
+  opacity: 0;
+  background: rgb(var(--sky-300));
+  transform: translateX(-3px) scale(var(--conversation-amp));
+}
+.conversation-navigation-dot:focus-visible {
+  outline: none;
+}
+.conversation-navigation-dot:focus-visible .conversation-navigation-tick {
+  outline: 1px solid rgb(var(--sky-300) / 0.7);
+  outline-offset: 3px;
+}
+/* The whole question is always in the DOM. Brushing uncovers one line of it and
+   dwelling lets the rest unfold, so the text is never swapped under the reader.
+   Its width is the measured gutter beside the message column. */
+.conversation-navigation-text {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--conversation-gutter);
+  text-align: right;
+  font-size: 11.5px;
+  line-height: 1.55;
+  letter-spacing: 0.015em;
+  color: rgb(var(--zinc-300));
+  white-space: normal;
+  overflow-wrap: anywhere;
+  overflow: hidden;
+  max-height: 1.55em;
+  text-shadow:
+    0 0 7px rgb(var(--ink-900)),
+    0 0 3px rgb(var(--ink-900));
+  /* Hidden, not merely transparent: resting text must not reach innerText,
+     assistive technology or the layout probe. */
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 165ms ease,
+    color 350ms ease 66ms,
+    max-height 440ms cubic-bezier(0.22, 1, 0.36, 1) 110ms,
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.conversation-navigation-dot.is-hover .conversation-navigation-text {
+  visibility: visible;
+  opacity: 1;
+}
+.conversation-navigation-dot.is-dwell .conversation-navigation-text {
+  visibility: visible;
+  opacity: 1;
+  color: rgb(var(--sky-300));
+  pointer-events: auto;
+  cursor: pointer;
+}
+/* A question too long to unfold trails off instead of being cut square. */
+.conversation-navigation-dot.is-clipped .conversation-navigation-text {
+  mask-image: linear-gradient(to bottom, black calc(100% - 26px), transparent);
+}
+/* Only a dwell in a pane too narrow for the gutter gets a soft ground. It
+   fades out to the left: no border, no radius, no card. */
+.conversation-navigation-dot.is-scrim .conversation-navigation-text {
+  background: linear-gradient(to right, rgb(var(--ink-900) / 0) 0, rgb(var(--ink-900) / 0.95) 46px, rgb(var(--ink-900) / 0.95) 100%);
+  padding: 5px 0 5px 46px;
+}
+/* A gutter too narrow to hold a readable line shows no text while brushing
+   rather than covering a message; the question is still one dwell away. */
+.conversation-navigation-dot.is-tight .conversation-navigation-text {
+  width: clamp(220px, var(--conversation-gutter), 320px);
+}
+.conversation-navigation-dot.is-tight.is-hover .conversation-navigation-text {
+  visibility: hidden;
+  opacity: 0;
 }
 @media (hover: none) {
   .conversation-navigation {
-    opacity: 0.8;
+    --conversation-ambient: 0.5;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .conversation-navigation {
+  .conversation-navigation-button,
+  .conversation-navigation-charge,
+  .conversation-navigation-tick,
+  .conversation-navigation-text {
     transition: none;
   }
 }

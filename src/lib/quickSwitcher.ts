@@ -25,6 +25,7 @@ export interface SearchTarget extends Target {
   sessionCount?: number
   lastActivity?: number
   at?: number
+  lastTs?: string | number | null
   firstPrompt?: string
   lastUserPrompt?: string
   oversized?: boolean
@@ -204,11 +205,6 @@ export function buildGroups({
         },
       ],
     })
-  if (folderMode && (foldersError || foldersLoading))
-    groups.push({
-      title: 'Folder catalog',
-      rows: [foldersError ? { kind: 'empty', key: 'folder-error', text: foldersError } : { kind: 'loading', key: 'folder-loading', text: 'Loading folders…' }],
-    })
   const folderProjectRow = (folder: Folder, hits?: Hits | null): SearchAction => ({
     kind: 'folder-project',
     key: folderItemKey(folder.id),
@@ -219,12 +215,46 @@ export function buildGroups({
     count: folder.sessionCount,
     hits,
   })
+  const writing: SearchAction[] = []
+  if (!level && !q && live.ids.size) {
+    // Demand only projects with observed writes; use the existing Query-backed
+    // index, including sessions not yet opened or added to recent history.
+    const demanded = index.projects.filter(isLiveP).flatMap((project) => index.sessionsFor(project.provider, project.root, project.slug) || [])
+    const candidates: SearchTarget[] = [
+      ...(index.cachedSessions?.() || []),
+      ...demanded,
+      ...recent,
+      ...terminals.filter((terminal) => terminal.id).map((terminal) => ({ ...liveTarget(terminal), at: Number(terminal.startedAt) || 0 })),
+    ]
+    const unique = new Map<string, SearchTarget>()
+    for (const session of candidates) {
+      const key = quickSessionKey(session)
+      if (session.id && session.provider && session.root && isLiveS(session) && !unique.has(key)) unique.set(key, session)
+    }
+    writing.push(
+      ...[...unique.values()]
+        .sort((a, b) => (Number(b.at) || new Date(b.lastTs || 0).getTime() || 0) - (Number(a.at) || new Date(a.lastTs || 0).getTime() || 0))
+        .map((session) => {
+          const row = sessRow(session, null, session.project, session.lastTs || session.at)
+          const terminal = terminals.find((entry) => entry.key && entry.id && quickSessionKey(entry) === row.key)
+          return terminal ? { ...row, running: true, target: { ...liveTarget(terminal), ...row.target } } : row
+        })
+    )
+    if (writing.length) groups.push({ title: 'Being written', rows: writing })
+  }
+  if (folderMode && (foldersError || foldersLoading))
+    groups.push({
+      title: 'Folder catalog',
+      rows: [foldersError ? { kind: 'empty', key: 'folder-error', text: foldersError } : { kind: 'loading', key: 'folder-loading', text: 'Loading folders…' }],
+    })
+  const writingKeys = new Set(writing.map((row) => row.key))
   const running = terminals
     .filter(
       (t) =>
         t.provider &&
         t.root &&
         t.key &&
+        (!t.id || !writingKeys.has(quickSessionKey(t))) &&
         (!level ||
           (sources
             ? sources.some((source) => matchesSource(t, source))
@@ -249,7 +279,7 @@ export function buildGroups({
     })
     .filter((r) => r.match)
     .sort((a, b) => b.at - a.at || a.key.localeCompare(b.key))
-  if (running.length) groups.push({ title: 'Live sessions', rows: running })
+  if (running.length) groups.push({ title: 'Running terminals', rows: running })
   const runningKeys = new Set(running.map((r) => targetKey(r.target)))
 
   if (level) {
@@ -300,17 +330,17 @@ export function buildGroups({
 
   if (!q) {
     const pinned = pins
-      .filter((p) => isFolderPin(p) || !runningKeys.has(targetKey(p)))
+      .filter((p) => isFolderPin(p) || (!runningKeys.has(targetKey(p)) && !writingKeys.has(quickSessionKey(p))))
       .map((p) => (isFolderPin(p) ? folderRow(p) : p.id ? sessRow(p, null, p.project, null) : pinProjRow(p)))
-    if (pinned.length) groups.push({ title: 'Pinned', rows: pinned })
     const pinnedKeys = new Set(pinned.map((r) => r.key))
     // recent = sessions only (projects have their own list right below)
     const rec = recent
-      .filter((t) => t.id && !runningKeys.has(targetKey(t)))
+      .filter((t) => t.id && !runningKeys.has(targetKey(t)) && !writingKeys.has(quickSessionKey(t)))
       .map((t) => sessRow(t, null, t.project, t.at))
       .filter((r) => !pinnedKeys.has(r.key))
       .slice(0, RECENT_ROWS)
     if (rec.length) groups.push({ title: 'Recent sessions', rows: rec })
+    if (pinned.length) groups.push({ title: 'Pinned', rows: pinned })
     const projs = folderMode
       ? visibleFolders
           .map((folder) => folderProjectRow(folder))
@@ -318,7 +348,7 @@ export function buildGroups({
           .slice(0, RECENT_PROJECT_ROWS)
       : index.projects.slice(0, RECENT_PROJECT_ROWS).map((p) => projRow(p))
     if (projs.length) groups.push({ title: folderMode ? 'Folders' : 'Projects', rows: projs })
-    if (!rec.length && !projs.length && !running.length && (!folderMode || (!pinned.length && !foldersError && !foldersLoading)))
+    if (!rec.length && !projs.length && !running.length && !writing.length && (!folderMode || (!pinned.length && !foldersError && !foldersLoading)))
       groups.push({
         title: folderMode ? 'Folders' : 'Projects',
         rows: [

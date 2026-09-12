@@ -17,10 +17,7 @@ and browser tests to Vitest; it accounts for every discovered test file.
 Its port-cleanup hook stops existing listeners, so use it only for your own
 development instance. The backend runs TypeScript directly; Vite builds the UI.
 `npm run build` creates `dist/`, and `npm start` serves it from the local API.
-The server binds to localhost by default and applies the existing browser-origin
-guard. `AGENTDECK_HOST=0.0.0.0` is an explicit opt-in for Docker bridge publishing;
-the container Make targets publish only on host loopback, separately from local
-development. See the [container instructions](README.md#container-alongside-local-development).
+The server binds to localhost and applies the existing browser-origin guard.
 
 To verify alongside an existing instance, build and run on separate ports:
 

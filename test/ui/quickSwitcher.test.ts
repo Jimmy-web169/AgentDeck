@@ -3,9 +3,10 @@ import type { Pin } from '../../src/lib/pins.ts'
 import { buildGroups, pinTargetOf } from '../../src/lib/quickSwitcher.ts'
 import { test } from 'vitest'
 import assert from 'node:assert/strict'
-import { targetKey, liveTarget } from '../../src/lib/tabs.ts'
+import { targetKey, liveTarget, sameTarget } from '../../src/lib/tabs.ts'
 import type { Folder } from '../../src/api/models.ts'
 import type { NavProject } from '../../src/api/useNavIndex.ts'
+import { liveSessionKey, liveProjectKey } from '../../shared/identity.ts'
 
 function action(row: ReturnType<typeof buildGroups>[number]['rows'][number] | undefined) {
   assert.ok(row && 'target' in row, 'expected an actionable search result')
@@ -44,7 +45,7 @@ test('new-tab picker lists idle live drafts without transcripts or recent histor
   const groups = buildGroups(args)
   assert.equal(groups[0].title, 'Navigation')
   assert.equal(action(groups[0].rows[0]).kind, 'home')
-  assert.equal(groups[1].title, 'Live sessions')
+  assert.equal(groups[1].title, 'Running terminals')
   assert.deepEqual(
     groups[1].rows.map((r) => action(r).primary),
     ['Second draft', 'First draft']
@@ -66,6 +67,92 @@ test('saved live sessions are not repeated in recent sessions', () => {
     groups.some((g) => g.title === 'Recent sessions'),
     false
   )
+})
+
+test('new-tab activity groups lead recent history without duplicating writing terminals or pins', () => {
+  const writing = mockNavSession({ provider: 'codex', root: 'r', slug: '/work/same', id: 'writing', title: 'Current work', lastTs: '2026-09-12T12:00:00Z' })
+  const older = mockNavSession({ id: 'older', title: 'Previous work' })
+  const pinned = { provider: 'codex', root: 'r', slug: '/work/pin', id: 'pin', title: 'Pinned work' }
+  const groups = buildGroups({
+    ...args,
+    index: mockNavIndex({ cachedSessions: () => [writing] }),
+    live: { ids: new Set([liveSessionKey('codex', 'r', 'writing')]), slugs: new Set() },
+    terminals: [{ ...a, id: 'writing' }, b],
+    recent: [writing, older],
+    pins: [writing, pinned],
+  })
+  assert.deepEqual(
+    groups.map((group) => group.title),
+    ['Navigation', 'Being written', 'Running terminals', 'Recent sessions', 'Pinned']
+  )
+  const active = action(groups[1].rows[0])
+  assert.equal(active.kind, 'session')
+  assert.equal(active.target.id, 'writing')
+  assert.equal(active.live, true)
+  assert.equal(action(groups[2].rows[0]).target.terminalKey, b.key)
+  assert.equal(action(groups[3].rows[0]).target.id, 'older')
+  assert.equal(groups.flatMap((group) => group.rows).filter((row) => 'target' in row && row.target.id === 'writing').length, 1)
+})
+
+test('writing terminals retain their launch identity before and after the session index loads', () => {
+  const terminal = { ...a, id: 'writing', slug: '/work/same' }
+  const session = mockNavSession({ ...terminal, title: 'Indexed title' })
+  for (const loaded of [false, true]) {
+    const groups = buildGroups({
+      ...args,
+      recent: [],
+      index: mockNavIndex({ cachedSessions: () => (loaded ? [session] : []), sessionsFor: () => (loaded ? [session] : null) }),
+      live: { ids: new Set([liveSessionKey('codex', 'r', 'writing')]), slugs: new Set() },
+      terminals: [terminal, b],
+      sidebarMode: 'folder',
+      foldersError: 'Fixture catalog unavailable',
+    })
+    assert.deepEqual(groups.map((group) => group.title).slice(0, 4), ['Navigation', 'Being written', 'Folder catalog', 'Running terminals'])
+    const row = action(groups[1].rows[0])
+    assert.equal(row.running, true)
+    assert.equal(row.live, true)
+    assert.equal(row.target.terminalKey, terminal.key)
+    assert.equal(row.target.launchId, terminal.launchId)
+    assert.equal(row.target.kind, 'tmux')
+    assert.equal(sameTarget(row.target, liveTarget(a)), true)
+    assert.equal(groups.flatMap((group) => group.rows).filter((item) => 'target' in item && item.target.id === 'writing').length, 1)
+    assert.equal(action(groups[3].rows[0]).target.terminalKey, b.key)
+  }
+})
+
+test('writing sessions can come from a live project before it appears in recent history and retain account identity', () => {
+  const session = mockNavSession({ provider: 'codex', root: 'r', slug: 'active-project', id: 'same-id', title: 'Writing now' })
+  const calls: string[][] = []
+  const project: NavProject = {
+    provider: 'codex',
+    providerLabel: 'Codex',
+    root: 'r',
+    rootLabel: 'Work',
+    exists: true,
+    probe: null,
+    slug: 'active-project',
+    cwd: '/work/active',
+    path: '/work/active',
+    name: 'Active',
+    sessionCount: 1,
+    lastActivity: 1,
+  }
+  const groups = buildGroups({
+    ...args,
+    recent: [],
+    index: mockNavIndex({
+      projects: [project],
+      sessionsFor: (...ref) => {
+        calls.push(ref)
+        return [session]
+      },
+    }),
+    live: { ids: new Set([liveSessionKey('codex', 'r', 'same-id')]), slugs: new Set([liveProjectKey('codex', 'r', 'active-project')]) },
+    terminals: [{ ...a, root: 'other-account', id: 'same-id' }],
+  })
+  assert.deepEqual(calls, [['codex', 'r', 'active-project']])
+  assert.equal(action(groups.find((group) => group.title === 'Being written')?.rows[0]).target.root, 'r')
+  assert.equal(action(groups.find((group) => group.title === 'Running terminals')?.rows[0]).target.root, 'other-account')
 })
 
 const questionSession = mockNavSession({
@@ -316,7 +403,7 @@ test('folder filters do not hide global live, pinned or recent navigation outsid
   assert.equal(rows.filter((row) => row.kind === 'terminal').length, 2)
   assert.deepEqual(
     rows.filter((row) => row.kind === 'session').map((row) => action(row).target.id),
-    ['pinned', 'recent']
+    ['recent', 'pinned']
   )
   assert.equal(rows.filter((row) => row.kind === 'folder-project').length, 0)
   assert.equal(allRows({ ...options, q: 'Second' }).filter((row) => row.kind === 'terminal').length, 1)

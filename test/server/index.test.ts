@@ -16,11 +16,13 @@ async function connect(port: string) {
   }
 }
 
-for (const host of [undefined, '0.0.0.0']) {
-  test(`startup binds ${host || 'loopback by default'} and shuts down its own listener`, { timeout: 15000 }, async (t) => {
+for (const legacyHost of [undefined, '0.0.0.0']) {
+  test(`startup binds loopback ${legacyHost ? 'despite the retired container override' : 'by default'} and shuts down its own listener`, {
+    timeout: 15000,
+  }, async (t) => {
     const env: NodeJS.ProcessEnv = { ...process.env, AGENTDECK_PORT: '0', AGENTDECK_CONFIG_DIR: temporaryDirectory('index-test-') }
     delete env.AGENTDECK_HOST
-    if (host) env.AGENTDECK_HOST = host
+    if (legacyHost) env.AGENTDECK_HOST = legacyHost
     const child = spawn(process.execPath, [fileURLToPath(new URL('../../server/index.ts', import.meta.url))], { env, stdio: ['ignore', 'pipe', 'pipe'] })
     const exited = once(child, 'exit')
     t.after(async () => {
@@ -37,7 +39,7 @@ for (const host of [undefined, '0.0.0.0']) {
         const match = /AgentDeck API.*http:\/\/localhost:(\d+)\s+\(bind: ([^)]+)\)/.exec(output)
         if (match) {
           child.stdout.off('data', onData)
-          if (match[2] !== (host || '127.0.0.1')) reject(new Error(`Expected bind ${host || '127.0.0.1'}, got ${match[2]}`))
+          if (match[2] !== '127.0.0.1') reject(new Error(`Expected bind 127.0.0.1, got ${match[2]}`))
           else resolve(match[1])
         }
       }

@@ -121,7 +121,7 @@ export default function Conversation({
   }, [jump, active])
   return (
     <div ref={rootRef} className={`conversation-content ${compact ? 'px-3 py-3' : 'mx-auto max-w-3xl px-4 py-6'}`}>
-      {active && !compact && <ConversationNavigator timeline={timeline} onJump={navigate} />}
+      {active && !compact && <ConversationNavigator timeline={timeline} rootRef={rootRef} onJump={navigate} />}
       <div className={`${compact ? 'mb-3 pb-3' : 'mb-5 pb-4'} border-b border-zinc-700/60`}>
         <h1 className={`${compact ? 'text-[14px]' : 'text-lg'} font-semibold text-zinc-100`}>{summary.title}</h1>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-zinc-500">

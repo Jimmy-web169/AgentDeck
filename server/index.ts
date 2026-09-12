@@ -9,9 +9,7 @@ import { dashboards } from './deck/dashboards.ts'
 
 const PORT = Number(process.env.AGENTDECK_PORT || 47841)
 const DEV_UI_PORT = Number(process.env.AGENTDECK_WEB_PORT || 47842)
-// Docker bridge publishing requires an explicit non-loopback bind inside the
-// container. Local starts keep the existing loopback-only default.
-const HOST = process.env.AGENTDECK_HOST?.trim() || '127.0.0.1'
+const HOST = '127.0.0.1'
 // Provider imports are declarative; process-owned terminal registration begins here.
 for (const provider of Object.values(PROVIDERS)) {
   if (provider.terminal) registerTerminalProvider(provider.terminal)

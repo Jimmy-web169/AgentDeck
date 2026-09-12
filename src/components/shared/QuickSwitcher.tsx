@@ -36,7 +36,7 @@ import type { Target } from '../../../shared/types.js'
 //               came from with your query restored.
 //   Enter       opens (a project → its live or newest session)
 //   Ctrl+Enter  opens in a new tab
-//   pin         every row has a pin toggle; pinned items lead the empty query
+//   pin         every row has a pin toggle; activity and recent sessions lead the empty query
 //
 // Motion: the panel pops in/out, levels slide sideways, the highlight glides
 // between rows (one absolutely positioned cursor, not per-row backgrounds).
