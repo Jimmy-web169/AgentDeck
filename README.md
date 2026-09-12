@@ -284,6 +284,7 @@ make init        # first-time setup: npm install + optional ttyd + checks for th
 make all         # asks whether to update the provider CLIs [y/N], then API server (:47841) + Vite UI (:47842), both hot-reload
 make update      # just the CLI updates (claude update, codex update, agy update)
                  # AGENTDECK_UPDATE=1 answers yes for make all; AGENTDECK_SKIP_UPDATE=1 skips them everywhere
+make deps        # check node_modules against package.json, installing whatever a pull added
 ```
 
 Open <http://localhost:47842>. On first run it auto-detects `~/.claude` and
@@ -293,6 +294,12 @@ Open <http://localhost:47842>. On first run it auto-detects `~/.claude` and
 optional [`ttyd`](https://github.com/tsl0922/ttyd) (Terminal mode) via your package
 manager, and checks for the `claude` / `codex` CLI. Safe to re-run. If `make all`
 ever fails on a fresh checkout, run `make init` first.
+
+After a `git pull` there is nothing extra to do: every run target checks
+`node_modules` against `package.json` and the lockfile first and installs what
+changed, so a new dependency cannot leave you with servers that start but pages
+that fail on `Failed to resolve import`. Run that check alone with `make deps`
+(`npm run check:deps`).
 
 On **native Windows** (no `make`/`sh`), use the PowerShell equivalent instead:
 
@@ -309,6 +316,7 @@ make all                 # backend + frontend, hot reload  → http://localhost:
 make be                  # backend (API) only              → http://localhost:47841
 make fe                  # frontend (Vite) only            → http://localhost:47842
 make build               # build the frontend into dist/
+make deps                # check node_modules against package.json (installs what a pull added)
 make stop                # free the API port (47841)
 make                     # (no target) list everything
 ```

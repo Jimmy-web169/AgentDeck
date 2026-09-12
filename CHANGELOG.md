@@ -36,6 +36,15 @@ All notable changes to AgentDeck are recorded here. The format follows
   Recent sessions before pinned items and projects. Writing sessions take
   precedence over duplicate terminal/recent entries and retain source identities.
 
+### Fixed
+- `make all`, `make be`, `make fe` and `make build` now check that
+  `node_modules` matches `package.json` and the lockfile, and install what is
+  missing, instead of only testing that the directory exists. A pull that added
+  a dependency used to leave the tree half-installed: the servers started and
+  Vite reported itself ready, then every page failed on "Failed to resolve
+  import". New target `make deps` (`npm run check:deps`) runs the same check on
+  its own; a tree that is absent entirely is still sent to `make init`.
+
 ### Removed
 - The unreleased application Docker image, container Make targets and settings
   import helper. AgentDeck runs locally with the installed provider CLIs; existing

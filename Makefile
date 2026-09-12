@@ -3,7 +3,7 @@
 PORT ?= 47841
 
 .DEFAULT_GOAL := help
-.PHONY: help init all be fe build install stop update
+.PHONY: help init all be fe build install deps stop update
 
 help: ## list targets
 	@echo "AgentDeck:"
@@ -15,6 +15,7 @@ help: ## list targets
 	@echo "  make fe                 frontend (Vite) only            -> http://localhost:47842"
 	@echo "  make build              build frontend into dist/"
 	@echo "  make install            npm install"
+	@echo "  make deps               check node_modules against package.json (installs what is missing)"
 	@echo "  make stop               free the API port ($(PORT))"
 
 # first-time onboarding: installs Node deps + the optional ttyd (Terminal mode)
@@ -27,26 +28,36 @@ init: ## one-shot setup (npm install + ttyd + codex check)
 update: ## update every tracked provider CLI
 	@node scripts/update-providers.ts
 
+# Every start path runs scripts/check-deps.ts, which compares node_modules
+# against package.json and the lockfile and installs what a pull added. Testing
+# that node_modules merely exists is not enough: Vite reports itself ready and
+# only fails per request, so a half-installed tree looks like a working dev
+# server. The npm pre-hooks (predev/preserver/preweb/prebuild) own that guard, so
+# `npm run dev` is covered too; `all` also calls it directly, to fail before the
+# CLI-update question rather than after it.
+#
 # The CLI updaters are optional at startup: answer y to run them, Enter to start
 # right away. AGENTDECK_UPDATE=1 / AGENTDECK_SKIP_UPDATE=1 answer without asking.
 all: stop ## ask whether to update provider CLIs, then backend + frontend together (hot reload)
-	@test -d node_modules || { echo "Dependencies not installed — run 'make init' first."; exit 1; }
+	@node scripts/check-deps.ts --install
 	@node scripts/update-providers.ts --ask
-	@npm run dev || { echo ""; echo "'make all' failed. If this is a fresh checkout, run 'make init' first to set up dependencies."; exit 1; }
+	@npm run dev
 
 be: stop ## backend / API server only (also serves dist/)
-	@test -d node_modules || { echo "Dependencies not installed — run 'make init' first."; exit 1; }
-	@npm run server || { echo ""; echo "'make be' failed. If this is a fresh checkout, run 'make init' first to set up dependencies."; exit 1; }
+	@npm run server
 
 fe: ## frontend Vite dev server only (proxies /api,/events,/chat to the backend)
-	@test -d node_modules || { echo "Dependencies not installed — run 'make init' first."; exit 1; }
-	@npm run web || { echo ""; echo "'make fe' failed. If this is a fresh checkout, run 'make init' first to set up dependencies."; exit 1; }
+	@npm run web
 
 build: ## compile the frontend into dist/
 	npm run build
 
 install: ## install dependencies
 	npm install
+
+# Same guard the run targets use, on its own — for CI, or after a pull.
+deps: ## verify node_modules matches package.json (installing what is missing)
+	@node scripts/check-deps.ts --install --verbose
 
 # free the API port first so `make all` / `make be` never hit EADDRINUSE.
 # Uses a Node helper (not lsof) so it works on Windows too, where lsof is absent.
