@@ -1,8 +1,9 @@
 #!/usr/bin/env sh
 # One-shot setup for AgentDeck (used by `make init`):
 #   1. installs Node dependencies (npm install)
-#   2. installs the optional `ttyd` (Terminal mode) via your OS package manager
-#   3. checks for the `claude` and `codex` CLIs (needed to continue a conversation)
+#   2. links the committed find-skills skill into .claude/skills/
+#   3. installs the optional `ttyd` (Terminal mode) via your OS package manager
+#   4. checks for the `claude` and `codex` CLIs (needed to continue a conversation)
 # Safe to re-run; skips anything already present. POSIX sh, no bashisms.
 
 say()  { printf '\n\033[36m==>\033[0m %s\n' "$1"; }
@@ -42,7 +43,20 @@ if [ "$(id -u 2>/dev/null)" != "0" ] && have sudo; then SUDO="sudo"; fi
 say "Installing Node dependencies (npm install)"
 npm install || warn "npm install failed — fix the error above before running the app."
 
-# --- 2. ttyd (only needed for Terminal mode) ---------------------------------
+# --- 2. find-skills ----------------------------------------------------------
+# Claude Code loads project skills only from .claude/skills/, and .claude/ is
+# local (never committed), so link the committed canonical copy in rather than
+# keeping a second copy that has to be kept in sync.
+if [ -e .claude/skills/find-skills ] || [ -L .claude/skills/find-skills ]; then
+  say "find-skills already linked"
+else
+  say "Linking find-skills into .claude/skills/"
+  mkdir -p .claude/skills
+  ln -s ../../skills/find-skills .claude/skills/find-skills ||
+    warn "could not link find-skills — Claude Code will not load it in this repo (the copy in skills/find-skills still works with \`npx skills\`)."
+fi
+
+# --- 3. ttyd (only needed for Terminal mode) ---------------------------------
 if have ttyd; then
   say "ttyd already installed ($(command -v ttyd))"
 else
@@ -67,7 +81,7 @@ else
   esac
 fi
 
-# --- 3. provider CLIs (needed to continue a conversation) --------------------
+# --- 4. provider CLIs (needed to continue a conversation) --------------------
 # AgentDeck monitors read-only WITHOUT any CLI; the CLIs are only needed to
 # "continue a conversation" (SDK chat / terminal) for that provider.
 if have claude; then

@@ -42,14 +42,12 @@ handoffs/
 # Portable conversation exports and tiny local delivery receipts (private).
 .agentdeck/
 dashboards/
-# .claude/ is local (settings.local.json, the maintainer's own skills) — except the
-# find-skills skill (canonical copy in skills/find-skills; this one is what Claude
-# Code loads) so any CLI can search the skills ecosystem during an AI hand-off;
-# skills-lock.json pins it
-.claude/*
-!.claude/skills/
-.claude/skills/*
-!.claude/skills/find-skills/
+# .claude/ is local, all of it: settings.local.json, the maintainer's own skills,
+# and a symlink for find-skills. find-skills has one canonical copy, the
+# committed skills/find-skills (pinned by skills-lock.json); .claude/skills/
+# points at it rather than holding a second copy, so there is nothing here to
+# keep in sync. scripts/setup.sh and setup.ps1 create that link.
+.claude/
 
 # local research notes, handoffs, scratch — never committed (see CLAUDE.md)
 tmp/

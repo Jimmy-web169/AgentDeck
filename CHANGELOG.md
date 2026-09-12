@@ -46,6 +46,13 @@ All notable changes to AgentDeck are recorded here. The format follows
   like `make all`, and it stays silent on a healthy tree. New: `make deps` and
   `npm run check:deps` run the check on its own; a tree that is absent entirely
   is still sent to `make init`.
+- `.claude/` is now local in full. `find-skills` used to be committed twice —
+  once as the canonical `skills/find-skills` and once as the copy Claude Code
+  loads — with a `.gitignore` exception to keep the second one tracked. The
+  exception is gone and `.claude/skills/find-skills` is a link to the canonical
+  copy, so there is no second copy to keep in sync; `scripts/setup.sh` and
+  `scripts/setup.ps1` create that link (the PowerShell one copies instead when
+  the shell has no symlink permission). The AI hand-off brief names the one path.
 - Antigravity sessions exported on Windows recorded a working folder of
   `file:///home/...` instead of the path itself. A rootless `file://` URI was
   decoded in the platform's own mode, which Windows rejects, and the raw URI was

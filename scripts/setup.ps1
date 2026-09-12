@@ -1,7 +1,8 @@
 # One-shot setup for AgentDeck on native Windows (`npm run init:win`):
 #   1. installs Node dependencies (npm install)
-#   2. installs the optional psmux (Terminal mode's tmux stand-in) via winget
-#   3. checks for the `claude` and `codex` CLIs (needed to continue a conversation)
+#   2. links the committed find-skills skill into .claude/skills/
+#   3. installs the optional psmux (Terminal mode's tmux stand-in) via winget
+#   4. checks for the `claude` and `codex` CLIs (needed to continue a conversation)
 # Safe to re-run; skips anything already present. Windows PowerShell 5.1 compatible.
 # Note: ttyd is NOT used on native Windows (its 1.7.7 release crashes at spawn,
 # tsl0922/ttyd#1292) — the browser terminal is served by server/shared/webterm.ts.
@@ -17,7 +18,27 @@ Say "Installing Node dependencies (npm install)"
 npm install
 if ($LASTEXITCODE -ne 0) { Warn "npm install failed - fix the error above before running the app." }
 
-# --- 2. psmux (tmux-compatible; only needed for Terminal mode persistence) ----
+# --- 2. find-skills ----------------------------------------------------------
+# Claude Code loads project skills only from .claude/skills/, and .claude/ is
+# local (never committed), so point it at the committed canonical copy instead of
+# keeping a second copy. A symlink needs Developer Mode or an elevated shell on
+# Windows, so fall back to a copy and say so.
+$skillLink = Join-Path $PSScriptRoot '..\.claude\skillsind-skills'
+$skillSrc  = Join-Path $PSScriptRoot '..\skillsind-skills'
+if (Test-Path $skillLink) {
+  Say "find-skills already present"
+} else {
+  Say "Linking find-skills into .claude/skills/"
+  New-Item -ItemType Directory -Force (Split-Path $skillLink) | Out-Null
+  try {
+    New-Item -ItemType SymbolicLink -Path $skillLink -Target $skillSrc -ErrorAction Stop | Out-Null
+  } catch {
+    Copy-Item $skillSrc $skillLink -Recurse
+    Warn "no symlink permission (enable Developer Mode for one) - copied find-skills instead; re-run this script after updating skills/find-skills."
+  }
+}
+
+# --- 3. psmux (tmux-compatible; only needed for Terminal mode persistence) ----
 # psmux ships a tmux.exe alias, which terminal.ts discovers as `tmux`.
 $psmuxPkgTmux = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages\marlocarlo.psmux_Microsoft.Winget.Source_8wekyb3d8bbwe\tmux.exe'
 if ((Have 'tmux') -or (Test-Path $psmuxPkgTmux)) {
@@ -31,7 +52,7 @@ if ((Have 'tmux') -or (Test-Path $psmuxPkgTmux)) {
   Warn "winget not found. Install psmux manually: https://github.com/psmux/psmux (Terminal mode falls back to non-persistent sessions without it)."
 }
 
-# --- 3. provider CLIs (needed to continue a conversation) ---------------------
+# --- 4. provider CLIs (needed to continue a conversation) ---------------------
 if (Have 'claude') {
   Say "claude CLI found ($((Get-Command claude).Source))"
 } else {
