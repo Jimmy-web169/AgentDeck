@@ -37,6 +37,10 @@ import CopyButton from './CopyButton.tsx'
 import { scrollParentOf, useEarlier } from '../../lib/useEarlier.ts'
 import ConversationNavigator from './ConversationNavigator.tsx'
 
+// After a jump the question's bottom edge rests this far below the pane's top:
+// a 16px margin, one 28px line with its 10px padding, and the 18px copy row.
+const JUMP_TAIL = 72
+
 export function UserMsg({ ev }: { ev: ConversationEvent }) {
   return (
     <div className="group flex flex-col items-end">
@@ -110,7 +114,11 @@ export default function Conversation({
         (element) => element.closest('.conversation-content') === root
       )
       if (!target) return
-      pane.scrollTop += target.getBoundingClientRect().top - pane.getBoundingClientRect().top - 16
+      const paneTop = pane.getBoundingClientRect().top
+      const { top, bottom } = target.getBoundingClientRect()
+      // Land on the question's end, its last line and copy button, so the reply
+      // is what the reader sees next; a question shorter than that stays whole.
+      pane.scrollTop += Math.max(top - paneTop - 16, bottom - paneTop - JUMP_TAIL)
       target.tabIndex = -1
       target.addEventListener('blur', () => target.removeAttribute('tabindex'), { once: true })
       target.focus({ preventScroll: true })

@@ -164,6 +164,7 @@ export default function SessionApp({
     sessionData,
     openSessionById,
     subagentCtx,
+    hasSubagents,
     canFork: !!cfg.forkCut,
     forkFromReply,
     shownPanes,

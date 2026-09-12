@@ -23,7 +23,7 @@ Per provider, in one UI:
 
 - **Conversations** — full transcript per session: prompts, replies, collapsible
   thinking, and every tool call with its input **and** output, plus token/model/time.
-- **Sub-agents** — open any sub-agent's complete transcript, or expand it inline under the tool call that spawned it.
+- **Sub-agents** — open any sub-agent's complete transcript, or expand it inline under the tool call that spawned it. On a session that spawned agents, **Show sub-agents** lists them beside the main conversation and opens one on click; drag the line between the two to resize.
 - **Ask the agent** — from any Config view or from Insights, say what you want
   ("run prettier after every edit", "add this MCP server read-only") and AgentDeck
   opens the provider's own terminal with a brief: your request, the file and its
@@ -281,8 +281,9 @@ The quickest path uses the bundled `Makefile`:
 
 ```bash
 make init        # first-time setup: npm install + optional ttyd + checks for the CLI
-make all         # update the provider CLIs, then API server (:47841) + Vite UI (:47842), both hot-reload
-make update      # just the CLI updates (claude update, codex update); AGENTDECK_SKIP_UPDATE=1 skips them
+make all         # asks whether to update the provider CLIs [y/N], then API server (:47841) + Vite UI (:47842), both hot-reload
+make update      # just the CLI updates (claude update, codex update, agy update)
+                 # AGENTDECK_UPDATE=1 answers yes for make all; AGENTDECK_SKIP_UPDATE=1 skips them everywhere
 ```
 
 Open <http://localhost:47842>. On first run it auto-detects `~/.claude` and
@@ -324,7 +325,7 @@ npm run build && npm start   # single-process production server serving dist/
 | --- | --- | --- |
 | `AGENTDECK_PORT` | `47841` | API / SSE / WebSocket server port |
 | `AGENTDECK_WEB_PORT` | `47842` | Vite dev-server port |
-| `AGENTDECK_CONFIG_DIR` | repo root | Base for `.agentdeck/` state, with existing legacy paths still supported. When set, only explicitly tracked roots are used; real provider homes are never added automatically. |
+| `AGENTDECK_CONFIG_DIR` | repo root | Base for `.agentdeck/` state. Legacy `roots.*.json`, `probe.*.json`, `handoffs/` and `dashboards/` beside it are copied into `.agentdeck/` automatically at startup with the originals kept, so older versions keep working; conflicts are left in place for `npm run migrate:state`. When set, only explicitly tracked roots are used; real provider homes are never added automatically. |
 
 ## Optional: usage-limit meters for Claude
 
@@ -438,12 +439,14 @@ under Being written; its provider/root identity is preserved.
 Writing, running and recent activity stay global in Folder mode, including
 sessions outside the sidebar's folder filters.
 
-Conversation navigation floats at the right edge of each transcript pane,
-without narrowing the messages. Evenly spaced ticks mark your questions and a
-brighter tick follows your reading position. Brushing a tick lights it and shows
-the start of its question in the margin beside the messages; resting on it for a
-moment unfolds the whole question in place, and clicking the question jumps
-there. Two arrows step to the previous or next question; hold one, or
+Conversation navigation floats at the right edge of each transcript pane; a
+column that fills its pane is inset just enough that its text stays clear of
+the ticks. Evenly spaced ticks mark your questions and a
+brighter tick follows your reading position. Hovering a tick dims the others and
+replaces it with a short label showing the start of its question; click the
+label to jump there — the question's last line and copy button land at the
+top, so its reply is what you read next. Over a long conversation the mouse wheel browses the
+ticks without scrolling the messages. Two arrows step to the previous or next question; hold one, or
 Shift-click it, to run to the first or latest message. Short conversations group
 their ticks, long ones glide as you read, and main and subagent panes navigate
 independently.

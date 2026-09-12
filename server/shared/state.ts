@@ -16,8 +16,10 @@ function identifier(id: string) {
   return id
 }
 
-// Existing installations keep their current owner until explicit migration.
-// Fresh installs write only below .agentdeck; no directory is created by reads.
+// A current owner always takes precedence; a legacy file is read only while no
+// current one exists. Fresh installs write only below .agentdeck; no directory
+// is created by reads. Startup converges existing installations (see
+// migrateStateOnStartup) without ever removing the legacy fallback.
 export function stateFile(owner: FileOwner, id: string, base = configDir()) {
   identifier(id)
   const current = path.join(stateDir(base), owner, `${id}.json`)
@@ -192,4 +194,32 @@ export function applyStateMigration(directory = configDir()): MigrationEntry[] {
   }
   for (const marker of pending) fs.unlinkSync(marker)
   return entries
+}
+
+export interface StartupMigration {
+  status: 'none' | 'current' | 'copied' | 'skipped' | 'failed'
+  entries: MigrationEntry[]
+  error?: string
+}
+
+// Every start copies clean legacy state into .agentdeck/, so installations
+// converge without an operator step, and never destroys the fallback: originals
+// are retained, conflicting or blocked entries leave the legacy files
+// authoritative (reported for `npm run migrate:state`), and a copy that fails
+// part-way leaves the resolution rules above pointing at intact legacy files.
+export function migrateStateOnStartup(directory = configDir()): StartupMigration {
+  let entries: MigrationEntry[]
+  try {
+    entries = planStateMigration(directory)
+  } catch (error) {
+    return { status: 'failed', entries: [], error: error instanceof Error ? error.message : String(error) }
+  }
+  if (!entries.length) return { status: 'none', entries }
+  if (entries.every((entry) => entry.status === 'identical')) return { status: 'current', entries }
+  if (entries.some((entry) => entry.status === 'blocked' || entry.status === 'conflict')) return { status: 'skipped', entries }
+  try {
+    return { status: 'copied', entries: applyStateMigration(directory) }
+  } catch (error) {
+    return { status: 'failed', entries, error: error instanceof Error ? error.message : String(error) }
+  }
 }

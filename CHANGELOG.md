@@ -7,14 +7,30 @@ All notable changes to AgentDeck are recorded here. The format follows
 ## [Unreleased]
 
 ### Changed
+- The Conversation toolbar's **Show sub-agents** button (formerly Multi-view)
+  appears only for sessions that have spawned subagents. The sub-agent pane
+  opens on a status list like the Sub-agents tab (status, type, tokens,
+  elapsed time); clicking a row opens that agent's transcript beside the main
+  conversation and `‹ Subagents` returns to the list. The line between the
+  transcript and the pane can be dragged (arrow keys nudge it, double-click
+  restores the default) and its position is remembered for stacked and
+  side-by-side arrangements separately.
+- The conversation navigation rail no longer runs over the messages: a column
+  that fills its pane is inset by its own padding so text and bubbles stop
+  short of the ticks, while a column with a gutter is unchanged.
+- `make all` asks whether to update the provider CLIs before starting the dev
+  servers (default no, so Enter starts immediately); `AGENTDECK_UPDATE=1` answers
+  yes, `AGENTDECK_SKIP_UPDATE=1` skips the question, and a shell without an
+  interactive terminal never waits on it. `make update` is unchanged.
 - Returning to a conversation now opens at the latest message instead of
   restoring an older remembered scroll position. While reading an active
   conversation, live appends still preserve an intentionally older position.
 - Conversation navigation floats transparently along the full right edge of
   each transcript pane without reducing its width. Evenly spaced question ticks
-  follow your reading position; brushing one shows the question's opening in the
-  margin beside the messages, dwelling unfolds it in place, and clicking it jumps
-  there. Two arrows step between questions and run to the first or latest message
+  follow your reading position; hovering one shows a short label, ending beside its tick, with the
+  question's opening, clicking jumps there — landing on the question's last
+  line and copy button so its reply is what you read next — and the mouse wheel browses a long
+  conversation's ticks without scrolling the messages. Two arrows step between questions and run to the first or latest message
   when held or Shift-clicked.
 - The empty new-tab picker lists Home, Being written, Running terminals, then
   Recent sessions before pinned items and projects. Writing sessions take
@@ -30,8 +46,8 @@ All notable changes to AgentDeck are recorded here. The format follows
   that can reveal older, initially unloaded messages. Opening or returning
   to a conversation now shows its latest messages; live updates preserve an
   active reader's position when reading earlier history.
-- Conversation multi-view keeps the main transcript mounted alongside a
-  selectable subagent list and independently scrolling child transcript. Narrow
+- A sub-agent pane keeps the main transcript mounted alongside a
+  subagent status list; a chosen child's transcript scrolls independently. Narrow
   windows stack both panes; the same UI supports nested and independent agents.
 - Home can be selected from the new-tab picker. Its project list follows the
   sidebar mode: Source keeps provider projects separate; Folder combines each
@@ -55,7 +71,9 @@ All notable changes to AgentDeck are recorded here. The format follows
   frontend descriptors, registry entries and native/golden fixtures.
 - Explicit dry-run/apply state migration into `.agentdeck/`, with legacy fallback,
   conflict checks, interrupted-copy recovery and preserved dashboard tmux identity.
-  Existing installations are not migrated automatically.
+  Clean legacy state is now copied into `.agentdeck/` automatically at startup with
+  the originals retained; conflicting or malformed files are left in place with a
+  warning that points at `npm run migrate:state`.
 - A maintained architecture guide and contributor verification/report workflow.
 - Independent review criteria for architecture work packages.
 - Raw Biome lint/format checks, strict TypeScript checking, and a declared

@@ -28,15 +28,15 @@ test('nested workflow agents and plain agents retain distinct transcript identit
 function Transcript({ data }: ConversationProps) {
   return createElement('p', null, `Viewing ${data.summary.id}`)
 }
-test('selecting a child loads its transcript without navigating the main session, and pauses hidden requests', async () => {
+test('the pane lists agent status first, opens a transcript only on click, and returns to the list without touching the main session', async () => {
   const send = vi.fn<typeof fetch>(async (input) => {
     const url = new URL(String(input), 'http://fixture')
     return Response.json(
       url.pathname.endsWith('/subagents')
         ? {
             children: [
-              { id: 'first', title: 'First agent', status: 'running' },
-              { id: 'second', title: 'Second agent', status: 'done' },
+              { id: 'first', title: 'First agent', status: 'running', agentRole: 'explorer', tokens: { output: 1200 } },
+              { id: 'second', title: 'Second agent', status: 'done', assistantTurns: 3 },
             ],
           }
         : { summary: mockNavSession({ id: url.searchParams.get('id') || '' }), timeline: [] }
@@ -47,11 +47,21 @@ test('selecting a child loads its transcript without navigating the main session
   const view = renderWithQuery(createElement(SubagentExplorer, props))
   expect(send).not.toHaveBeenCalled()
   view.rerender(createElement(SubagentExplorer, { ...props, active: true }))
-  await view.findByText('Viewing first')
+  const first = await view.findByRole('button', { name: /First agent/ })
+  // Status rows come first, in the Sub-agents tab's idiom; no transcript is requested yet.
+  expect(first.textContent).toContain('explorer')
+  expect(first.textContent).toContain('running')
+  expect(view.getByRole('button', { name: /Second agent/ }).textContent).toContain('3 replies')
+  expect(view.queryByText(/^Viewing /)).toBeNull()
+  expect(send.mock.calls.some(([input]) => String(input).includes('/session?'))).toBe(false)
   fireEvent.click(view.getByRole('button', { name: /Second agent/ }))
   await view.findByText('Viewing second')
-  expect(view.getByRole('button', { name: /Second agent/ }).getAttribute('aria-pressed')).toBe('true')
+  expect(view.queryByRole('button', { name: /First agent/ })).toBeNull()
+  expect(view.getByText('Second agent')).toBeTruthy()
   expect(send.mock.calls.some(([input]) => String(input).includes('/session?') && String(input).includes('id=parent'))).toBe(false)
-  fireEvent.click(view.getByRole('button', { name: 'Close multi-view' }))
+  fireEvent.click(view.getByRole('button', { name: 'Back to subagent list' }))
+  expect(view.queryByText('Viewing second')).toBeNull()
+  expect(view.getByRole('button', { name: /First agent/ })).toBeTruthy()
+  fireEvent.click(view.getByRole('button', { name: 'Close sub-agent pane' }))
   expect(props.onClose).toHaveBeenCalledOnce()
 })

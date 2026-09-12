@@ -7,11 +7,11 @@
 }
 
 /* The rail overlays the pane's right edge without taking transcript width.
-   No track, no capsule, no bubble, no side label, no ellipsis: evenly spaced
-   ticks, a neutral mark for the reading position, and the question itself
-   appearing in the tick's own row. Brushing is pale and still; dwelling clears
-   the strip and the chosen tick's magnification is its exit, so only the
-   question remains and clicking it jumps. */
+   No track, no capsule, no bubble, no side label, no ellipsis, no ground:
+   evenly spaced ticks, a neutral mark for the reading position, and a short
+   label for the tick under the pointer. Hovering is one stage: the other
+   ticks dim to a trace, the pointed tick grows as it fades, and the label
+   slides in where it was. */
 .conversation-navigation {
   position: fixed;
   z-index: 20;
@@ -20,7 +20,7 @@
   flex-direction: column;
   align-items: center;
   --conversation-ambient: 0.16;
-  --conversation-amp: 2.4;
+  --conversation-amp: 2.2;
   --conversation-hold: 420ms;
 }
 .conversation-navigation-button {
@@ -74,8 +74,8 @@
   transform: scale(1);
   opacity: 1;
 }
-/* Overflow stays visible so the question can reach into the gutter; the
-   strip's ends dissolve through per-tick opacity instead of being clipped. */
+/* Overflow stays visible so the label can reach into the gutter; the strip's
+   ends dissolve through per-tick opacity instead of being clipped. */
 .conversation-navigation-dots {
   position: relative;
   z-index: 1;
@@ -87,6 +87,13 @@
   padding: 0;
   border: 0;
   overflow: visible;
+  --conversation-dim: 1;
+}
+/* While one tick is pointed at, the other ticks stay as a faint trace so the
+   rail keeps its shape, and only the pointed tick gives way to its label;
+   clicking the label is what jumps. */
+.conversation-navigation-dots.is-focus {
+  --conversation-dim: 0.35;
 }
 .conversation-navigation-strip {
   position: absolute;
@@ -94,6 +101,7 @@
   left: 0;
   right: 0;
   will-change: transform;
+  transition: transform 140ms ease-out;
 }
 .conversation-navigation-dot {
   position: absolute;
@@ -117,30 +125,20 @@
   height: 1.5px;
   border-radius: 1px;
   background: rgb(var(--zinc-300));
-  opacity: calc(var(--conversation-ambient) * var(--conversation-edge));
-  /* Staggered on purpose: the strip clears first, then the chosen tick grows
-     as it hands over to the text. Changing everything at once reads as a pop. */
+  opacity: calc(var(--conversation-ambient) * var(--conversation-edge) * var(--conversation-dim));
   transition:
-    transform 420ms cubic-bezier(0.22, 1, 0.36, 1) 66ms,
-    opacity 330ms ease,
-    background-color 350ms ease 66ms;
-}
-.conversation-navigation-dot.is-hover .conversation-navigation-tick {
-  opacity: calc(0.75 * var(--conversation-edge));
-  background: rgb(var(--zinc-200));
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease,
+    background-color 200ms ease;
 }
 /* The reading position is a neutral bright mark; colour belongs to the pointer. */
 .conversation-navigation-dot[aria-current] .conversation-navigation-tick {
   width: 15px;
   background: rgb(var(--zinc-100));
-  opacity: calc(0.72 * var(--conversation-edge));
+  opacity: calc(0.72 * var(--conversation-edge) * var(--conversation-dim));
 }
-/* While one question is being read the whole strip leaves, including the
-   chosen tick: its magnification is the exit, and only the text remains. */
-.conversation-navigation-dots.is-focus .conversation-navigation-tick {
-  opacity: 0;
-}
-.conversation-navigation-dot.is-dwell .conversation-navigation-tick {
+/* The pointed tick grows as it fades: its magnification is its exit. */
+.conversation-navigation-dot.is-hover .conversation-navigation-tick {
   opacity: 0;
   background: rgb(var(--sky-300));
   transform: translateX(-3px) scale(var(--conversation-amp));
@@ -152,67 +150,47 @@
   outline: 1px solid rgb(var(--sky-300) / 0.7);
   outline-offset: 3px;
 }
-/* The whole question is always in the DOM. Brushing uncovers one line of it and
-   dwelling lets the rest unfold, so the text is never swapped under the reader.
-   Its width is the measured gutter beside the message column. */
+/* One short line of the question, in the tick's own row, ending with a fade
+   where it runs out of room. The full text stays in the DOM for the
+   accessible name; only its start is shown. Hidden, not merely transparent,
+   at rest so it reaches neither innerText nor the layout probe. */
 .conversation-navigation-text {
+  --conversation-nudge: 6px;
   position: absolute;
   right: 9px;
   top: 50%;
-  transform: translateY(-50%);
-  width: var(--conversation-gutter);
-  text-align: right;
+  transform: translateY(-50%) translateX(var(--conversation-nudge));
+  /* The box hugs its text so a short question ends beside its tick; a long
+     one fills the room the pane allows and fades where it is clipped. */
+  width: fit-content;
+  max-width: var(--conversation-label);
+  text-align: left;
   font-size: 11.5px;
   line-height: 1.55;
   letter-spacing: 0.015em;
-  color: rgb(var(--zinc-300));
-  white-space: normal;
-  overflow-wrap: anywhere;
+  color: rgb(var(--sky-300));
+  white-space: nowrap;
   overflow: hidden;
-  max-height: 1.55em;
   text-shadow:
-    0 0 7px rgb(var(--ink-900)),
-    0 0 3px rgb(var(--ink-900));
-  /* Hidden, not merely transparent: resting text must not reach innerText,
-     assistive technology or the layout probe. */
+    0 0 8px rgb(var(--ink-900)),
+    0 0 3px rgb(var(--ink-900)),
+    0 0 1px rgb(var(--ink-900));
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
   transition:
-    opacity 165ms ease,
-    color 350ms ease 66ms,
-    max-height 440ms cubic-bezier(0.22, 1, 0.36, 1) 110ms,
-    width 220ms cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 160ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.conversation-navigation-dot.is-clipped .conversation-navigation-text {
+  mask-image: linear-gradient(to right, black calc(100% - 26px), transparent);
 }
 .conversation-navigation-dot.is-hover .conversation-navigation-text {
+  --conversation-nudge: 0px;
   visibility: visible;
   opacity: 1;
-}
-.conversation-navigation-dot.is-dwell .conversation-navigation-text {
-  visibility: visible;
-  opacity: 1;
-  color: rgb(var(--sky-300));
   pointer-events: auto;
   cursor: pointer;
-}
-/* A question too long to unfold trails off instead of being cut square. */
-.conversation-navigation-dot.is-clipped .conversation-navigation-text {
-  mask-image: linear-gradient(to bottom, black calc(100% - 26px), transparent);
-}
-/* Only a dwell in a pane too narrow for the gutter gets a soft ground. It
-   fades out to the left: no border, no radius, no card. */
-.conversation-navigation-dot.is-scrim .conversation-navigation-text {
-  background: linear-gradient(to right, rgb(var(--ink-900) / 0) 0, rgb(var(--ink-900) / 0.95) 46px, rgb(var(--ink-900) / 0.95) 100%);
-  padding: 5px 0 5px 46px;
-}
-/* A gutter too narrow to hold a readable line shows no text while brushing
-   rather than covering a message; the question is still one dwell away. */
-.conversation-navigation-dot.is-tight .conversation-navigation-text {
-  width: clamp(220px, var(--conversation-gutter), 320px);
-}
-.conversation-navigation-dot.is-tight.is-hover .conversation-navigation-text {
-  visibility: hidden;
-  opacity: 0;
 }
 @media (hover: none) {
   .conversation-navigation {
@@ -222,26 +200,32 @@
 @media (prefers-reduced-motion: reduce) {
   .conversation-navigation-button,
   .conversation-navigation-charge,
+  .conversation-navigation-strip,
   .conversation-navigation-tick,
   .conversation-navigation-text {
     transition: none;
   }
 }
+/* The sub-agent pane sits below the transcript, or beside it from 1280px
+   (PaneDivider's breakpoint). Its share of the row is the --subagent-pane
+   the divider maintains; the divider itself is the line between the two. */
 .conversation-panes.is-split {
   flex-direction: column;
 }
 .subagent-explorer {
-  flex: 1;
-  border-top-width: 1px;
+  flex: 0 0 var(--subagent-pane, 50%);
+}
+.subagent-divider {
+  flex: 0 0 6px;
+  cursor: row-resize;
+  transition: background-color 120ms ease-out;
 }
 @media (min-width: 1280px) {
   .conversation-panes.is-split {
     flex-direction: row;
   }
-  .subagent-explorer {
-    flex: 0 0 42%;
-    border-top-width: 0;
-    border-left-width: 1px;
+  .subagent-divider {
+    cursor: col-resize;
   }
 }
 

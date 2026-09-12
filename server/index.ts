@@ -5,6 +5,7 @@ import { createServer } from './http.ts'
 import { stopAllTerminals, noteTerminalChanges, registerTerminalProvider } from './shared/terminal.ts'
 import { scheduleProbes, runAllProbes } from './shared/formatProbe.ts'
 import { configDir, isolatedConfig } from './shared/roots.ts'
+import { migrateStateOnStartup, stateDir } from './shared/state.ts'
 import { dashboards } from './deck/dashboards.ts'
 
 const PORT = Number(process.env.AGENTDECK_PORT || 47841)
@@ -14,6 +15,16 @@ const HOST = '127.0.0.1'
 for (const provider of Object.values(PROVIDERS)) {
   if (provider.terminal) registerTerminalProvider(provider.terminal)
 }
+// Legacy state converges into .agentdeck/ on every start: clean copies happen
+// here with the originals retained, and anything conflicting stays where it is.
+const migration = migrateStateOnStartup()
+if (migration.status === 'copied')
+  console.log(`  state: copied ${migration.entries.filter((entry) => entry.status === 'copied').length} legacy item(s) into ${stateDir()}; originals retained`)
+else if (migration.status === 'skipped')
+  console.warn(
+    `  state: legacy files left in place (${migration.entries.filter((entry) => entry.status !== 'identical').length} conflicting or blocked); inspect with: npm run migrate:state -- --config-dir ${configDir()}`
+  )
+else if (migration.status === 'failed') console.warn(`  state: migration did not complete (${migration.error}); legacy files remain authoritative`)
 const host = createServer({
   providers: PROVIDERS,
   dist: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../dist'),

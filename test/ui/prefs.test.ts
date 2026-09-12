@@ -118,4 +118,14 @@ describe('prefs', () => {
     assert.deepEqual((await boot(storage)).getPrefs().folderExcludedRoots, [])
     assert.deepEqual((await boot(storage)).getPrefs().folderExcludedProviders, [])
   })
+
+  test('the sub-agent pane share is clamped per arrangement and falls back to its defaults', async () => {
+    const storage = new Map([['agentdeck_prefs', JSON.stringify({ subagentPane: { stacked: 0.95, beside: 'wide' } })]])
+    const app = await boot(storage)
+    assert.deepEqual(app.getPrefs().subagentPane, { stacked: 0.8, beside: 0.42 })
+    app.setPref('subagentPane', { stacked: 0.1, beside: 0.6 })
+    assert.deepEqual(app.getPrefs().subagentPane, { stacked: 0.2, beside: 0.6 })
+    assert.deepEqual(JSON.parse(required(storage.get('agentdeck_prefs'))).subagentPane, { stacked: 0.2, beside: 0.6 })
+    assert.deepEqual((await boot(new Map())).getPrefs().subagentPane, app.DEFAULT_PANE_SHARES)
+  })
 })

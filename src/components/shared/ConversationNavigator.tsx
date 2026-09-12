@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { ConversationEvent } from '../../api/models.ts'
@@ -17,19 +17,25 @@ const PITCH = 24
 const MAX_PITCH = 32
 const INSET = 8
 const EDGE_FADE = 26
-// Brushing a tick is immediate; the question unfolds only after a deliberate
-// dwell, and holding an arrow runs to the edge while an early release is one
-// ordinary step, so fast repeated clicks can never be misread as a jump.
-const DWELL_MS = 400
+// A message column that fills its pane is inset by its own right padding so
+// text and bubbles end this far before the rail; a column with a gutter keeps
+// the stylesheet's 1rem padding.
+const RAIL_CLEARANCE = 4
+const COLUMN_PADDING = 16
+// Holding an arrow runs to the edge; an early release is one ordinary step,
+// so fast repeated clicks can never be misread as a jump.
 const HOLD_MS = 420
-// Below this gutter width no line is readable: brushing shows no text at all,
-// and only a dwell may paint a soft ground over the transcript.
-const MIN_READABLE = 140
-const MAX_UNFOLD = 300
-
-type Hot = { order: number; stage: 'hover' | 'dwell'; clipped: boolean; maxHeight: number | null }
+// The label beside a hovered tick is one short line: as wide as the gutter
+// beside the messages allows, never narrower than a few words nor wider than
+// a glance, and never wrapped or unfolded.
+const LABEL_MIN = 120
+const LABEL_MAX = 260
+// A wheel-browsed strip drifts back to the reading position this long after
+// the pointer leaves the rail.
+const BROWSE_RESET_MS = 1200
 
 const round = (value: number) => Math.round(value * 100) / 100
+const clamp = (value: number, low: number, high: number) => Math.max(low, Math.min(high, value))
 
 // Overlay the nearest viewport without consuming transcript width. Parent and
 // child conversations each control their own pane and tick strip.
@@ -46,11 +52,16 @@ export default function ConversationNavigator({
     () => timeline.flatMap((event, index) => (event.kind === 'user' ? [{ index, text: event.text?.trim() || '(attachment)' }] : [])),
     [timeline]
   )
-  const [viewport, setViewport] = useState({ top: 0, right: 0, height: 0, current: -1, progress: 0, gutter: 0 })
-  const [hot, setHot] = useState<Hot | null>(null)
+  const [viewport, setViewport] = useState({ top: 0, right: 0, height: 0, current: -1, progress: 0, gutter: 0, pane: 0 })
+  const [hot, setHot] = useState<number | null>(null)
+  const [clipped, setClipped] = useState(false)
+  const [browse, setBrowse] = useState(0)
   const [portalHost, setPortalHost] = useState<HTMLElement | null>(null)
   const navRef = useRef<HTMLElement>(null)
-  const texts = useRef(new Map<number, HTMLSpanElement>())
+  const dotsRef = useRef<HTMLFieldSetElement>(null)
+  const resetTimer = useRef(0)
+  // Render-time geometry the native wheel listener reads without re-binding.
+  const geometry = useRef({ offset: 0, pitch: PITCH, usable: 1, windowed: false, count: 0, progress: 0, browse: 0 })
   const selectedPrompt = useRef<{ order: number; scrollTop: number | null } | null>(null)
   useEffect(() => {
     const root = rootRef.current,
@@ -100,22 +111,24 @@ export default function ConversationNavigator({
         if (span > 0) progress = Math.min(prompts.length - 1, current + Math.max(0, Math.min(1, (line - here) / span)))
       }
       const scrollbar = pane.offsetWidth - pane.clientWidth
-      // The empty gutter between the message column and the rail is the only
-      // space the question text may occupy, so it can never cover a message.
-      const gutter = Math.max(0, Math.round(rect.right - scrollbar - RAIL_WIDTH - root.getBoundingClientRect().right - 6))
-      const next = { top, right: Math.max(0, window.innerWidth - rect.right + scrollbar), height, current, progress, gutter }
+      // The empty gutter between the message column and the rail sizes the
+      // label; a short label keeps to the pane's edge even without a gutter.
+      const beyond = rect.right - scrollbar - root.getBoundingClientRect().right
+      const gutter = Math.max(0, Math.round(beyond - RAIL_WIDTH - 6))
+      const inset = Math.round(RAIL_WIDTH + RAIL_CLEARANCE - beyond)
+      root.style.paddingRight = inset > COLUMN_PADDING ? `${inset}px` : ''
+      const next = { top, right: Math.max(0, window.innerWidth - rect.right + scrollbar), height, current, progress, gutter, pane: pane.clientWidth }
       setViewport((old) => (Object.keys(next).every((key) => old[key as keyof typeof old] === next[key as keyof typeof next]) ? old : next))
     }
     const schedule = () => {
       cancelAnimationFrame(frame)
       frame = requestAnimationFrame(measure)
     }
-    const scroll = () => {
-      setHot(null)
-      schedule()
-    }
+    // Scrolling only re-measures. A live transcript's bottom-follow scrolls
+    // constantly, and a reader pointing at a tick must not lose its label;
+    // when ticks glide under a still pointer the browser fires enter/leave.
     measure()
-    pane.addEventListener('scroll', scroll, { passive: true })
+    pane.addEventListener('scroll', schedule, { passive: true })
     window.addEventListener('resize', schedule)
     window.addEventListener('scroll', schedule, true)
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(schedule)
@@ -123,66 +136,92 @@ export default function ConversationNavigator({
     observer?.observe(root)
     return () => {
       cancelAnimationFrame(frame)
-      pane.removeEventListener('scroll', scroll)
+      pane.removeEventListener('scroll', schedule)
       window.removeEventListener('resize', schedule)
       window.removeEventListener('scroll', schedule, true)
       observer?.disconnect()
+      root.style.paddingRight = ''
     }
   }, [prompts, rootRef])
   useEffect(() => {
-    if (!hot) return
+    if (hot === null) return
     const outside = (event: PointerEvent) => {
       if (event.target instanceof Node && !navRef.current?.contains(event.target)) setHot(null)
     }
     window.addEventListener('pointerdown', outside)
     return () => window.removeEventListener('pointerdown', outside)
   }, [hot])
-  const hotOrder = hot?.order,
-    hotStage = hot?.stage
+  // A label wider than its room fades at the rail; a short one ends there
+  // whole. Measured before paint so the fade never flashes on or off.
+  useLayoutEffect(() => {
+    const text = hot === null ? null : navRef.current?.querySelector<HTMLElement>('.conversation-navigation-dot.is-hover .conversation-navigation-text')
+    setClipped(!!text && text.scrollWidth > text.clientWidth + 1)
+  }, [hot])
+  // Wheeling over a long conversation's rail browses the strip instead of the
+  // transcript, so a question can be found before jumping to it. React binds
+  // wheel passively, so the listener that must preventDefault is native.
   useEffect(() => {
-    if (hotOrder === undefined || hotStage !== 'hover') return
-    const timer = window.setTimeout(() => {
-      // Measure the whole question before unfolding, so the growth animates
-      // across its real height instead of finishing in the first few frames.
-      const wanted = texts.current.get(hotOrder)?.scrollHeight || 0
-      const cap = Math.min(Math.round(window.innerHeight * 0.42), MAX_UNFOLD)
-      setHot((old) =>
-        old && old.order === hotOrder && old.stage === 'hover'
-          ? { order: hotOrder, stage: 'dwell', clipped: wanted > cap, maxHeight: wanted > 0 ? Math.min(wanted, cap) : cap }
-          : old
-      )
-    }, DWELL_MS)
-    return () => window.clearTimeout(timer)
-  }, [hotOrder, hotStage])
+    const dots = dotsRef.current
+    if (!dots) return
+    const wheel = (event: WheelEvent) => {
+      const g = geometry.current
+      if (!g.windowed || g.count < 2) return
+      event.preventDefault()
+      const pixels = event.deltaMode === 1 ? event.deltaY * g.pitch : event.deltaMode === 2 ? event.deltaY * g.pitch * 8 : event.deltaY
+      const next = clamp(g.browse + pixels / g.pitch, -g.progress, g.count - 1 - g.progress)
+      if (next === g.browse) return
+      g.browse = next
+      setBrowse(next)
+      // The strip moves under a still pointer; light the tick that arrives there.
+      const centre = clamp(g.progress + next, 0, g.count - 1)
+      const offset = INSET + (centre / (g.count - 1)) * g.usable - (centre * g.pitch + g.pitch / 2)
+      const y = event.clientY - dots.getBoundingClientRect().top
+      setHot(clamp(Math.round((y - offset - g.pitch / 2) / g.pitch), 0, g.count - 1))
+    }
+    dots.addEventListener('wheel', wheel, { passive: false })
+    return () => {
+      dots.removeEventListener('wheel', wheel)
+      window.clearTimeout(resetTimer.current)
+    }
+  }, [])
 
   const count = prompts.length
   const dotsHeight = Math.max(0, viewport.height - CHROME)
   const usable = Math.max(1, dotsHeight - 2 * INSET)
   const windowed = count * PITCH > usable
   const pitch = windowed ? PITCH : Math.min(MAX_PITCH, usable / Math.max(1, count))
+  const centre = clamp(viewport.progress + browse, 0, Math.max(0, count - 1))
   // Sliding a uniform strip by exactly one pitch puts every tick where its
   // neighbour was and changes no pixels; the mark sweeping the whole rail is the
   // motion a reader can actually see, so the strip's shift per step is
   // deliberately not a whole pitch.
-  const offset = windowed
-    ? INSET + (count > 1 ? viewport.progress / (count - 1) : 0) * usable - (viewport.progress * pitch + pitch / 2)
-    : INSET + (usable - count * pitch) / 2
-  const tight = viewport.gutter < MIN_READABLE
+  const offset = windowed ? INSET + (count > 1 ? centre / (count - 1) : 0) * usable - (centre * pitch + pitch / 2) : INSET + (usable - count * pitch) / 2
+  geometry.current = { offset, pitch, usable, windowed, count, progress: viewport.progress, browse }
+  const label = clamp(viewport.gutter - 6, LABEL_MIN, LABEL_MAX)
   const previous = viewport.current - 1,
     next = viewport.current + 1
+  const settle = () => {
+    setHot(null)
+    setBrowse(0)
+    window.clearTimeout(resetTimer.current)
+  }
   const jumpPrompt = (order: number) => {
     if (prompts[order]) {
       selectedPrompt.current = { order, scrollTop: null }
       onJump(prompts[order].index)
     }
-    setHot(null)
+    settle()
   }
   const jumpEdge = (edge: 'top' | 'bottom') => {
     selectedPrompt.current = null
     onJump(edge)
-    setHot(null)
+    settle()
   }
-  const enter = (order: number) => setHot((old) => (old?.order === order ? old : { order, stage: 'hover', clipped: false, maxHeight: null }))
+  const leaveRail = () => {
+    setHot(null)
+    window.clearTimeout(resetTimer.current)
+    resetTimer.current = window.setTimeout(() => setBrowse(0), BROWSE_RESET_MS)
+  }
   // Above the first rendered question, with earlier history still unloaded, the
   // previous arrow leads to the first message so that edge is never unreachable.
   const up = useHoldToEdge(
@@ -209,13 +248,15 @@ export default function ConversationNavigator({
               height: viewport.height,
               '--conversation-button-size': `${BUTTON_SIZE}px`,
               '--conversation-gutter': `${viewport.gutter}px`,
+              '--conversation-pane': `${viewport.pane}px`,
+              '--conversation-label': `${label}px`,
             } as CSSProperties
           }
           onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget)) setHot(null)
           }}
           onKeyDown={(event) => {
-            if (hot && event.key === 'Escape') {
+            if (hot !== null && event.key === 'Escape') {
               setHot(null)
               event.stopPropagation()
             }
@@ -233,23 +274,18 @@ export default function ConversationNavigator({
             <Arrow up />
           </button>
           <fieldset
+            ref={dotsRef}
             aria-label="User prompts"
-            className={`conversation-navigation-dots${hot?.stage === 'dwell' ? ' is-focus' : ''}`}
-            onMouseLeave={() => setHot(null)}
+            className={`conversation-navigation-dots${hot !== null ? ' is-focus' : ''}`}
+            onMouseEnter={() => window.clearTimeout(resetTimer.current)}
+            onMouseLeave={leaveRail}
           >
             <div className="conversation-navigation-strip" style={{ transform: `translateY(${round(offset)}px)` }}>
               {prompts.map((prompt, order) => {
                 const y = order * pitch + pitch / 2 + offset
                 const edge = !windowed ? 1 : y < 0 || y > dotsHeight ? 0 : Math.max(0, Math.min(1, Math.min(y, dotsHeight - y) / EDGE_FADE))
                 const off = edge <= 0.05
-                const mine = hot?.order === order ? hot : null
-                const state = [
-                  mine ? ` is-${mine.stage}` : '',
-                  tight ? ' is-tight' : '',
-                  tight && mine?.stage === 'dwell' ? ' is-scrim' : '',
-                  mine?.clipped ? ' is-clipped' : '',
-                  off ? ' is-off' : '',
-                ].join('')
+                const state = `${hot === order ? ` is-hover${clipped ? ' is-clipped' : ''}` : ''}${off ? ' is-off' : ''}`
                 return (
                   <button
                     type="button"
@@ -260,21 +296,12 @@ export default function ConversationNavigator({
                     tabIndex={off ? -1 : undefined}
                     className={`conversation-navigation-dot${state}`}
                     style={{ top: round(order * pitch), height: round(pitch), '--conversation-edge': round(edge) } as CSSProperties}
-                    onMouseEnter={() => enter(order)}
-                    onFocus={() => enter(order)}
+                    onMouseEnter={() => setHot(order)}
+                    onFocus={() => setHot(order)}
                     onClick={() => jumpPrompt(order)}
                   >
                     <span className="conversation-navigation-tick" />
-                    <span
-                      className="conversation-navigation-text"
-                      ref={(element) => {
-                        if (element) texts.current.set(order, element)
-                        else texts.current.delete(order)
-                      }}
-                      style={mine?.maxHeight != null ? { maxHeight: mine.maxHeight } : undefined}
-                    >
-                      {prompt.text}
-                    </span>
+                    <span className="conversation-navigation-text">{prompt.text}</span>
                   </button>
                 )
               })}

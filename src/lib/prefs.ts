@@ -17,6 +17,7 @@ export type Preferences = {
   pathDepth: number
   homeSessions: number
   homeProjects: number
+  subagentPane: PaneShares
 }
 
 import { useSyncExternalStore } from 'react'
@@ -75,6 +76,21 @@ export const HOME_SESSIONS = [
   { k: 10, label: '10' },
   { k: 15, label: '15' },
 ]
+// subagentPane: the sub-agent pane's share of the conversation row, kept per
+// arrangement (stacked below the transcript, or beside it from 1280px) and
+// clamped so neither side can collapse. PaneDivider sets it; the popover has
+// no knob for it.
+export type PaneShares = { stacked: number; beside: number }
+export const PANE_SHARE = { min: 0.2, max: 0.8 }
+export const DEFAULT_PANE_SHARES: PaneShares = { stacked: 0.5, beside: 0.42 }
+export function normalizePaneShares(value: unknown): PaneShares {
+  const raw = value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const pick = (k: keyof PaneShares) => {
+    const v = raw[k]
+    return typeof v === 'number' && Number.isFinite(v) ? Math.min(PANE_SHARE.max, Math.max(PANE_SHARE.min, v)) : DEFAULT_PANE_SHARES[k]
+  }
+  return { stacked: pick('stacked'), beside: pick('beside') }
+}
 // Recent projects follow sidebarMode; there is no independent display mode.
 const DEFAULTS: Preferences = {
   theme: 'graphite',
@@ -95,6 +111,7 @@ const DEFAULTS: Preferences = {
   pathDepth: 2,
   homeSessions: 10,
   homeProjects: 5,
+  subagentPane: { ...DEFAULT_PANE_SHARES },
 }
 const MAX_SWATCHES = 24
 
@@ -141,6 +158,7 @@ function load() {
     .filter((c) => c !== null)
     .filter((c) => !seen.has(c) && !!seen.add(c))
     .slice(-MAX_SWATCHES)
+  prefs.subagentPane = normalizePaneShares(prefs.subagentPane)
   return prefs
 }
 
@@ -188,6 +206,7 @@ export function setPref(k: string, v: unknown) {
   if (k === 'sidebarMode' && !SIDEBAR_MODES.some((x) => x.k === v)) return
   if (k === 'showFirstPrompt' || k === 'recentProjectsBy') return
   if (k === 'fontSize' && !FONT_SIZES.some((x) => x.k === v)) return
+  if (k === 'subagentPane') v = normalizePaneShares(v)
   prefs = { ...prefs, [k]: v }
   persistPrefs(k)
 }

@@ -79,9 +79,13 @@ All new AgentDeck state uses the configured base's `.agentdeck/` directory:
 | Briefs and portable conversation exports | `handoffs/` |
 | Machine-local handoff launch receipts | `runtime/handoffs/` |
 
-`server/shared/state.ts` retains legacy roots/probe files and handoff/dashboard
-directories until explicit migration. A current owner takes precedence; an
-interrupted directory copy retains the legacy view via a pending marker.
+On every start `server/shared/state.ts` copies clean legacy roots/probe files
+and handoff/dashboard directories into `.agentdeck/` and retains the originals,
+so existing installations converge without an operator step while older
+versions still find their files. A current owner takes precedence; conflicting,
+malformed or blocked entries are left authoritative in place with a startup
+warning; an interrupted directory copy retains the legacy view via a pending
+marker.
 Dashboard tmux socket identity remains based on its original configured-base
 namespace, independent of the selected record directory.
 
@@ -93,9 +97,11 @@ npm run migrate:state -- --config-dir /path/to/config-base --apply
 
 The default only inspects. Apply preflights conflicts and symlinks, verifies
 source and destination bytes, copies without overwriting, and retains originals.
-It also preserves empty directories. It does not silently merge competing
-stores, remove legacy state, or run on application startup. Brief retention
-removes only old Markdown briefs, never portable JSONL exports.
+It also preserves empty directories. Startup performs the same clean copy
+automatically; the command exists to inspect conflicts and to apply after they
+are resolved by hand. Nothing silently merges competing stores or removes
+legacy state. Brief retention removes only old Markdown briefs, never portable
+JSONL exports.
 
 ## Enforced rules
 

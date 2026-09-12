@@ -12,7 +12,8 @@ afterEach(() => {
 
 // The pane is 800×500 at (100,100); the message column is `contentWidth` wide
 // from x=100, so the gutter beside it is 900 − 30 − (100 + contentWidth) − 6.
-function geometry({ contentWidth = 600 } = {}) {
+// Messages are 40px tall at 40px pitch; the question at index `tall` is 400px.
+function geometry({ contentWidth = 600, tall = -1 } = {}) {
   let height = 500
   const rect = (top: number, width = 800, h = height): DOMRect => ({
     x: 100,
@@ -29,8 +30,12 @@ function geometry({ contentWidth = 600 } = {}) {
   vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(function (this: Element) {
     return isPane(this) ? height : 0
   })
+  // A hovered label has 150px of room; its text measures 8px a character.
   vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(function (this: Element) {
-    return isPane(this) ? 800 : 0
+    return isPane(this) ? 800 : this.classList.contains('conversation-navigation-text') ? 150 : 0
+  })
+  vi.spyOn(Element.prototype, 'scrollWidth', 'get').mockImplementation(function (this: Element) {
+    return this.classList.contains('conversation-navigation-text') ? (this.textContent?.length || 0) * 8 : 0
   })
   vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
     return isPane(this) ? 800 : 0
@@ -43,7 +48,8 @@ function geometry({ contentWidth = 600 } = {}) {
     if (this.classList.contains('conversation-content')) return rect(100, contentWidth, 4000)
     if (this.hasAttribute('data-conversation-index')) {
       const pane = this.closest('[data-testid="pane"]')
-      return rect(140 + Number(this.getAttribute('data-conversation-index')) * 40 - (pane?.scrollTop || 0), 700, 40)
+      const index = Number(this.getAttribute('data-conversation-index'))
+      return rect(140 + index * 40 - (pane?.scrollTop || 0), 700, index === tall ? 400 : 40)
     }
     return rect(0, 0, 0)
   })
@@ -249,41 +255,56 @@ test('previous and next prompts keep their selected ordinal when native scrollin
   await waitFor(() => expectCurrentPrompt(nav, 75))
 })
 
-test('dwelling on a tick unfolds the complete question in place, clears the other ticks, and inactive or compact transcripts hide their rail', async () => {
+test('a jump lands on the end of a long question so its reply follows, while a short question stays whole', async () => {
+  geometry({ tall: 5 })
+  const view = render(paneWith(transcript('landing')))
+  const pane = view.getByTestId('pane'),
+    nav = view.getByRole('navigation')
+  toFirst(nav)
+  await waitFor(() => expect(pane.scrollTop).toBe(0))
+  // A 40px question fits inside the landing zone, so its top rests 16px below the pane's top.
+  fireEvent.click(view.getByRole('button', { name: 'Question 3: Prompt 2' }))
+  expect(pane.scrollTop).toBe(140 + 2 * 40 - 100 - 16)
+  // A 400px question lands with its bottom 72px below the pane's top: its last
+  // line and copy row stay in view and the reply is next.
+  fireEvent.click(view.getByRole('button', { name: 'Question 6: Prompt 5' }))
+  expect(pane.scrollTop).toBe(140 + 5 * 40 + 400 - 100 - 72)
+  expect(document.activeElement?.getAttribute('data-conversation-index')).toBe('5')
+})
+
+test('hovering a tick shows a short label of its question at once, recedes the other ticks, and inactive or compact transcripts hide their rail', async () => {
   geometry()
   const question = `${'Full question '.repeat(100)}final words`
-  const data = transcript('unfold', question)
+  const data = transcript('label', question)
   const view = render(paneWith(data))
   const nav = view.getByRole('navigation')
   toFirst(nav)
+  await waitFor(() => expect(nav.style.getPropertyValue('--conversation-label')).toBe('158px'))
   const dot = view.getByRole('button', { name: `Question 1: ${question}` })
   const text = dot.querySelector('.conversation-navigation-text') as HTMLElement
   const dots = view.getByRole('group', { name: 'User prompts' })
-  // The full question is present from the start; nothing is truncated or swapped.
+  // The full question stays in the DOM for the accessible name; the label shows
+  // its start through a fixed-width fading box, never an ellipsis.
   expect(text.textContent).toBe(question)
   expect(text.textContent).not.toContain('…')
   fireEvent.mouseEnter(dot)
   expect(dot.classList.contains('is-hover')).toBe(true)
-  expect(dot.classList.contains('is-dwell')).toBe(false)
-  expect(dots.classList.contains('is-focus')).toBe(false)
-  await waitFor(() => expect(dot.classList.contains('is-dwell')).toBe(true), { timeout: 1500 })
   expect(dots.classList.contains('is-focus')).toBe(true)
-  expect(text.textContent).toBe(question)
-  expect(text.style.maxHeight).toBe('300px')
-  // Moving to another tick restarts the two stages there.
+  // A long question is clipped and fades at the rail; a short one is not.
+  expect(dot.classList.contains('is-clipped')).toBe(true)
   const second = view.getByRole('button', { name: 'Question 2: Prompt 1' })
   fireEvent.mouseEnter(second)
   expect(second.classList.contains('is-hover')).toBe(true)
-  expect(dot.classList.contains('is-dwell')).toBe(false)
-  expect(dots.classList.contains('is-focus')).toBe(false)
+  expect(second.classList.contains('is-clipped')).toBe(false)
+  expect(dot.classList.contains('is-hover')).toBe(false)
   fireEvent.mouseLeave(dots)
   expect(second.classList.contains('is-hover')).toBe(false)
-  // Clicking the unfolded question is what jumps.
+  expect(dots.classList.contains('is-focus')).toBe(false)
+  // Clicking the label jumps to its question.
   fireEvent.mouseEnter(dot)
-  await waitFor(() => expect(dot.classList.contains('is-dwell')).toBe(true), { timeout: 1500 })
   fireEvent.click(text)
   expect(document.activeElement?.getAttribute('data-conversation-index')).toBe('0')
-  expect(dot.classList.contains('is-dwell')).toBe(false)
+  expect(dot.classList.contains('is-hover')).toBe(false)
   view.rerender(paneWith(data, { active: false }))
   expect(view.queryByRole('navigation')).toBeNull()
   view.rerender(paneWith(data, { compact: true }))
@@ -349,29 +370,63 @@ test('a short conversation groups its ticks at a capped pitch instead of stretch
   expect(reachableQuestions(nav).length).toBeLessThan(100)
 })
 
-test('the question keeps to the gutter beside the messages, and a pane too narrow for a line shows no brushing text', async () => {
+test('the label is as wide as the gutter beside the messages allows, within a short floor and ceiling, and a column that fills its pane is inset from the rail', async () => {
   geometry()
   const view = render(paneWith(transcript('gutter')))
   const nav = view.getByRole('navigation')
   await waitFor(() => expect(nav.style.getPropertyValue('--conversation-gutter')).toBe('164px'))
-  toFirst(nav)
-  const dot = view.getByRole('button', { name: 'Question 1: Prompt 0' })
-  fireEvent.mouseEnter(dot)
-  expect(dot.classList.contains('is-tight')).toBe(false)
-  expect(dot.classList.contains('is-scrim')).toBe(false)
+  expect(nav.style.getPropertyValue('--conversation-label')).toBe('158px')
+  expect(nav.style.getPropertyValue('--conversation-pane')).toBe('800px')
+  expect((view.container.querySelector('.conversation-content') as HTMLElement).style.paddingRight).toBe('')
   cleanup()
   vi.restoreAllMocks()
   geometry({ contentWidth: 760 })
   const narrow = render(paneWith(transcript('gutter-narrow')))
   const rail = narrow.getByRole('navigation')
   await waitFor(() => expect(rail.style.getPropertyValue('--conversation-gutter')).toBe('4px'))
-  toFirst(rail)
-  const tick = narrow.getByRole('button', { name: 'Question 1: Prompt 0' })
-  fireEvent.mouseEnter(tick)
-  expect(tick.classList.contains('is-tight')).toBe(true)
-  expect(tick.classList.contains('is-scrim')).toBe(false)
-  await waitFor(() => expect(tick.classList.contains('is-dwell')).toBe(true), { timeout: 1500 })
-  expect(tick.classList.contains('is-scrim')).toBe(true)
+  // No gutter at all still leaves a short label at the pane's edge.
+  expect(rail.style.getPropertyValue('--conversation-label')).toBe('120px')
+  expect((narrow.container.querySelector('.conversation-content') as HTMLElement).style.paddingRight).toBe('')
+  cleanup()
+  vi.restoreAllMocks()
+  // A column that fills its pane would run under the ticks: its own right
+  // padding grows so text and bubbles stop 4px short of the 30px rail.
+  geometry({ contentWidth: 800 })
+  const filled = render(paneWith(transcript('gutter-filled')))
+  const column = filled.container.querySelector('.conversation-content') as HTMLElement
+  await waitFor(() => expect(column.style.paddingRight).toBe('34px'))
+  expect(filled.getByRole('navigation').style.getPropertyValue('--conversation-gutter')).toBe('0px')
+  filled.rerender(paneWith(transcript('gutter-filled'), { active: false }))
+  expect(column.style.paddingRight).toBe('')
+})
+
+test('wheeling over a long conversation browses the strip without scrolling the transcript, and it drifts back after the pointer leaves', async () => {
+  geometry()
+  const view = render(paneWith(transcript('wheel')))
+  const pane = view.getByTestId('pane'),
+    nav = view.getByRole('navigation')
+  toLatest(nav)
+  await waitFor(() => expectCurrentPrompt(nav, 100))
+  const dots = view.getByRole('group', { name: 'User prompts' })
+  const strip = nav.querySelector('.conversation-navigation-strip') as HTMLElement
+  const before = strip.style.transform
+  const scrollTop = pane.scrollTop
+  fireEvent.mouseEnter(dots)
+  fireEvent.wheel(dots, { deltaY: -480, clientY: 300 })
+  await waitFor(() => expect(strip.style.transform).not.toBe(before))
+  // The transcript did not move and the reading mark stayed where it was.
+  expect(pane.scrollTop).toBe(scrollTop)
+  expect(nav.querySelector('[aria-current]')?.getAttribute('aria-label')).toBe('Question 100: Prompt 99')
+  // The tick that arrived under the still pointer is lit.
+  expect(nav.querySelectorAll('.conversation-navigation-dot.is-hover').length).toBe(1)
+  fireEvent.mouseLeave(dots)
+  await waitFor(() => expect(strip.style.transform).toBe(before), { timeout: 2500 })
+  // A short conversation has nothing to browse.
+  view.rerender(paneWith(transcript('wheel', 'Prompt 0', 7)))
+  await waitFor(() => expect(nav.querySelectorAll('.conversation-navigation-dot').length).toBe(7))
+  const grouped = strip.style.transform
+  fireEvent.wheel(dots, { deltaY: -480, clientY: 300 })
+  expect(strip.style.transform).toBe(grouped)
 })
 
 test('omitted provider events do not leave empty spacing wrappers', () => {

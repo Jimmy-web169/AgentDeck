@@ -26,12 +26,17 @@ roots.json
 # local test project used to exercise Codex (subagents, tool calls)
 testproj/
 
-# per-provider tracked roots (machine-specific absolute paths)
+# per-provider tracked roots (machine-specific absolute paths). Current home is
+# .agentdeck/roots/; these legacy copies and their .migrated markers are retained
+# by the startup migration so older versions keep working.
 roots.claude.json
 roots.codex.json
 roots.antigravity.json
-# format-drift probe store (per provider), written next to roots.*.json by a server run from the repo
+roots.*.json.migrated
+# format-drift probe store (per provider). Current home is .agentdeck/probe/;
+# legacy copies and .migrated markers are retained likewise.
 probe.*.json
+probe.*.json.migrated
 # AI hand-off briefs (server/shared/handoff.ts), written under the config dir like probe.*.json
 handoffs/
 # Portable conversation exports and tiny local delivery receipts (private).

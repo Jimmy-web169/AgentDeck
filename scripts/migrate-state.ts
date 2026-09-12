@@ -3,8 +3,10 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { configDir, planStateMigration, applyStateMigration } from '../server/shared/state.ts'
 
-// No startup migration: operators inspect a plan, stop the configured service,
-// and explicitly apply. The copy operation never removes legacy state.
+// Startup already copies clean legacy state automatically. This command is for
+// inspecting a plan (conflicts, blocked files) and for applying after they are
+// resolved by hand, with the configured service stopped. Copies never remove
+// legacy state.
 export function migrateState(args: string[]) {
   let directory = configDir(),
     apply = false
@@ -14,7 +16,7 @@ export function migrateState(args: string[]) {
     else if (arg === '--config-dir' && args[i + 1] && !args[i + 1].startsWith('--')) directory = path.resolve(args[++i])
     else if (arg === '--help') {
       return {
-        help: 'Usage: npm run migrate:state -- [--config-dir <directory>] [--apply]\nDefault is a read-only plan. Stop the service using this config directory before --apply. Legacy files are retained.',
+        help: 'Usage: npm run migrate:state -- [--config-dir <directory>] [--apply]\nDefault is a read-only plan. Startup copies clean legacy state automatically; use --apply for a hand-resolved plan with the service stopped. Legacy files are retained.',
       }
     } else throw Error(`Unknown or incomplete argument: ${arg}`)
   }

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import path from 'node:path'
 import { temporaryDirectory, withConfigDir } from '../../helpers/tmpConfigDir.ts'
-import { stateDir, stateFile, stateDirectory, planStateMigration, applyStateMigration } from '../../../server/shared/state.ts'
+import { stateDir, stateFile, stateDirectory, planStateMigration, applyStateMigration, migrateStateOnStartup } from '../../../server/shared/state.ts'
 import { idFor } from '../../../server/shared/roots.ts'
 import { terminalIdentity } from '../../../server/shared/terminalIdentity.ts'
 
@@ -114,4 +114,44 @@ test('malformed JSON and symbolic destination parents block migration without ch
   assert.throws(() => applyStateMigration(base), /blocked/)
   assert.deepEqual(fs.readdirSync(outside), [])
   assert.equal(fs.readFileSync(legacy, 'utf8'), '[]')
+})
+
+test('startup migration copies clean legacy state, retains the originals, and is idempotent', async () => {
+  const base = temporaryDirectory('state-startup-')
+  fs.writeFileSync(path.join(base, 'roots.claude.json'), '[{"id":"one"}]')
+  fs.writeFileSync(path.join(base, 'probe.claude.json'), '{"root":{"baseline":{}}}')
+  const first = migrateStateOnStartup(base)
+  assert.equal(first.status, 'copied')
+  assert.equal(first.entries.filter((entry) => entry.status === 'copied').length, 2)
+  assert.equal(stateFile('roots', 'claude', base), path.join(stateDir(base), 'roots', 'claude.json'))
+  assert.equal(fs.readFileSync(stateFile('roots', 'claude', base), 'utf8'), '[{"id":"one"}]')
+  assert.equal(fs.readFileSync(path.join(base, 'roots.claude.json'), 'utf8'), '[{"id":"one"}]')
+  assert.equal(fs.readFileSync(stateFile('probe', 'claude', base), 'utf8'), '{"root":{"baseline":{}}}')
+  assert.ok(fs.existsSync(path.join(base, 'roots.claude.json.migrated')))
+  const second = migrateStateOnStartup(base)
+  assert.equal(second.status, 'current')
+  assert.ok(second.entries.every((entry) => entry.status === 'identical'))
+  await withConfigDir(base, () => assert.equal(migrateStateOnStartup().status, 'current'))
+})
+
+test('startup migration does nothing on a fresh install and leaves conflicting or malformed legacy state authoritative', () => {
+  const fresh = temporaryDirectory('state-startup-fresh-')
+  assert.deepEqual(migrateStateOnStartup(fresh), { status: 'none', entries: [] })
+  assert.deepEqual(fs.readdirSync(fresh), [])
+  const base = temporaryDirectory('state-startup-conflict-')
+  fs.writeFileSync(path.join(base, 'roots.claude.json'), '[{"id":"old"}]')
+  fs.writeFileSync(path.join(base, 'roots.codex.json'), '[]')
+  fs.mkdirSync(path.join(stateDir(base), 'roots'), { recursive: true })
+  fs.writeFileSync(path.join(stateDir(base), 'roots', 'claude.json'), '[{"id":"new"}]')
+  const skipped = migrateStateOnStartup(base)
+  assert.equal(skipped.status, 'skipped')
+  assert.equal(required(skipped.entries.find((entry) => entry.source.endsWith('roots.claude.json'))).status, 'conflict')
+  // Nothing was copied, so the untouched legacy file still owns codex.
+  assert.equal(fs.existsSync(path.join(stateDir(base), 'roots', 'codex.json')), false)
+  assert.equal(stateFile('roots', 'codex', base), path.join(base, 'roots.codex.json'))
+  const broken = temporaryDirectory('state-startup-broken-')
+  fs.writeFileSync(path.join(broken, 'probe.claude.json'), '{')
+  assert.equal(migrateStateOnStartup(broken).status, 'skipped')
+  assert.equal(fs.existsSync(stateDir(broken)), false)
+  assert.equal(fs.readFileSync(path.join(broken, 'probe.claude.json'), 'utf8'), '{')
 })

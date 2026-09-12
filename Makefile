@@ -8,8 +8,9 @@ PORT ?= 47841
 help: ## list targets
 	@echo "AgentDeck:"
 	@echo "  make init               first-time setup: npm deps + ttyd + check codex (OS-friendly)"
-	@echo "  make all                update provider CLIs, then backend + frontend (hot reload) -> http://localhost:47842"
+	@echo "  make all                ask whether to update provider CLIs [y/N], then backend + frontend (hot reload) -> http://localhost:47842"
 	@echo "  make update             update every tracked provider CLI (claude / codex / agy update); AGENTDECK_SKIP_UPDATE=1 to skip"
+	@echo "                          AGENTDECK_UPDATE=1 answers yes for 'make all'; a non-interactive shell skips the question"
 	@echo "  make be                 backend (API) only              -> http://localhost:$(PORT)"
 	@echo "  make fe                 frontend (Vite) only            -> http://localhost:47842"
 	@echo "  make build              build frontend into dist/"
@@ -26,8 +27,11 @@ init: ## one-shot setup (npm install + ttyd + codex check)
 update: ## update every tracked provider CLI
 	@node scripts/update-providers.ts
 
-all: stop update ## update provider CLIs, then backend + frontend together (hot reload)
+# The CLI updaters are optional at startup: answer y to run them, Enter to start
+# right away. AGENTDECK_UPDATE=1 / AGENTDECK_SKIP_UPDATE=1 answer without asking.
+all: stop ## ask whether to update provider CLIs, then backend + frontend together (hot reload)
 	@test -d node_modules || { echo "Dependencies not installed — run 'make init' first."; exit 1; }
+	@node scripts/update-providers.ts --ask
 	@npm run dev || { echo ""; echo "'make all' failed. If this is a fresh checkout, run 'make init' first to set up dependencies."; exit 1; }
 
 be: stop ## backend / API server only (also serves dist/)

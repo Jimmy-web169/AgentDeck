@@ -3,7 +3,7 @@ import type { ConversationProps } from './Conversation.tsx'
 import type { TerminalProps } from './TerminalPanel.tsx'
 import type { ThreadContext } from './SubagentThread.tsx'
 import type { StatsProps } from './Stats.tsx'
-import type { ComponentType, RefObject, UIEventHandler } from 'react'
+import type { ComponentType, RefObject, UIEventHandler, CSSProperties } from 'react'
 import type { Target, TimelineEvent, TerminalEntry } from '../../../shared/types.js'
 import type { createApi } from '../../api/index.ts'
 type Session = Partial<SessionDetails> & { id: string }
@@ -36,6 +36,7 @@ export interface SessionViewContext {
   Conversation: ComponentType<ConversationProps>
   openSessionById: (id: string, options?: { view?: string }) => void
   subagentCtx: ThreadContext | null
+  hasSubagents: boolean
   canFork: boolean
   forkFromReply: (event: TimelineEvent) => unknown
   shownPanes: Array<{ key: string; target: Target }>
@@ -70,12 +71,21 @@ import ConversationPending from './ConversationPending.tsx'
 import InfoDot from './InfoDot.tsx'
 import ErrorBoundary from './ErrorBoundary.tsx'
 import { ActivityIcon } from './icons.tsx'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import SubagentExplorer from './SubagentExplorer.tsx'
+import PaneDivider, { usePaneLayout } from './PaneDivider.tsx'
+import { getPrefs, setPref } from '../../lib/prefs.ts'
 
 // Shared session layout preserves mounted conversations and terminal panes.
 export default function SessionView(ctx: SessionViewContext) {
-  const [multiView, setMultiView] = useState(false)
+  const [subagentPane, setSubagentPane] = useState(false)
+  // The pane's share follows the pointer locally; the preference store takes
+  // one value when the gesture ends.
+  const [paneShares, setPaneShares] = useState(() => getPrefs().subagentPane)
+  const paneLayout = usePaneLayout()
+  const panesRef = useRef<HTMLDivElement>(null)
+  const resizePane = (size: number) => setPaneShares((old) => ({ ...old, [paneLayout]: size }))
+  const commitPane = (size: number) => setPref('subagentPane', { ...paneShares, [paneLayout]: size })
   const {
     api,
     SESSION_TABS,
@@ -103,6 +113,7 @@ export default function SessionView(ctx: SessionViewContext) {
     Conversation,
     openSessionById,
     subagentCtx,
+    hasSubagents,
     canFork,
     forkFromReply,
     shownPanes,
@@ -130,6 +141,9 @@ export default function SessionView(ctx: SessionViewContext) {
     fillConfig,
     emptyStreamLabel,
   } = ctx
+  // Only a session that has spawned agents offers the pane; the toggle's
+  // state survives across sessions but never shows an empty pane.
+  const split = subagentPane && !!subagentCtx && hasSubagents
   return (
     <ProviderApiContext.Provider value={api}>
       <main className="h-full flex flex-col min-w-0">
@@ -147,15 +161,15 @@ export default function SessionView(ctx: SessionViewContext) {
               </button>
             ))}
           </div>
-          {tab === 'conversation' && subagentCtx && sessionData && (
+          {tab === 'conversation' && subagentCtx && sessionData && hasSubagents && (
             <button
               type="button"
-              aria-pressed={multiView}
-              onClick={() => setMultiView(!multiView)}
-              title="Watch the main conversation and subagents together"
-              className={`text-[12px] px-2.5 py-1.5 rounded-md border ${multiView ? 'border-sky-500/50 bg-sky-500/10 text-zinc-200' : 'border-zinc-700 text-zinc-400 hover:text-zinc-100'}`}
+              aria-pressed={subagentPane}
+              onClick={() => setSubagentPane(!subagentPane)}
+              title="See every sub-agent's status beside this conversation and open one to read it"
+              className={`text-[12px] px-2.5 py-1.5 rounded-md border ${subagentPane ? 'border-sky-500/50 bg-sky-500/10 text-zinc-200' : 'border-zinc-700 text-zinc-400 hover:text-zinc-100'}`}
             >
-              ◫ Multi-view
+              {subagentPane ? 'Hide sub-agents' : 'Show sub-agents'}
             </button>
           )}
           <div className="flex-1" />
@@ -188,7 +202,11 @@ export default function SessionView(ctx: SessionViewContext) {
             expanded threads stay mounted; returning to Conversation shows latest */}
         <ErrorBoundary label="this conversation" resetKey={conversationBoundaryKey(root || '', active?.id || '', nestedSubagents ? openSlug || '' : undefined)}>
           <div className={tab === 'conversation' ? 'flex-1 min-h-0 flex flex-col' : 'hidden'}>
-            <div className={`conversation-panes flex-1 min-h-0 min-w-0 flex ${multiView && subagentCtx ? 'is-split' : ''}`}>
+            <div
+              ref={panesRef}
+              className={`conversation-panes flex-1 min-h-0 min-w-0 flex ${split ? 'is-split' : ''}`}
+              style={split ? ({ '--subagent-pane': `${Math.round(paneShares[paneLayout] * 1000) / 10}%` } as CSSProperties) : undefined}
+            >
               <section ref={mainRef} onScroll={onMainScroll} aria-label="Main transcript" className="flex-1 min-h-0 min-w-0 overflow-y-auto">
                 {termDraft ||
                 (active && !active.oversized && !sessionData) ||
@@ -210,7 +228,8 @@ export default function SessionView(ctx: SessionViewContext) {
                   <Empty active={active} streamLabel={emptyStreamLabel} />
                 )}
               </section>
-              {multiView && subagentCtx && (
+              {split && <PaneDivider containerRef={panesRef} layout={paneLayout} size={paneShares[paneLayout]} onSize={resizePane} onCommit={commitPane} />}
+              {split && (
                 <SubagentExplorer
                   key={conversationBoundaryKey(root || '', active?.id || '', openSlug || '')}
                   provider={providerId}
@@ -218,7 +237,7 @@ export default function SessionView(ctx: SessionViewContext) {
                   nested={nestedSubagents}
                   active={appActive && tab === 'conversation'}
                   Conversation={Conversation}
-                  onClose={() => setMultiView(false)}
+                  onClose={() => setSubagentPane(false)}
                 />
               )}
             </div>

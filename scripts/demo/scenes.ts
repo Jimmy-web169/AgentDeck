@@ -82,22 +82,30 @@ export function getCheckOnlyScenes(H = 900): Scene[] {
       { name: 'empty-home', hash: '#/', seed: 'base', h: H, scenario: 'empty' },
       { name: 'error-root', hash: '#/', seed: 'base', h: H, scenario: 'error' },
       { name: 'long-content', hash: '#/', seed: 'full', h: H, scenario: 'stress' },
-      ...(['claude', 'codex', 'antigravity'] as const).map((provider) => ({
+      // The pane exists only where a session spawned agents; no Antigravity
+      // fixture session has any, so its transcript is covered by session-antigravity.
+      ...(['claude', 'codex'] as const).map((provider) => ({
         name: `multi-view-${provider}`,
-        hash: (fx: Fixture) => sessionHash(fx.target(provider === 'claude' ? fx.claudeStar : provider === 'codex' ? fx.codexStar : fx.agyStar)),
+        hash: (fx: Fixture) => sessionHash(fx.target(provider === 'claude' ? fx.claudeStar : fx.codexStar)),
         seed: 'full',
         h: H,
         scenario: 'folders',
         act: async (cdp: Cdp) => {
           const pane = `[...document.querySelectorAll('[aria-label="Main transcript"]')].find(element => element.clientHeight > 0)`
           if (!(await cdp.waitFor(`${pane}?.querySelector('.conversation-content') != null`))) throw Error('Main transcript did not load')
-          await cdp.eval(`${pane}.closest('main').querySelector('button[title="Watch the main conversation and subagents together"]').click()`)
-          if (
-            !(await cdp.waitFor(
-              `!!document.querySelector('[aria-label="Subagent multi-view"]') && !document.querySelector('[aria-label="Subagent multi-view"]').innerText.includes('Loading')`
-            ))
-          )
-            throw Error('Subagent pane did not load')
+          // Only a session that spawned agents offers the pane; a fixture that
+          // lost its agents would record the conversation alone rather than fail.
+          const button = `${pane}.closest('main').querySelector('button[title^="See every sub-agent"]')`
+          const shown = `!!document.querySelector('[aria-label="Sub-agent pane"]')`
+          if (await cdp.eval(`!!(${button})`)) {
+            await cdp.eval(`(${button}).click()`)
+            if (!(await cdp.waitFor(`${shown} && !document.querySelector('[aria-label="Sub-agent pane"]').innerText.includes('Loading')`)))
+              throw Error('Subagent pane did not load')
+            // The navigator re-measures its rail on the next animation frame after
+            // the split narrows the transcript; probe after that frame so the
+            // rail's position is the settled one rather than whichever came first.
+            await cdp.eval('new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))')
+          } else if (await cdp.eval(shown)) throw Error('Sub-agent pane shown without its button')
         },
       })),
       {
