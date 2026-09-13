@@ -222,14 +222,15 @@ export default function ConversationNavigator({
     window.clearTimeout(resetTimer.current)
     resetTimer.current = window.setTimeout(() => setBrowse(0), BROWSE_RESET_MS)
   }
-  // Above the first rendered question, with earlier history still unloaded, the
-  // previous arrow leads to the first message so that edge is never unreachable.
+  // Past the first or last question a step continues to the edge itself: the
+  // reply after the last question, or the messages before the first, so both
+  // edges stay reachable by click and by hold from anywhere in the transcript.
   const up = useHoldToEdge(
     () => (previous >= 0 ? jumpPrompt(previous) : jumpEdge('top')),
     () => jumpEdge('top')
   )
   const down = useHoldToEdge(
-    () => jumpPrompt(next),
+    () => (next < count ? jumpPrompt(next) : jumpEdge('bottom')),
     () => jumpEdge('bottom')
   )
   // Keep the transcript's existing sibling structure; only the controls move
@@ -266,7 +267,7 @@ export default function ConversationNavigator({
             type="button"
             aria-label="Previous user prompt"
             title="Previous question · hold, or Shift-click, for the first message"
-            disabled={count === 0 || viewport.current === 0}
+            disabled={count === 0}
             className={`conversation-navigation-button${up.holding ? ' is-holding' : ''}`}
             {...up.handlers}
           >
@@ -311,7 +312,7 @@ export default function ConversationNavigator({
             type="button"
             aria-label="Next user prompt"
             title="Next question · hold, or Shift-click, for the latest message"
-            disabled={count === 0 || next >= count}
+            disabled={count === 0}
             className={`conversation-navigation-button${down.holding ? ' is-holding' : ''}`}
             {...down.handlers}
           >

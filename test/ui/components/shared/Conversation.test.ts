@@ -225,7 +225,15 @@ test('prompt ticks follow reading position and available height, with previous a
   await waitFor(() => expect(reachableQuestions(nav).length).toBeLessThan(initial))
   expect(nav.style.height).toBe('252px')
   toLatest(nav)
-  await waitFor(() => expect(nextButton(nav).hasAttribute('disabled')).toBe(true))
+  await waitFor(() => expectCurrentPrompt(nav, 100))
+  // The arrows never stop at the first or last question: past them a click
+  // reaches the edge itself, where the reply after the last question lives.
+  expect(nextButton(nav).hasAttribute('disabled')).toBe(false)
+  pane.scrollTop -= 40
+  fireEvent.scroll(pane)
+  fireEvent.click(nextButton(nav))
+  await waitFor(() => expect(pane.scrollTop).toBe(pane.scrollHeight))
+  expect(previousButton(nav).hasAttribute('disabled')).toBe(false)
 })
 
 test('previous and next prompts keep their selected ordinal when native scrolling clamps at the bottom', async () => {

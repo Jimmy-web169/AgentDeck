@@ -37,6 +37,11 @@ All notable changes to AgentDeck are recorded here. The format follows
   precedence over duplicate terminal/recent entries and retain source identities.
 
 ### Fixed
+- The conversation navigator's arrows no longer stop at the first and last
+  question: they stay enabled from anywhere in the transcript, a click past the
+  last question reaches the very bottom (the reply after it) and past the first
+  reaches the very top, and holding an arrow, or Shift-clicking it, reaches
+  that edge from any question.
 - A new Antigravity conversation started from AgentDeck on Windows now links to
   its record instead of waiting for a manual match. `agy` names the conversation
   it created or resumed in its per-process log, so every launch gets a log file
