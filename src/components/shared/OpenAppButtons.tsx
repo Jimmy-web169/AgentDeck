@@ -24,7 +24,7 @@ export default function OpenAppButtons({ onOpenTool, className = '' }: { onOpenT
         onClick={() => openWith('vscode')}
         disabled={!!opening}
         title="Open this project in VS Code"
-        className="text-[11px] px-2 py-0.5 rounded bg-ink-700 border border-zinc-700 text-zinc-300 hover:text-zinc-100 disabled:opacity-40"
+        className="shrink-0 whitespace-nowrap text-[11px] px-2 py-0.5 rounded bg-ink-700 border border-zinc-700 text-zinc-300 hover:text-zinc-100 disabled:opacity-40"
       >
         {opening === 'vscode' ? 'opening…' : '⧉ VS Code'}
       </button>
@@ -33,7 +33,7 @@ export default function OpenAppButtons({ onOpenTool, className = '' }: { onOpenT
         onClick={() => openWith('terminal')}
         disabled={!!opening}
         title="Open a terminal in this project"
-        className="text-[11px] px-2 py-0.5 rounded bg-ink-700 border border-zinc-700 text-zinc-300 hover:text-zinc-100 disabled:opacity-40"
+        className="shrink-0 whitespace-nowrap text-[11px] px-2 py-0.5 rounded bg-ink-700 border border-zinc-700 text-zinc-300 hover:text-zinc-100 disabled:opacity-40"
       >
         {opening === 'terminal' ? 'opening…' : '❯_ Terminal'}
       </button>

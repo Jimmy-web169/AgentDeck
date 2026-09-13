@@ -31,7 +31,8 @@ Per provider, in one UI:
   does the work in front of you; AgentDeck never calls a model or edits a file itself.
 - **To tab / pop out** — any embedded terminal can open as a `>_` sub-tab of
   its conversation's tab (Alt+↓ / Alt+↑ flip between the two, the pair moves and
-  closes as one, **← Back to session** folds it back), or as its own browser tab
+  closes as one, **← Back to session** folds it back, and its bar keeps the
+  **VS Code** / **Terminal** buttons), or as its own browser tab
   filling the whole window with the same way back, however many tabs you have
   open.
 - **Raw** — line-by-line JSONL viewer with type filtering.

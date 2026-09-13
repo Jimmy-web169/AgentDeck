@@ -6,16 +6,21 @@ import { popoutHref, popoutWindowName } from '../../lib/route.ts'
 import { sessionTargetOf } from '../../lib/tabs.ts'
 import { announceTerminalEnd } from '../../lib/terminalTarget.ts'
 import { setTermView, shellActions } from '../../store/index.ts'
+import OpenAppButtons from './OpenAppButtons.tsx'
 import { TerminalPage } from './TerminalPopout.tsx'
 
 // A terminal in its own AgentDeck tab, beside its conversation's tab. The
 // conversation's panel folds to a bar while this tab exists, so one pty has one
-// viewer; "Back to session" and the panel's "re-embed" fold it back.
+// viewer; "Back to session" and the panel's "re-embed" fold it back. The bar
+// keeps the panel header's VS Code / Terminal buttons: moving the terminal to a
+// tab must not take away the way to open the conversation's folder.
 export default function TerminalTabView({ target }: { target: Target }) {
   const session = sessionTargetOf(target)
   const key = target.terminalKey || ''
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const openTool = (what: 'vscode' | 'terminal') =>
+    createApi(target.provider || '').open({ root: session.root || '', id: session.id || null, slug: session.slug || undefined }, { what, cwd: session.cwd })
   const popOut = () => {
     const w = window.open(popoutHref(session), popoutWindowName(key))
     if (!w) return
@@ -42,8 +47,10 @@ export default function TerminalTabView({ target }: { target: Target }) {
       target={session}
       onBack={() => shellActions.backToSession(target)}
       backTitle="Show the conversation and fold this terminal back into its panel"
+      showOrigin={false}
       actions={
         <>
+          <OpenAppButtons onOpenTool={openTool} />
           <button type="button" onClick={popOut} className="shrink-0 text-zinc-400 hover:text-sky-300" title="Open in a new browser tab instead of this tab">
             ⤢ pop out
           </button>

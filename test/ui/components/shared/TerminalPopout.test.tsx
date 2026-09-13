@@ -30,6 +30,9 @@ test('the pop-out page fills the window with the exact terminal and its bar goes
   expect(frame.className).toContain('h-full')
   expect(attach).toHaveBeenCalledWith(target)
   expect(screen.getByText('connected')).toBeTruthy()
+  // A browser tab of its own has no other chrome, so the bar names the provider and folder too.
+  expect(screen.getByText('Claude Code')).toBeTruthy()
+  expect(screen.getByText('/home/demo/orbit-api')).toBeTruthy()
   await user.click(screen.getByRole('button', { name: /Back to session/ }))
   expect(onBack).toHaveBeenCalledWith(target)
   // reload asks the server again for the same terminal

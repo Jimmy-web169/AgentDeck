@@ -20,6 +20,10 @@ interface PageProps {
   backTitle?: string
   // Extra actions for the bar (the in-app terminal tab adds pop out and End).
   actions?: ReactNode
+  // Provider name and working folder beside the title. The pop-out page has no
+  // other chrome, so it shows them; the in-app tab leaves them to the tab strip
+  // and sidebar.
+  showOrigin?: boolean
 }
 interface Props {
   target?: Target | null
@@ -51,7 +55,7 @@ const pageTitle = (target: Target | null) => target?.title || (target?.cwd || ta
 
 // One terminal filling its container under a slim bar whose first control goes
 // back to the conversation.
-export function TerminalPage({ target, attach = attachByKey, onBack, backTitle, actions }: PageProps) {
+export function TerminalPage({ target, attach = attachByKey, onBack, backTitle, actions, showOrigin = true }: PageProps) {
   const [url, setUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [nonce, setNonce] = useState(0)
@@ -91,8 +95,8 @@ export function TerminalPage({ target, attach = attachByKey, onBack, backTitle, 
         <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${color.dot}`} />
         <span className="min-w-0 flex items-baseline gap-2 truncate">
           <span className="text-zinc-100 truncate">{title}</span>
-          <span className="text-zinc-500 truncate">{label}</span>
-          {(target.cwd || target.slug) && <span className="text-zinc-600 font-mono truncate">{target.cwd || target.slug}</span>}
+          {showOrigin && <span className="text-zinc-500 truncate">{label}</span>}
+          {showOrigin && (target.cwd || target.slug) && <span className="text-zinc-600 font-mono truncate">{target.cwd || target.slug}</span>}
         </span>
         <span className="flex-1" />
         {error ? (

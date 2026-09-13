@@ -147,9 +147,14 @@ takes the sub-tab with it (one notice), on the sub-tab only folds it back (no
 notice); "others" and "to the right" count units; a drag moves the unit. Tab
 shortcuts (Alt+←/→, Alt+[ ], Alt+1…9) step over units and land on the segment
 last used (`lastSegment`, in memory); Alt+↓ / Alt+↑ move inside the unit. `TerminalTabView` renders the
-shared `TerminalPage` with pop out and End; the conversation's
+shared `TerminalPage` with the panel header's **VS Code** / **Terminal**
+buttons (`OpenAppButtons`, calling the provider's `open` endpoint at the
+conversation's folder), then pop out and End. Its bar names the conversation
+only (`showOrigin={false}`): the tab strip and sidebar already carry the
+provider and folder, which the pop-out page still shows; the conversation's
 `TerminalPanel` folds to a bar while a sub-tab for its key exists (derived
-from the tab list, not stored), so one pty has one viewer. **Back to session**
+from the tab list, not stored), so one pty has one viewer, and that bar keeps
+the same two buttons beside its hand-off actions. **Back to session**
 opens the conversation and detaches the sub-tab; **re-embed**, a middle-click
 on the glyph and the menu's **Fold terminal back** only detach it; End, or the
 terminal ending anywhere, closes it (`closeTerminalTabs`). `sameTarget` and

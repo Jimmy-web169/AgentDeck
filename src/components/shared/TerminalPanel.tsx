@@ -287,6 +287,7 @@ export default function TerminalPanel({
         <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse shrink-0" />
         <span className="text-[12px] text-zinc-400 shrink-0">Terminal open in its own tab</span>
         <HandoffActions provider={providerId} root={root} slug={slug} id={id} cwd={cwd} title={title} disabled={loading} />
+        <OpenAppButtons onOpenTool={onOpenTool} />
         <span className="flex-1" />
         <button
           type="button"

@@ -110,6 +110,15 @@ All notable changes to AgentDeck are recorded here. The format follows
   handed back. The URI's shape now decides: drive-letter as a Windows path,
   rootless as a posix path, and only a URI carrying a host is left to the
   platform — so a home copied between machines reads the same on both.
+- A terminal moved to its own tab (**⧉ to tab**) keeps the **VS Code** and
+  **Terminal** buttons. The sub-tab's bar carries them ahead of pop out and
+  End, opening the conversation's folder the same way the panel header does,
+  and the conversation's folded panel bar keeps them beside its hand-off
+  actions — so opening the tab no longer takes away the way to open that
+  folder in VS Code or a system terminal. The sub-tab's bar also stops
+  repeating the provider name and working folder beside the title: the tab
+  strip and sidebar already say which conversation this is. The popped-out
+  browser tab keeps them, having no other chrome.
 
 ### Removed
 - The unreleased application Docker image, container Make targets and settings
