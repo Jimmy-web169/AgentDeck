@@ -20,10 +20,11 @@ const dec = (s: string) => {
   }
 }
 
-export function toHash(target: import('./types.d.ts').Target | null | undefined) {
+export function toHash(target: import('./types.d.ts').Target | null | undefined): string {
   if (target?.kind === 'folder') return '#/' // retired standalone folder view
   if (target?.kind === 'context') return '#/' // retired SQLite views
   if (target?.kind === 'dashboard' && target.dashboardId) return `#/dashboard/${enc(target.dashboardId)}`
+  if (target?.kind === 'terminal' && target.provider) return `#/terminal/${toHash({ ...target, kind: undefined }).slice(2)}`
   if (!target?.provider) {
     const v = target?.view
     const query = new URLSearchParams()
@@ -72,6 +73,10 @@ export function fromHash(hash: unknown, knownProviders: string[] = []): import('
   if (segs[0] === 'folder') return { provider: null, view: 'activity' }
   if (segs[0] === 'context') return { provider: null, view: 'activity' }
   if (segs[0] === 'dashboard' && segs[1]) return { kind: 'dashboard', dashboardId: segs[1] }
+  if (segs[0] === 'terminal') {
+    const inner = fromHash(`#/${h.slice('#/terminal/'.length)}`, knownProviders)
+    return inner?.provider ? { ...inner, kind: 'terminal' } : null
+  }
   const [provider, root, slug, id] = segs
   if (knownProviders.length && !knownProviders.includes(provider)) return null
 
@@ -86,4 +91,26 @@ export function fromHash(hash: unknown, knownProviders: string[] = []): import('
   if (query.get('session')) t.id = query.get('session')
   if (query.get('draft') === '1') t.draft = true
   return t
+}
+
+// A popped-out terminal page: the same target encoding under a "popout"
+// prefix, plus the title the page shows before it knows anything else.
+//   #/popout/<provider>/<root>/<slug>/<id>?terminal=<key>&title=…
+export const isPopoutHash = (hash: unknown) => String(hash || '').startsWith('#/popout/')
+
+export function toPopoutHash(target: import('./types.d.ts').Target) {
+  const base = toHash(target).slice(2)
+  const [route, search = ''] = base.split('?')
+  const query = new URLSearchParams(search)
+  if (target.title) query.set('title', target.title)
+  return `#/popout/${route}${query.size ? `?${query}` : ''}`
+}
+
+export function fromPopoutHash(hash: unknown, knownProviders: string[] = []): import('./types.d.ts').Target | null {
+  if (!isPopoutHash(hash)) return null
+  const rest = String(hash).slice('#/popout/'.length)
+  const target = fromHash(`#/${rest}`, knownProviders)
+  if (!target?.provider) return null
+  const title = new URLSearchParams(rest.split('?')[1] || '').get('title')
+  return title ? { ...target, title } : target
 }

@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url'
 import { terminalIdentity, findTerminal } from '../../../server/shared/terminalIdentity.ts'
 import { uniqueSession } from '../../../server/shared/terminalDiscovery.ts'
 import { findOnPath, resolveVendoredExe } from '../../../server/shared/terminal.ts'
+import { tmuxTarget, tmuxAttachArgs } from '../../../server/shared/terminalBinary.ts'
 
 describe('terminal-lifecycle', async () => {
   test('terminal identity isolates providers, accounts and concurrent drafts; retries are idempotent', () => {
@@ -283,5 +284,20 @@ describe('windows/resolve-vendored-exe', async () => {
     } finally {
       fs.rmSync(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('windows/psmux-targets', () => {
+  // psmux resolves attach-session to the server's current session whatever
+  // `-t` names and ignores kill-session's `=`; tmux keeps its exact-name form.
+  test('tmux keeps exact-name targets; psmux gets plain names and an exact-name attach', () => {
+    assert.equal(tmuxTarget('agentdeck-0123456789ab', 'linux'), '=agentdeck-0123456789ab')
+    assert.equal(tmuxTarget('agentdeck-0123456789ab', 'darwin'), '=agentdeck-0123456789ab')
+    assert.equal(tmuxTarget('agentdeck-0123456789ab', 'win32'), 'agentdeck-0123456789ab')
+    assert.deepEqual(tmuxAttachArgs('agentdeck-0123456789ab', 'linux'), ['attach-session', '-t', '=agentdeck-0123456789ab'])
+    const attach = tmuxAttachArgs('agentdeck-0123456789ab', 'win32')
+    assert.deepEqual(attach.slice(0, 4), ['new-session', '-A', '-s', 'agentdeck-0123456789ab'])
+    // an ended session runs an exiting command: no bare shell survives under the AgentDeck name
+    assert.deepEqual(attach.slice(4), ['--', 'cmd.exe', '/c', 'exit'])
   })
 })

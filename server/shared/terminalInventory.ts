@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { sourceKey } from '../../shared/identity.ts'
-import { findTmux } from './terminalBinary.ts'
+import { findTmux, tmuxTarget } from './terminalBinary.ts'
 import { processFiles } from './terminalDiscovery.ts'
 import type { ChangeEvent } from '../../shared/types.d.ts'
 import type { TerminalConfig, TerminalMetadata, TerminalPoolEntry } from './terminalTypes.ts'
@@ -74,7 +74,7 @@ export function createTerminalInventory(providers: Map<string, TerminalConfig>, 
           const observed = provider.resolveSession({ meta, files: () => processFiles(tmux, name) })
           if (observed?.id && (observed.id !== meta.id || observed.slug !== meta.slug || observed.title !== meta.title)) {
             meta = { ...meta, ...observed, isNew: false }
-            execFileSync(tmux, ['set-environment', '-t', `=${name}`, 'AGENTDECK_META', Buffer.from(JSON.stringify(meta)).toString('base64')], {
+            execFileSync(tmux, ['set-environment', '-t', tmuxTarget(name), 'AGENTDECK_META', Buffer.from(JSON.stringify(meta)).toString('base64')], {
               stdio: 'ignore',
               timeout: 2000,
             })

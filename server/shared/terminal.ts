@@ -8,7 +8,7 @@ import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { findTerminal } from './terminalIdentity.ts'
 import { createTerminalInventory } from './terminalInventory.ts'
-import { findTmux, findTtyd } from './terminalBinary.ts'
+import { findTmux, findTtyd, tmuxTarget, tmuxAttachArgs } from './terminalBinary.ts'
 export { findOnPath, resolveVendoredExe, findTmux, findTtyd } from './terminalBinary.ts'
 
 // Shared embedded-terminal pool. Runs a provider's real CLI TUI inside a ttyd
@@ -56,7 +56,7 @@ function killTmuxSession(name: string) {
   const tmux = findTmux()
   if (!tmux) return
   try {
-    execFileSync(tmux, ['kill-session', '-t', `=${name}`], { stdio: 'ignore', timeout: 2000 })
+    execFileSync(tmux, ['kill-session', '-t', tmuxTarget(name)], { stdio: 'ignore', timeout: 2000 })
   } catch {}
 }
 
@@ -188,12 +188,12 @@ function startTerminalOnce({
       }
     } else {
       try {
-        execFileSync(tmux, ['has-session', '-t', `=${tmuxName}`], { stdio: 'ignore', timeout: 2000 })
+        execFileSync(tmux, ['has-session', '-t', tmuxTarget(tmuxName)], { stdio: 'ignore', timeout: 2000 })
       } catch {
         throw err(410, 'This terminal has ended. Open a new conversation or resume its saved session.')
       }
     }
-    command = [tmux, 'attach-session', '-t', `=${tmuxName}`]
+    command = [tmux, ...tmuxAttachArgs(tmuxName)]
   } else {
     if (!bin) throw err(404, `${config.title} executable not found`)
     command = [bin, ...cliArgs]
@@ -286,7 +286,7 @@ export async function reattachTerminal({ body, root, config }: { body: ReattachB
     if (hit.tmuxName) {
       const tmux = findTmux()
       if (!tmux) throw err(410, 'This terminal is no longer running.')
-      execFileSync(tmux, ['set-environment', '-t', `=${hit.tmuxName}`, 'AGENTDECK_META', Buffer.from(JSON.stringify(bound)).toString('base64')], {
+      execFileSync(tmux, ['set-environment', '-t', tmuxTarget(hit.tmuxName), 'AGENTDECK_META', Buffer.from(JSON.stringify(bound)).toString('base64')], {
         stdio: 'ignore',
         timeout: 2000,
       })

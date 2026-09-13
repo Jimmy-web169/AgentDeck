@@ -29,6 +29,11 @@ Per provider, in one UI:
   opens the provider's own terminal with a brief: your request, the file and its
   current content, and the official docs page for that kind of setting. The CLI
   does the work in front of you; AgentDeck never calls a model or edits a file itself.
+- **To tab / pop out** — any embedded terminal can open as a `>_` sub-tab of
+  its conversation's tab (Alt+↓ / Alt+↑ flip between the two, the pair moves and
+  closes as one, **← Back to session** folds it back), or as its own browser tab
+  filling the whole window with the same way back, however many tabs you have
+  open.
 - **Raw** — line-by-line JSONL viewer with type filtering.
 - **Stats** — tool usage, models, and token totals aggregated across a tracked
   folder, drillable to project and session.
@@ -128,7 +133,8 @@ sentence.
 
 ⌘/Ctrl+K fuzzy-jumps to any project or session in any provider or folder;
 → browses a project's sessions by title and first prompt; Enter opens, ⌘/Ctrl+Enter
-opens in a new tab. Alt+T / Alt+W / Alt+[ ] / Alt+1…9 drive the tabs. The full
+opens in a new tab. Alt+T / Alt+W / Alt+← → / Alt+1…9 drive the tabs and Alt+↑ ↓
+a conversation's terminal sub-tab. The full
 list is behind the **?** in the tab strip, with the modifier named for your OS.
 
 <img src="demo/v2.0/quick-switcher-open.png" alt="The quick switcher">

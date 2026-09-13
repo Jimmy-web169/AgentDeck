@@ -20,10 +20,14 @@ if (bin === 'ttyd') {
 } else if (bin === 'tmux') {
   if (args[0] === 'new-session') {
     const file = sessionFile(value('-s'))
-    if (fs.existsSync(file)) process.exit(1)
-    const meta = args.find((s) => s.startsWith('AGENTDECK_META='))
-    if (!meta) throw Error('missing fixture metadata')
-    fs.writeFileSync(file, JSON.stringify({ meta: meta.slice('AGENTDECK_META='.length), args }))
+    if (fs.existsSync(file)) {
+      if (!args.includes('-A')) process.exit(1)
+      setInterval(() => {}, 1000) // `new-session -A`: attached to the existing session
+    } else {
+      const meta = args.find((s) => s.startsWith('AGENTDECK_META='))
+      if (!meta) throw Error('missing fixture metadata')
+      fs.writeFileSync(file, JSON.stringify({ meta: meta.slice('AGENTDECK_META='.length), args }))
+    }
   } else if (args[0] === 'list-sessions') {
     for (const f of fs.readdirSync(dir).filter((s: string) => /^agentdeck-.*\.json$/.test(s))) console.log(f.slice(0, -5) + '\t0')
   } else if (args[0] === 'show-environment') {

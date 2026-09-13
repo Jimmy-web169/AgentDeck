@@ -22,7 +22,7 @@ interface TabStripProps {
   onToggleSidebar?: () => void
 }
 import { useEffect, useRef, useState } from 'react'
-import { tabLabel, targetKey } from '../../lib/tabs.ts'
+import { groupTabs, tabLabel, targetKey, unitOf } from '../../lib/tabs.ts'
 import { providerColor, statusDot } from '../../lib/providerColors.ts'
 import { usePrefs } from '../../lib/prefs.ts'
 import { liveSessionKey } from '../../../shared/identity.ts'
@@ -65,10 +65,11 @@ export default function TabStrip({
   const [menu, setMenu] = useState<{ x: number; y: number; key: string } | null>(null) // { x, y, key }
   const [help, setHelp] = useState(false) // the "?" shortcuts popover
 
-  // keep the active tab in view
+  // keep the active unit in view (a terminal sub-tab lives inside its conversation's element)
   useEffect(() => {
-    els.current.get(activeKey || '')?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' })
-  }, [activeKey])
+    const unit = unitOf(tabs, activeKey)
+    els.current.get(unit?.tab.key || activeKey || '')?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' })
+  }, [activeKey, tabs])
 
   // context menu / help popover: close on outside click / Esc
   useEffect(() => {
@@ -101,15 +102,19 @@ export default function TabStrip({
     const el = els.current.get(overKey)
     if (!el) return
     const r = el.getBoundingClientRect()
+    // Units move as one: indices are those of the conversation tabs; the store keeps sub-tabs attached.
     const fromIdx = tabs.findIndex((t) => t.key === from)
+    const over = unitOf(tabs, overKey)
     let toIdx = tabs.findIndex((t) => t.key === overKey)
-    if (e.clientX > r.left + r.width / 2) toIdx += 1
+    if (e.clientX > r.left + r.width / 2) toIdx += over?.terminal ? 2 : 1
     if (fromIdx < toIdx) toIdx -= 1
     if (toIdx !== fromIdx) onReorder(from, toIdx)
   }
 
+  const units = groupTabs(tabs)
   const menuTab = menu ? tabs.find((t) => t.key === menu.key) : null
-  const menuIdx = menuTab ? tabs.indexOf(menuTab) : -1
+  const menuUnit = menu ? unitOf(tabs, menu.key) : null
+  const menuIdx = menuUnit ? units.indexOf(menuUnit) : -1
 
   return (
     <div className="h-9 shrink-0 flex items-stretch bg-ink-900 border-b border-zinc-800 select-none" role="tablist">
@@ -119,8 +124,9 @@ export default function TabStrip({
       </button>
 
       <div ref={scrollRef} onWheel={onWheel} className="flex-1 min-w-0 flex items-end overflow-x-auto no-scrollbar pt-1 px-0.5 gap-px">
-        {tabs.map((tab) => {
-          const active = tab.key === activeKey
+        {units.map(({ tab, terminal }) => {
+          const active = tab.key === activeKey || (!!terminal && terminal.key === activeKey)
+          const onTerminal = !!terminal && terminal.key === activeKey
           const t = tab.target
           const { primary, secondary } = tabLabel(t, providers)
           const color = providerColor(providers, t?.provider)
@@ -167,10 +173,35 @@ export default function TabStrip({
               style={active ? { boxShadow: `inset 0 2px 0 ${color.bar}` } : undefined}
             >
               <span className={`shrink-0 w-1.5 h-1.5 rounded-full ${dot}`} />
-              <span className="min-w-0 flex-1 truncate">
+              <span className={`min-w-0 flex-1 truncate ${onTerminal ? 'opacity-60' : ''}`}>
                 <span className={active ? 'font-medium' : ''}>{primary}</span>
                 {secondary && <span className="text-zinc-500"> · {secondary}</span>}
               </span>
+              {terminal && (
+                // the terminal sub-tab: one glyph inside the conversation's tab, Alt+↓ / Alt+↑ flip between them
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={onTerminal}
+                  aria-label="terminal"
+                  title="Terminal in its own view (Alt+↓ / Alt+↑) · middle-click folds it back"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onSelect(terminal.key)
+                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onAuxClick={(e) => {
+                    if (e.button !== 1) return
+                    e.stopPropagation()
+                    onClose(terminal.key)
+                  }}
+                  className={`shrink-0 h-6 px-1.5 rounded font-mono text-[11px] leading-none border-l border-zinc-700/70 ${
+                    onTerminal ? 'text-sky-200 bg-ink-600' : 'text-zinc-500 hover:text-zinc-200 hover:bg-ink-600/60'
+                  }`}
+                >
+                  &gt;_
+                </button>
+              )}
               <button
                 type="button"
                 onClick={(e) => {
@@ -272,9 +303,10 @@ export default function TabStrip({
           {(
             [
               ['Close tab', () => onClose(menu.key), true, 'Alt W'],
-              ['Close other tabs', () => onCloseOthers(menu.key), tabs.length > 1],
-              ['Close tabs to the right', () => onCloseRight(menu.key), menuIdx < tabs.length - 1],
+              ['Close other tabs', () => onCloseOthers(menu.key), units.length > 1],
+              ['Close tabs to the right', () => onCloseRight(menu.key), menuIdx < units.length - 1],
               ['Copy link', () => onCopyLink(menu.key), !!menuTab.target],
+              ['Fold terminal back', () => menuUnit?.terminal && onClose(menuUnit.terminal.key), !!menuUnit?.terminal],
             ] satisfies [string, () => void, boolean, string?][]
           ).map(([label, fn, enabled, keys]) => (
             <button

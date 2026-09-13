@@ -24,6 +24,11 @@ export interface Baseline {
   fingerprint: string
   at: string
   versions: string[]
+  // Set only when an operator accepted this shape. A first-sight baseline never
+  // silences drift: the descriptor may be stale from day one and should say so.
+  acceptedAt?: string
+  // Share of sampled records carrying each required key at acceptance time.
+  presence?: Record<string, number>
 }
 export interface StoredProbe {
   baseline?: Baseline
@@ -108,21 +113,32 @@ export const fingerprint = (obs: Pick<Observation, 'keys' | 'enums' | 'types'>) 
     .slice(0, 16)
 
 // ---- comparing with the descriptor and the stored baseline ----
-export function compare(spec: ProbeSpec | null, obs: Observation, baseline: Pick<Baseline, 'keys' | 'enums'> | null) {
+// Drift is measured against the descriptor. An operator who pressed "accept"
+// has said the shape on disk is understood, so exactly what was accepted is
+// reported as an `accepted` note (dialog only, status unaffected) rather than
+// drift again; anything beyond the accepted shape is drift as before.
+export function compare(spec: ProbeSpec | null, obs: Observation, baseline: Pick<Baseline, 'keys' | 'enums' | 'types' | 'acceptedAt' | 'presence'> | null) {
   const details: ProbeResult['details'] = []
   if (!obs.records) return { status: 'empty', details }
+  const accepted = baseline?.acceptedAt ? baseline : null
+  const flag = (covered: boolean, msg: string) => details.push(covered ? { level: 'accepted', msg: `accepted: ${msg}` } : { level: 'drift', msg })
   for (const f of spec?.required || []) {
     const share = (obs.presence[f] || 0) / obs.records
-    if (share < REQUIRED_MIN_SHARE) details.push({ level: 'drift', msg: `required key "${f}" is in ${Math.round(share * 100)}% of the sampled records` })
+    if (share < REQUIRED_MIN_SHARE)
+      flag(!!accepted && (accepted.presence?.[f] ?? 1) < REQUIRED_MIN_SHARE, `required key "${f}" is in ${Math.round(share * 100)}% of the sampled records`)
   }
   for (const [f, allowed] of Object.entries(spec?.enums || {})) {
     const unknown = (obs.enums[f] || []).filter((v) => !allowed.includes(v))
-    if (unknown.length) details.push({ level: 'drift', msg: `new ${f} value${unknown.length > 1 ? 's' : ''}: ${unknown.join(', ')}` })
+    const known = new Set(accepted?.enums?.[f] || [])
+    for (const part of [unknown.filter((v) => !known.has(v)), unknown.filter((v) => known.has(v))])
+      if (part.length) flag(known.has(part[0]), `new ${f} value${part.length > 1 ? 's' : ''}: ${part.join(', ')}`)
   }
   for (const [f, t] of Object.entries(spec?.types || {})) {
     const seen = (obs.types[f] || []).filter((x) => x !== 'null' && x !== 'undefined')
     const bad = seen.filter((x) => x !== t)
-    if (bad.length) details.push({ level: 'drift', msg: `${f} is ${bad.join('/')}, expected ${t}` })
+    const known = new Set(accepted?.types?.[f] || [])
+    for (const part of [bad.filter((x) => !known.has(x)), bad.filter((x) => known.has(x))])
+      if (part.length) flag(known.has(part[0]), `${f} is ${part.join('/')}, expected ${t}`)
   }
   if (baseline) {
     const known = new Set(baseline.keys || [])
@@ -136,6 +152,6 @@ export function compare(spec: ProbeSpec | null, obs: Observation, baseline: Pick
       if (fresh.length) details.push({ level: 'changed', msg: `first sighting of ${f} = ${fresh.join(', ')}` })
     }
   }
-  const status = details.some((d) => d.level === 'drift') ? 'drift' : details.length ? 'changed' : baseline ? 'ok' : 'baseline'
+  const status = details.some((d) => d.level === 'drift') ? 'drift' : details.some((d) => d.level === 'changed') ? 'changed' : baseline ? 'ok' : 'baseline'
   return { status, details }
 }

@@ -158,7 +158,13 @@ fingerprinted and compared with the descriptor and with the baseline stored in
 
 Thresholds (decision 4 below, 2026-09-08): a new optional key is not worth a badge —
 warn only on what every consumer of the format needs. `POST /api/probe/accept`
-makes the current shape the baseline; `POST /api/probe/run` re-samples now.
+samples now and makes that shape the baseline; `POST /api/probe/run` re-samples
+now. An accepted baseline (`acceptedAt`, with the required-key presence it saw)
+also settles drift: exactly the accepted values, types and missing keys are
+reported afterwards as `accepted:` notes (level `accepted`, dialog only, status
+unaffected) until the descriptor lists them, while anything beyond the accepted
+shape is drift again. A first-sight baseline never accepts drift, so a stale
+descriptor is still reported on a fresh folder.
 `test/format-probe.test.js` lays the spec fixtures out as homes and breaks the
 format the way a vendor would.
 

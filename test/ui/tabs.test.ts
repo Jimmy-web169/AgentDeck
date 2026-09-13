@@ -1,9 +1,17 @@
 import { required } from '../helpers/assert.ts'
 // Original test group: tab-identity. Assertions retained during module-path migration.
-import { test, vi } from 'vitest'
+import { expect, test, vi } from 'vitest'
 import assert from 'node:assert/strict'
 import {
   isHome,
+  isTerminalTab,
+  sessionTargetOf,
+  tabLabel,
+  groupTabs,
+  unitOf,
+  unitKeys,
+  normalizeGroups,
+  unitEntry,
   loadTabs,
   TABS_KEY,
   terminalTabKeys,
@@ -15,6 +23,7 @@ import {
   sameTarget,
   targetKey,
 } from '../../src/lib/tabs.ts'
+import { toHash, fromHash } from '../../src/lib/route.ts'
 
 const scope = { provider: 'codex', root: 'account-a', cwd: '/work/project' }
 
@@ -160,4 +169,90 @@ test('retired standalone folder links and stored tabs migrate to Activity; dashb
   }
   const dashboard = { kind: 'dashboard', dashboardId: 'a' }
   assert.equal(isHome(dashboard), false)
+})
+
+test('a terminal tab is its own tab beside the conversation: identity, label, deep link and running dot', () => {
+  const session = {
+    provider: 'claude',
+    root: 'acc',
+    slug: 'p',
+    id: 'one',
+    title: 'Fix the flaky test',
+    project: 'orbit-api',
+    terminalKey: 'claude|acc|session|one',
+  }
+  const term = { ...session, kind: 'terminal' }
+  expect(isTerminalTab(term)).toBe(true)
+  expect(isTerminalTab(session)).toBe(false)
+  expect(sameTarget(session, term)).toBe(false)
+  expect(sameTarget(term, { ...term, title: 'renamed' })).toBe(true)
+  expect(targetKey(term)).toBe('claude|acc|terminal-tab|claude|acc|session|one')
+  expect(sessionTargetOf(term)).toMatchObject({ ...session, kind: undefined })
+  expect(sameTarget(sessionTargetOf(term), session)).toBe(true)
+  expect(tabLabel(term, [{ id: 'claude', label: 'Claude Code' }])).toEqual({ primary: '>_ orbit-api', secondary: 'Fix the flaky test' })
+  const hash = toHash(term)
+  expect(hash).toBe('#/terminal/claude/acc/p/one?terminal=claude%7Cacc%7Csession%7Cone')
+  expect(fromHash(hash, ['claude'])).toEqual({ provider: 'claude', root: 'acc', slug: 'p', id: 'one', terminalKey: 'claude|acc|session|one', kind: 'terminal' })
+  expect(fromHash('#/terminal/', ['claude'])).toBeNull()
+  // both tabs get the running dot; the terminal tab learns the saved conversation like the conversation tab
+  const running = { provider: 'claude', root: 'acc', key: 'claude|acc|session|one', id: 'one', slug: 'p', title: 'Fix the flaky test', launchId: null }
+  const keys = terminalTabKeys([running])
+  expect(keys.has(targetKey(session))).toBe(true)
+  expect(keys.has(targetKey(term))).toBe(true)
+  const draftTerm = { provider: 'claude', root: 'acc', cwd: '/w', launchId: 'l1', terminalKey: 'claude|acc|launch|l1', draft: true, kind: 'terminal' }
+  const bound = adoptTerminal(draftTerm, {
+    provider: 'claude',
+    root: 'acc',
+    key: 'claude|acc|launch|l1',
+    launchId: 'l1',
+    id: 'saved',
+    slug: 'p',
+    title: 'Saved',
+  })
+  expect(bound).toMatchObject({ kind: 'terminal', id: 'saved', title: 'Saved', draft: false })
+  // stored tabs keep terminal tabs apart from their conversations
+  const deduped = dedupeTabs(
+    [
+      { key: 'a', target: session },
+      { key: 'b', target: term },
+    ],
+    'a'
+  )
+  expect(deduped.map((t) => t.key)).toEqual(['a', 'b'])
+})
+
+test('units: a terminal sub-tab is filed under its conversation, an orphan is given one, a duplicate is dropped', () => {
+  const one = { provider: 'claude', root: 'acc', id: 'one', terminalKey: 'k1' }
+  const two = { provider: 'claude', root: 'acc', id: 'two', terminalKey: 'k2' }
+  const tabs = [
+    { key: 't2', target: { ...two, kind: 'terminal' } },
+    { key: 'a', target: one },
+    { key: 'home', target: { provider: null, view: 'activity' } },
+    { key: 't1', target: { ...one, kind: 'terminal' } },
+    { key: 't1dup', target: { ...one, kind: 'terminal', title: 'again' } },
+    { key: 'b', target: two },
+  ]
+  const units = groupTabs(tabs)
+  expect(units.map((u) => [u.tab.key, u.terminal?.key || null])).toEqual([
+    ['a', 't1'],
+    ['home', null],
+    ['b', 't2'],
+  ])
+  expect(unitOf(tabs, 't2')?.tab.key).toBe('b')
+  expect(unitOf(tabs, 'home')?.terminal).toBeNull()
+  expect(unitOf(tabs, 'nope')).toBeNull()
+  expect(unitKeys(units[0])).toEqual(['a', 't1'])
+  expect(normalizeGroups(tabs).map((t) => t.key)).toEqual(['a', 't1', 'home', 'b', 't2'])
+  // an orphan gets a conversation tab of its own, in place
+  const repaired = normalizeGroups([
+    { key: 'home', target: { provider: null, view: 'activity' } },
+    { key: 't1', target: { ...one, kind: 'terminal' } },
+  ])
+  expect(repaired.map((t) => (t.key === 't1' ? 't1' : t.target?.id || 'home'))).toEqual(['home', 'one', 't1'])
+  expect(repaired[1].target?.kind).toBeUndefined()
+  expect(sameTarget(repaired[1].target, one)).toBe(true)
+  // where a unit opens: the segment last used there
+  expect(unitEntry(units[0], {})).toBe('a')
+  expect(unitEntry(units[0], { a: 'terminal' })).toBe('t1')
+  expect(unitEntry(units[1], { home: 'terminal' })).toBe('home')
 })

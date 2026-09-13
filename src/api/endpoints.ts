@@ -66,7 +66,10 @@ export function createProviderClient(provider: string, addressing: Addressing, r
     browse: ({ path }: { path?: string } = {}) => get('browse', path ? { path } : {}),
     pickFolder: () => get<{ ok?: boolean; path?: string; cancelled?: boolean }>('pick-folder'),
 
-    terminal: (body: Reply) => send<TerminalEntry & { canBindSession?: boolean; reused?: boolean; brief?: string }>('terminal', { method: 'POST', body }),
+    // Starting a terminal is idempotent per key on the server, so a dropped
+    // connection or a failed handler is retried before the user sees an error.
+    terminal: (body: Reply) =>
+      send<TerminalEntry & { canBindSession?: boolean; reused?: boolean; brief?: string }>('terminal', { method: 'POST', body, retry: 2 }),
 
     terminals: (): Promise<{ terminals: TerminalEntry[] }> => get('terminals'),
 

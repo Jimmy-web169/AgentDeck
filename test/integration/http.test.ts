@@ -250,6 +250,20 @@ test('HTTP routes injected provider/deck requests and reports unknown providers'
   assert.deepEqual(await failed.json(), { error: 'unexpected dispatcher failure' })
   assert.ok(fx.log.some((message) => message.includes('[http] GET /api/fixture/sessions?root=fixture: unexpected dispatcher failure')))
   assert.deepEqual(await (await fetch(`${base}/api/deck/folders`)).json(), { folders: [] })
+  // a handler failure the dispatcher already turned into a 500 is logged with its stack
+  const thrown = new Error('handler exploded')
+  fx.provider.dispatch = async () => ({ status: 500, body: { error: thrown.message }, cause: thrown })
+  const exploded = await fetch(`${base}/api/fixture/terminal`, { method: 'POST', body: '{}' })
+  assert.equal(exploded.status, 500)
+  assert.deepEqual(await exploded.json(), { error: 'handler exploded' })
+  const logged = fx.log.find((message) => message.startsWith('[http] POST /api/terminal: '))
+  assert.ok(logged, JSON.stringify(fx.log))
+  assert.match(logged, /handler exploded/)
+  assert.match(logged, /http\.test\.ts/, 'the stack names where it threw')
+  // a 5xx a handler chose on purpose logs its message without pretending to have a stack
+  fx.provider.dispatch = async () => ({ status: 503, body: { error: 'no free port' } })
+  assert.equal((await fetch(`${base}/api/fixture/terminal`, { method: 'POST', body: '{}' })).status, 503)
+  assert.ok(fx.log.some((message) => message === '[http] POST /api/terminal: no free port'))
 })
 
 test('HTTP ETag exact comparison returns 304 without mutating a cached handler result', async (t) => {

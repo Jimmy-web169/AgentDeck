@@ -176,7 +176,19 @@ is runtime output, not an unchecked maintained module.
   provider classes and theme-supplied lightness. Cover light and graphite as
   well as midnight when reviewing visuals.
 - A scoped feature must preserve the other modes and established layout. Tab
-  shortcuts use Alt because browsers reserve Ctrl+T/W/Tab/1–9.
+  shortcuts use Alt because browsers reserve Ctrl+T/W/Tab/1–9; they also stay
+  clear of the operating systems' own chords (Ctrl+Alt+Tab, Ctrl+Alt+T,
+  Ctrl+Alt+arrows).
+- A terminal has exactly one viewer. It lives in its conversation's panel, or
+  in a terminal sub-tab (`kind: 'terminal'`, `#/terminal/…`, rendered by
+  `TerminalTabView`; the tab list stays flat, `normalizeGroups` keeps the
+  sub-tab right after its conversation tab and gives an orphan one, and the strip
+  and tab shortcuts treat the pair as one unit while the panel folds to a bar),
+  or in a popped-out browser tab (`#/popout/…`, the same bundle showing
+  `TerminalPopout`). Each of the last two carries the way back to the
+  conversation; the main window is named so the pop-out page can steer it, and
+  the shell's hash listener does the navigation. There are no split panes,
+  terminal grids or docks.
 
 ## Adding a provider
 

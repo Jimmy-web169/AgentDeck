@@ -2,7 +2,7 @@ import { sourceKey } from '../../shared/identity.ts'
 import fs from 'node:fs'
 import path from 'node:path'
 import { jsonRecord } from './json.ts'
-import { observe, compare, fingerprint, type ProbeSpec, type StoredProbe, type ProbeResult } from './probeShape.ts'
+import { observe, compare, fingerprint, type Baseline, type ProbeSpec, type StoredProbe, type ProbeResult } from './probeShape.ts'
 export { observe, compare, fingerprint, valuesAt } from './probeShape.ts'
 import type { Root } from '../../shared/types.d.ts'
 import { fileURLToPath } from 'node:url'
@@ -26,7 +26,9 @@ import { stateFile } from './state.ts'
 //   drift    a required key present in fewer than half the sampled records, an
 //            enum value the descriptor does not list, a type that changed
 //            → badge on the folder chip; the Folders dialog says what and offers
-//            "accept" (make this the new baseline) and "re-check"
+//            "accept" (make this the new baseline) and "re-check". Accepted
+//            drift becomes an "accepted:" note in the dialog until the
+//            descriptor catches up; new drift beyond it is flagged again.
 //   changed  keys the baseline never saw (a vendor added something optional)
 //            → recorded and shown in the Folders dialog only, no badge
 //   ok / baseline (first run) / empty (nothing to sample yet)
@@ -160,26 +162,46 @@ const writeStore = (id: string, store: Record<string, StoredProbe>) => {
 }
 const last = new Map<string, ProbeResult>() // `${id}|${rootId}` -> result
 
-// Probe one root of one provider; persists the baseline on first sight and the
-// latest observation always (for "accept"). Returns { status, details, at, … }.
-export function runProbe(providerId: string, root: Root) {
+// Sample a root's newest transcripts as its descriptor's probe block asks.
+function sampleRoot(providerId: string, root: Root) {
   const spec = loadProbeSpec(providerId)
   if (!spec?.sample?.glob) return null
   const files = expandGlob(root.dir, spec.sample.glob).slice(0, spec.sample.newest || 5)
-  const obs = observe(sampleRecords(files, { head: spec.sample.head, tail: spec.sample.tail }), spec)
+  return { spec, files, obs: observe(sampleRecords(files, { head: spec.sample.head, tail: spec.sample.tail }), spec) }
+}
+
+// Compare one observation with the stored baseline and persist it as the latest
+// result. The baseline is taken on first sight, or replaced when the operator
+// accepts this observation. Returns { status, details, at, … }.
+function recordProbe(providerId: string, root: Root, { spec, files, obs }: NonNullable<ReturnType<typeof sampleRoot>>, accept = false) {
   const store = readStore(providerId)
   const entry = store[root.id] || {}
-  const baseline = entry.baseline || null
-  const { status, details } = compare(spec, obs, baseline)
   const now = new Date().toISOString()
-  const result = { status, details, at: now, files: files.length, records: obs.records, versions: obs.versions, fingerprint: fingerprint(obs) }
-  if (!baseline && obs.records)
-    entry.baseline = { keys: obs.keys, enums: obs.enums, types: obs.types, fingerprint: result.fingerprint, at: now, versions: obs.versions }
+  const shape: Baseline = { keys: obs.keys, enums: obs.enums, types: obs.types, fingerprint: fingerprint(obs), at: now, versions: obs.versions }
+  if (accept) {
+    // What the operator accepted, including which required keys were already
+    // missing, so exactly that shape stops counting as drift.
+    shape.acceptedAt = now
+    shape.presence = Object.fromEntries((spec.required || []).map((f) => [f, obs.records ? (obs.presence[f] || 0) / obs.records : 0]))
+  }
+  // First sight reports "baseline" (compared with nothing); accepting compares
+  // with the shape just accepted, so what was accepted reads as ok.
+  const previous = entry.baseline || null
+  if ((accept || !previous) && obs.records) entry.baseline = shape
+  const { status, details } = compare(spec, obs, accept ? entry.baseline || null : previous)
+  const result = { status, details, at: now, files: files.length, records: obs.records, versions: obs.versions, fingerprint: shape.fingerprint }
   entry.last = { ...result, keys: obs.keys, enums: obs.enums, types: obs.types }
   store[root.id] = entry
   writeStore(providerId, store)
   last.set(sourceKey(providerId, root.id), result)
   return result
+}
+
+// Probe one root of one provider; persists the baseline on first sight and the
+// latest observation always.
+export function runProbe(providerId: string, root: Root) {
+  const sampled = sampleRoot(providerId, root)
+  return sampled && recordProbe(providerId, root, sampled)
 }
 
 // what GET /api/roots attaches to each root: the latest result, or the stored one after a restart
@@ -193,22 +215,13 @@ export function probeStatus(providerId: string, rootId: string) {
   return rest
 }
 
-// "accept": the latest observation becomes the baseline (the drift was a real format change we now understand)
+// "accept": the shape the transcripts have right now becomes the baseline (the
+// change was a real format change we now understand). It samples first: the
+// stored observation can be an hour old, and accepting that one leaves every
+// key seen since then still flagged as new.
 export function acceptProbe(providerId: string, root: Root) {
-  const store = readStore(providerId)
-  const e = store[root.id]
-  if (!e?.last) return runProbe(providerId, root)
-  e.baseline = {
-    keys: e.last.keys,
-    enums: e.last.enums,
-    types: e.last.types,
-    fingerprint: e.last.fingerprint,
-    at: new Date().toISOString(),
-    versions: e.last.versions,
-  }
-  store[root.id] = e
-  writeStore(providerId, store)
-  return runProbe(providerId, root)
+  const sampled = sampleRoot(providerId, root)
+  return sampled && recordProbe(providerId, root, sampled, true)
 }
 
 // every root of every provider, once

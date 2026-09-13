@@ -9,9 +9,10 @@ import FoldersDialog from './components/shared/FoldersDialog.tsx'
 import ConversationHandoffDialog from './components/shared/ConversationHandoffDialog.tsx'
 import DashboardView from './components/shared/DashboardView.tsx'
 import LiveSessionsPanel from './components/shared/LiveSessionsPanel.tsx'
+import TerminalTabView from './components/shared/TerminalTabView.tsx'
 import { PROVIDER_LIST } from './providers/index.ts'
 import { registerProviders } from './lib/providerColors.ts'
-import { liveTarget, type Terminal } from './lib/tabs.ts'
+import { isTerminalTab, liveTarget, type Terminal } from './lib/tabs.ts'
 import { toManagerItems } from './lib/useActiveSessions.ts'
 import useAppShell from './lib/useAppShell.ts'
 import type { Target } from '../shared/types.js'
@@ -99,8 +100,17 @@ export default function App() {
                 </QueryActivityContext.Provider>
               </div>
             ))}
+          {tabs
+            .filter((t) => isTerminalTab(t.target))
+            .map((tab) => (
+              <div key={tab.key} className="absolute inset-0" style={{ display: tab.key === activeKey ? 'block' : 'none' }}>
+                <QueryActivityContext.Provider value={tab.key === activeKey}>
+                  {tab.target && <TerminalTabView target={tab.target} />}
+                </QueryActivityContext.Provider>
+              </div>
+            ))}
           {PROVIDER_LIST.map((p) => {
-            const shown = activeTarget?.provider === p.id
+            const shown = activeTarget?.provider === p.id && !isTerminalTab(activeTarget)
             return (
               <div key={p.id} className="absolute inset-0" style={{ display: shown ? 'block' : 'none' }}>
                 <QueryActivityContext.Provider value={shown}>
@@ -112,7 +122,7 @@ export default function App() {
                     onNavigate={onNavigate}
                     pendingOpen={pendingOpen?.provider === p.id ? pendingOpen : null}
                     navigationTarget={shown ? activeTarget : null}
-                    openTargets={tabs.map((t) => t.target).filter((t): t is Target => t?.provider === p.id)}
+                    openTargets={tabs.map((t) => t.target).filter((t): t is Target => t?.provider === p.id && !isTerminalTab(t))}
                     onConsumedPending={consumedPending}
                   />
                 </QueryActivityContext.Provider>

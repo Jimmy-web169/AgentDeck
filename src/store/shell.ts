@@ -14,6 +14,10 @@ import {
   emptyTab,
   forgetRecent,
   isHome,
+  isTerminalTab,
+  sessionTargetOf,
+  normalizeGroups,
+  unitOf,
   loadRecent,
   loadTabs,
   normalizeView,
@@ -52,6 +56,8 @@ interface ShellData {
   folderFocus: { folderId: string } | null
   sidebarW: number
   searchNewTab: boolean
+  // Per conversation tab: which segment of its unit was used last (in memory only).
+  lastSegment: Record<string, 'conversation' | 'terminal'>
 }
 interface Services {
   readTerminals: () => TerminalEntry[]
@@ -82,6 +88,8 @@ function initialState(providerIds: readonly string[]): TabState {
       activeKey = t.key
     }
   }
+  tabs = normalizeGroups(tabs)
+  if (!tabs.some((t) => t.key === activeKey)) activeKey = tabs[0].key
   return { tabs, activeKey }
 }
 
@@ -115,6 +123,7 @@ function initialData(providerIds: readonly string[]): ShellData {
     folderFocus: null,
     sidebarW: width >= 240 && width <= 600 ? width : 300,
     searchNewTab: false,
+    lastSegment: {},
   }
 }
 export function createShellStore(providerIds: readonly string[] = Object.keys(PROVIDER_METADATA)) {
@@ -143,7 +152,11 @@ export function createShellStore(providerIds: readonly string[] = Object.keys(PR
   const dismissClosedRunning = () => setClosedRunning(null)
 
   const commit = (next: TabState) => {
-    set({ state: next })
+    const tabs = normalizeGroups(next.tabs)
+    const activeKey = tabs.some((t) => t.key === next.activeKey) ? next.activeKey : tabs[0]?.key || null
+    const unit = unitOf(tabs, activeKey)
+    const lastSegment = unit ? { ...get().lastSegment, [unit.tab.key]: unit.terminal?.key === activeKey ? 'terminal' : 'conversation' } : get().lastSegment
+    set({ state: { tabs, activeKey }, lastSegment: lastSegment as ShellData['lastSegment'] })
   }
 
   const issuePending = (target: Target | null | undefined) => {
@@ -175,6 +188,8 @@ export function createShellStore(providerIds: readonly string[] = Object.keys(PR
       target = newDraft(target)
       newTab = true
     }
+    // A terminal sub-tab never replaces the tab it is opened from; commit files it under its conversation.
+    if (isTerminalTab(target)) newTab = true
     const terminal = target?.provider && services.readTerminals().find((t) => sameTarget(target, liveTarget(t)))
     if (terminal) target = adoptTerminal(target, terminal)
     const next: TabState = openTabState(cur, target, { newTab })
@@ -225,7 +240,7 @@ export function createShellStore(providerIds: readonly string[] = Object.keys(PR
     if (running.length) setClosedRunning(running)
   }
 
-  const { closeTab, closeOthers, closeRight, moveTab } = createTabActions({
+  const { closeTab, closeOthers, closeRight, moveTab, detachTab } = createTabActions({
     read: () => get().state,
     commit,
     notifyClosed,
@@ -294,8 +309,24 @@ export function createShellStore(providerIds: readonly string[] = Object.keys(PR
     services.updateTerminal(entry, false)
     adoptTerminals([entry])
   }
+  // Every terminal tab showing this terminal, closed without the "still running" notice.
+  const closeTerminalTabs = (terminalKey: string) => {
+    for (const tab of get().state.tabs) if (isTerminalTab(tab.target) && tab.target?.terminalKey === terminalKey) detachTab(tab.key)
+  }
+  // "to tab": the terminal gets a sub-tab of its conversation's unit (commit files it there).
+  const popOutToTab = (target: Target) => {
+    if (!target?.provider || !target.terminalKey) return
+    openTarget({ ...target, kind: 'terminal', view: undefined, newConversation: undefined }, { newTab: true })
+  }
+  // "Back to session": show the conversation (its tab, or this tab turned into it) and fold the terminal tab away.
+  const backToSession = (target: Target) => {
+    if (!target?.provider) return
+    openTarget(sessionTargetOf(target))
+    if (target.terminalKey) closeTerminalTabs(target.terminalKey)
+  }
   const terminalEnded = (provider: string, key: string) => {
     if (!key) return
+    closeTerminalTabs(key)
     services.updateTerminal({ provider, key }, true)
     setClosedRunning((targets) => targets?.filter((target) => target.provider !== provider || target.terminalKey !== key) || null)
     const cur = get().state
@@ -369,6 +400,9 @@ export function createShellStore(providerIds: readonly string[] = Object.keys(PR
       setSearchNewTab,
       terminalReady,
       terminalEnded,
+      closeTerminalTabs,
+      popOutToTab,
+      backToSession,
       dashboardEnded,
       openDeckView,
       openTerminal,

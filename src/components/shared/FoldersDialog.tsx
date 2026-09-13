@@ -161,7 +161,7 @@ function Dialog({ onClose, providers, index }: DialogProps) {
                     <div className="text-[11px] text-zinc-500 font-mono truncate">{r.dir}</div>
                     {!!r.probe?.details?.length && (
                       <div
-                        className={`text-[10.5px] truncate ${r.probe.status === 'drift' ? 'text-amber-300/90' : 'text-zinc-500'}`}
+                        className={`text-[10.5px] truncate ${r.probe.status === 'drift' ? 'text-amber-300/90' : r.probe.status === 'changed' ? 'text-zinc-400' : 'text-zinc-600'}`}
                         title={r.probe.details.map((d) => d.msg).join('\n')}
                       >
                         {r.probe.details.map((d) => d.msg).join(' · ')}
@@ -185,7 +185,7 @@ function Dialog({ onClose, providers, index }: DialogProps) {
                         type="button"
                         onClick={() => run(() => command(r.provider, 'probeAccept', { ref: { root: r.id } }))}
                         disabled={busy}
-                        title="This is a real format change I understand — make the current shape the baseline"
+                        title="I understand this change — take the shape on disk right now as the baseline. The badge clears; what was accepted stays listed here as a note until the descriptor catches up."
                         className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 disabled:opacity-40"
                       >
                         accept

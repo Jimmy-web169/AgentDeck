@@ -98,3 +98,43 @@ test('mutations serialize defined JSON bodies, retain cache policy and forward c
     (value) => value === error
   )
 })
+
+test('retry repeats only transient failures, then surfaces the last answer', async () => {
+  const answers: (Response | Error)[] = []
+  const attempts: number[] = []
+  const request = createFetcher({
+    backoff: (attempt) => {
+      attempts.push(attempt)
+      return 0
+    },
+    fetch: async () => {
+      const next = answers.shift()
+      if (!next) throw new Error('no scripted answer')
+      if (next instanceof Error) throw next
+      return next
+    },
+  })
+  // a dropped connection, then a failed handler, then success
+  answers.push(new TypeError('Failed to fetch'), new Response('{"error":"unexpected"}', { status: 500 }), new Response('{"ok":true}'))
+  assert.deepEqual(await request('/api/claude/terminal', { method: 'POST', body: {}, retry: 2 }), { ok: true })
+  assert.deepEqual(attempts, [0, 1])
+  // the server's answer to this request is final
+  answers.push(new Response('{"error":"ttyd not found"}', { status: 404 }), new Response('{"ok":true}'))
+  await assert.rejects(request('/api/claude/terminal', { method: 'POST', body: {}, retry: 2 }), { message: 'ttyd not found', status: 404 })
+  assert.equal(answers.length, 1)
+  answers.length = 0
+  // the budget runs out on the last transient failure
+  answers.push(
+    new Response('{"error":"a"}', { status: 502 }),
+    new Response('{"error":"b"}', { status: 502 }),
+    new Response('{"error":"c"}', { status: 502 }),
+    new Response('{}')
+  )
+  await assert.rejects(request('/api/claude/terminal', { method: 'POST', body: {}, retry: 2 }), { message: 'c', status: 502 })
+  assert.equal(answers.length, 1)
+  answers.length = 0
+  // without opting in, one failure is one failure
+  answers.push(new Response('{"error":"once"}', { status: 500 }), new Response('{}'))
+  await assert.rejects(request('/api/claude/roots'), { message: 'once', status: 500 })
+  assert.equal(answers.length, 1)
+})

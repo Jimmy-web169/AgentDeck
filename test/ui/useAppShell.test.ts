@@ -57,6 +57,33 @@ test('shell keyboard bindings preserve search/sidebar toggles, Alt tab actions a
     terminal.remove()
     key('KeyW', { altKey: true })
     expect(shell.store.getState().state.tabs).toHaveLength(count + 1)
+    // Alt+→ / ← step like Alt+] / Alt+[, over units; Alt+↓/↑ move inside one; text fields keep their keys
+    shellActions.openTarget({ provider: 'codex', root: 'fixture', id: 'three', terminalKey: 'codex|fixture|session|three' }, { newTab: true })
+    shellActions.popOutToTab({ provider: 'codex', root: 'fixture', id: 'three', terminalKey: 'codex|fixture|session|three' })
+    const state = () => shell.store.getState().state
+    const sub = state().tabs.find((t) => t.target?.kind === 'terminal')
+    const parent = state().tabs.find((t) => t.target?.id === 'three' && t.target?.kind !== 'terminal')
+    expect(state().activeKey).toBe(sub?.key)
+    key('ArrowUp', { altKey: true })
+    expect(state().activeKey).toBe(parent?.key)
+    key('ArrowDown', { altKey: true })
+    expect(state().activeKey).toBe(sub?.key)
+    key('ArrowLeft', { altKey: true }) // the unit before
+    expect(state().activeKey).toBe(state().tabs.find((t) => t.target?.id === 'one')?.key)
+    key('ArrowRight', { altKey: true }) // back into the unit, on the segment last used
+    expect(state().activeKey).toBe(sub?.key)
+    key('Digit9', { altKey: true })
+    expect(state().activeKey).toBe(sub?.key)
+    const field = document.createElement('textarea')
+    document.body.append(field)
+    expect(key('ArrowLeft', { altKey: true }, field)).toBe(false)
+    expect(state().activeKey).toBe(sub?.key)
+    field.remove()
+    key('KeyW', { altKey: true }) // on the sub-tab: folds it back to the conversation
+    expect(state().tabs.some((t) => t.target?.kind === 'terminal')).toBe(false)
+    expect(state().activeKey).toBe(parent?.key)
+    key('KeyW', { altKey: true }) // on the conversation: closes the unit
+    expect(state().tabs.some((t) => t.target?.id === 'three')).toBe(false)
     unbind()
     shellActions.setSearchOpen(false)
     expect(key('KeyT', { altKey: true })).toBe(false)

@@ -173,6 +173,67 @@ test('a missing required key, an unknown enum value and a type change are drift;
     assert.equal(runProbe('codex', root).status, 'changed')
     assert.equal(acceptProbe('codex', root).status, 'ok')
     assert.equal(probeStatus('codex', 'r1').status, 'ok')
+
+    // accept without a re-check first: the stored observation is from before
+    // the vendor's next key arrived (the hourly probe has not run), and one
+    // click must still make the shape on disk the baseline
+    writeLines(
+      file,
+      recs.map((r) => ({ ...r, trace_id: 'abc', span_id: 'def' }))
+    )
+    assert.equal(probeStatus('codex', 'r1').status, 'ok', 'nothing has re-sampled yet')
+    const accepted = acceptProbe('codex', root)
+    assert.equal(accepted.status, 'ok', JSON.stringify(accepted.details))
+    assert.equal(probeStatus('codex', 'r1').status, 'ok')
+    assert.equal(runProbe('codex', root).status, 'ok', 'the accepted shape is the stored baseline')
+    const stored = JSON.parse(fs.readFileSync(path.join(dir, '.agentdeck', 'probe', 'codex.json'), 'utf8'))
+    assert.ok(stored.r1.baseline.keys.includes('span_id'), 'the baseline records what was accepted')
+
+    // accepting drift: the accepted value stops being drift and is only noted;
+    // a further unknown value is drift again; a first-sight baseline never accepts
+    writeLines(
+      file,
+      recs.map((r, i) => (i === 2 ? { ...r, type: 'weird_new_record' } : r))
+    )
+    assert.equal(runProbe('codex', root).status, 'drift')
+    const acceptedDrift = acceptProbe('codex', root)
+    assert.equal(acceptedDrift.status, 'ok', JSON.stringify(acceptedDrift.details))
+    assert.ok(
+      acceptedDrift.details.some((d) => d.level === 'accepted' && /accepted: new type value: weird_new_record/.test(d.msg)),
+      JSON.stringify(acceptedDrift.details)
+    )
+    assert.equal(runProbe('codex', root).status, 'ok', 'the accepted drift stays accepted on the next probe')
+    writeLines(
+      file,
+      recs.map((r, i) => (i === 2 ? { ...r, type: 'weird_new_record' } : i === 3 ? { ...r, type: 'another_new_record' } : r))
+    )
+    const again = runProbe('codex', root)
+    assert.equal(again.status, 'drift')
+    assert.ok(
+      again.details.some((d) => d.level === 'drift' && /another_new_record/.test(d.msg) && !/weird/.test(d.msg)),
+      JSON.stringify(again.details)
+    )
+    assert.ok(
+      again.details.some((d) => d.level === 'accepted' && /weird_new_record/.test(d.msg)),
+      JSON.stringify(again.details)
+    )
+    // a required key most records lost is accepted the same way
+    writeLines(
+      file,
+      recs.map((r) => ({ ts: r.timestamp, type: r.type, payload: r.payload }))
+    )
+    assert.equal(runProbe('codex', root).status, 'drift')
+    const acceptedMissing = acceptProbe('codex', root)
+    assert.equal(acceptedMissing.status, 'ok', JSON.stringify(acceptedMissing.details))
+    assert.ok(acceptedMissing.details.some((d) => d.level === 'accepted' && /required key "timestamp"/.test(d.msg)))
+    // a fresh root whose first sample already drifts is still drift: first sight accepts nothing
+    const fresh = codexHome()
+    const freshFile = expandGlob(fresh, loadProbeSpec('codex').sample.glob)[0].file
+    writeLines(
+      freshFile,
+      lines(freshFile).map((r, i) => (i === 2 ? { ...r, type: 'weird_new_record' } : r))
+    )
+    assert.equal(runProbe('codex', { id: 'r2', dir: fresh, label: 'fresh' }).status, 'drift')
   })
 })
 

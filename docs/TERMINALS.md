@@ -30,6 +30,16 @@ Only persistent metadata is stored; ports, URLs and attached state are observed
 at runtime. Without tmux, the ttyd process survives tab navigation but cannot
 survive the AgentDeck server stopping.
 
+On native Windows the `tmux` on PATH is psmux, which resolves targets
+differently: `attach-session -t <name>` attaches to the server's *current*
+session whatever the name, and `kill-session -t =<name>` does nothing. The pool
+therefore attaches there with `new-session -A -s <name>` — exact by name; a
+session that has ended runs an exiting command instead of a bare shell — and
+addresses kill, has-session and set-environment by the plain name, which is
+exact because every AgentDeck session name is the same fixed-length hash. tmux
+keeps `=<name>`. `tmuxTarget` and `tmuxAttachArgs` in
+`server/shared/terminalBinary.ts` own the two forms.
+
 ## Provider adapter contract
 
 Keep provider behavior in `server/providers/<provider>/terminal.js`, registered
@@ -78,7 +88,7 @@ The UI consumes the same targets and navigation policy for every provider.
 | --- | --- | --- |
 | Claude Code | Probe for `--session-id`, reserve a UUID, wait for that exact transcript | Older CLI versions fall back to process-owned transcript evidence |
 | Codex | Exact rollout held by the terminal's process tree, validated against the provider index; subagents excluded | Daemon-backed CLIs or versions that do not hold a rollout open may require explicit linking |
-| Antigravity | Exact transcript/database held by the terminal's process tree, validated against its index | Only the CLI's default data folder is supported for new/resume; workspace metadata may arrive later |
+| Antigravity | The conversation `agy` names in this launch's own log file (`--log-file`, exact on every platform), else the transcript/database held by the terminal's process tree; both validated against its index | Only the CLI's default data folder is supported for new/resume; workspace metadata may arrive later |
 
 Process-file discovery is optional on POSIX (`ps`/`lsof`). On Windows, inaccessible
 processes, or ambiguous candidates, use explicit linking. The terminal key and
@@ -123,7 +133,49 @@ single matching legacy draft can be adopted; multiple candidates require
 selection from Live sessions. No existing tmux session is renamed or killed by
 migration. Draft deep links preserve launch, terminal and cwd information.
 
-## Verification
+## The terminal sub-tab
+
+**⧉ to tab** in a terminal panel gives the terminal a sub-tab of its
+conversation's tab (`kind: 'terminal'`, deep link `#/terminal/<the
+conversation link>`, `targetKey` `…|terminal-tab|<key>`). The tab list stays
+flat and persisted as before: `normalizeGroups` (run by the store on every
+commit and on load) keeps the sub-tab right after its conversation tab, gives an
+orphan sub-tab a conversation tab of its own and drops a second sub-tab for the
+same conversation; `groupTabs`/`unitOf` expose the pairs as units. The strip
+renders a unit as one tab with a `>_` segment; `closeTab` on the conversation
+takes the sub-tab with it (one notice), on the sub-tab only folds it back (no
+notice); "others" and "to the right" count units; a drag moves the unit. Tab
+shortcuts (Alt+←/→, Alt+[ ], Alt+1…9) step over units and land on the segment
+last used (`lastSegment`, in memory); Alt+↓ / Alt+↑ move inside the unit. `TerminalTabView` renders the
+shared `TerminalPage` with pop out and End; the conversation's
+`TerminalPanel` folds to a bar while a sub-tab for its key exists (derived
+from the tab list, not stored), so one pty has one viewer. **Back to session**
+opens the conversation and detaches the sub-tab; **re-embed**, a middle-click
+on the glyph and the menu's **Fold terminal back** only detach it; End, or the
+terminal ending anywhere, closes it (`closeTerminalTabs`). `sameTarget` and
+`dedupeTabs` keep a sub-tab apart from its conversation's tab, while
+`adoptTerminal` lets it learn the saved conversation the same way.
+
+## The popped-out terminal
+
+**Pop out** opens `#/popout/<provider>/<root>/…?terminal=<key>&title=…` in a
+tab named after the terminal key (`popoutWindowName`). `src/main.tsx` renders
+`TerminalPopout` for that hash instead of the app; the page attaches through
+`POST /api/terminal` with the exact `terminalKey`, so the server reuses the
+running viewer or answers 410 once the terminal has ended, and the terminal
+fills the window under a slim bar. The main window carries `window.name =
+agentdeck-main`. **← Back to session** (`focusMainWindow` in
+`src/lib/route.ts`) clears the panel's popped view in storage — the panel in
+the main window follows through `subscribeTermView` and re-embeds — sets the
+main window's hash to the conversation, which the shell's hash listener opens or
+focuses, and closes the pop-out tab, which returns the browser to its opener.
+Browsers do not raise another tab on `focus()`, so closing is the one reliable
+way back; a tab the browser refuses to close, or a pop-out whose main window is
+gone, navigates itself to the conversation and becomes the main window. The
+main window's **focus tab** reopens or re-targets the pop-out by its name;
+whether an already open tab is brought forward is the browser's decision.
+
+## Verification## Verification
 
 The following covers the shared policies and provider evidence using synthetic transcripts and fake
 tmux/ttyd processes. No model requests or real terminal processes are needed.

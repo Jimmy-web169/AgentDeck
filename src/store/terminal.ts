@@ -18,6 +18,14 @@ function readViews(): Record<string, View> {
   }
 }
 export const getTermView = (key: string | null) => (key ? readViews()[key] || null : null)
+// Another tab (the popped-out terminal page) changed a view: the panel here follows.
+export function subscribeTermView(listener: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === VIEW_KEY || event.key === null) listener()
+  }
+  window.addEventListener('storage', onStorage)
+  return () => window.removeEventListener('storage', onStorage)
+}
 export function setTermView(key: string | null, state: View | null) {
   if (!key) return
   const views = readViews()

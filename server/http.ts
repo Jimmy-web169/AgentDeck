@@ -221,6 +221,13 @@ export function createServer({
       const result = await runWithWatchGate(gate, () => provider.dispatch(req.method || 'GET', apiPath, url.searchParams, body))
       const { status } = result
       let out = result.body
+      if (status >= 500) {
+        // A handler that failed unexpectedly is otherwise invisible: the browser
+        // shows "HTTP 500" and nothing records what threw.
+        const cause = 'cause' in result ? result.cause : undefined
+        const detail = cause instanceof Error && cause.stack ? cause.stack : String(jsonRecord(out).error ?? cause ?? status)
+        log.warn(`[http] ${req.method} ${apiPath}: ${detail}`)
+      }
       // tracked-folder changes -> re-arm watchers so live updates cover new roots
       // (via the gate: deferred if a delete currently holds the watchers paused)
       if (apiPath === '/api/roots' && req.method !== 'GET' && status < 400) {

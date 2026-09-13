@@ -37,6 +37,43 @@ All notable changes to AgentDeck are recorded here. The format follows
   precedence over duplicate terminal/recent entries and retain source identities.
 
 ### Fixed
+- A new Antigravity conversation started from AgentDeck on Windows now links to
+  its record instead of waiting for a manual match. `agy` names the conversation
+  it created or resumed in its per-process log, so every launch gets a log file
+  of its own (`--log-file` under the CLI home's `log/` directory, named
+  `agentdeck-<launch>.log`) and that line is read as exact evidence; the POSIX
+  process-tree evidence stays as the fallback. Listings of other conversations
+  in the same log are not evidence, an identified terminal is never rebound, and
+  a sub-agent conversation is never taken for the terminal's own.
+- On Windows, opening a second terminal no longer shows the first one. psmux,
+  the tmux stand-in there, attaches `attach-session` to the server's *current*
+  session whatever `-t` names, so every new terminal landed in whichever
+  session a client had attached last; `kill-session -t =name` was ignored the
+  same way, so End left the session running and it came straight back in Live
+  sessions. Windows now attaches with `new-session -A -s <name>`, the one form
+  psmux resolves by exact name, and addresses kill/has-session/set-environment
+  by the plain fixed-length name; tmux on macOS and Linux keeps its `=name`
+  exact targets. A session that ended between the check and the attach runs an
+  exiting command instead of hijacking another terminal or leaving a bare shell
+  under the AgentDeck name.
+- **accept** in the Folders dialog takes effect on the first click. It used to
+  make the *stored* observation the baseline — the one from startup or the last
+  hourly probe — and only then re-sample, so every key that had arrived since
+  stayed "new" until **re-check** refreshed the observation first. Accept now
+  samples first and makes that shape the baseline; a first sight still reports
+  `baseline`. Accept also settles a **format drift**: it used to leave the amber
+  badge in place because drift is measured against the provider descriptor, so
+  the button appeared to do nothing. What was accepted — the value, the type,
+  the required key most records lost — now stays listed in the dialog as an
+  "accepted:" note, the badge clears, and anything beyond the accepted shape is
+  drift again. A folder's first sample never accepts drift on its own.
+- Opening a terminal retries a dropped connection or a failed handler (a 5xx)
+  twice, with a short back-off, before showing an error; a terminal start is
+  idempotent per key on the server, so nothing is duplicated. A 4xx is the
+  server's answer and is shown at once. Every 5xx a handler returns is now
+  logged by the host with the failure's stack (the response body still carries
+  only the message), so an "HTTP 500" seen once in the browser leaves a trace in
+  the server log instead of nothing.
 - The layout gate no longer reports a recorded contrast finding as new because
   another operating system recorded it. A baseline entry carries the platforms
   that observed it, which is right for geometry rules — glyph metrics differ per
@@ -75,6 +112,30 @@ All notable changes to AgentDeck are recorded here. The format follows
   container volumes are retained. The Linux layout-test image remains in CI.
 
 ### Added
+- **To tab**: a terminal can open as a sub-tab of its conversation's tab — one
+  tab in the strip with two segments, the conversation and a `>_` glyph —
+  filling the whole pane under a slim bar (**← Back to session**, title,
+  provider, folder, reload, **pop out**, **End**). The conversation's panel
+  folds to one line meanwhile — *Terminal open in its own tab · focus tab ·
+  re-embed · End* — so one terminal has one viewer. The pair is one unit for
+  every tab shortcut: Alt+← / Alt+→ (and Alt+[ / Alt+]) and Alt+1…9 step over
+  units and land on the segment last used, Alt+W on the conversation
+  closes both, dragging moves both; Alt+↓ / Alt+↑ flip between the conversation
+  and its terminal inside the unit. Back to session, re-embed, middle-click on
+  the glyph and the tab menu's **Fold terminal back** fold the sub-tab away; End
+  closes it; a terminal link (`#/terminal/…`) always opens with its
+  conversation tab, so no terminal tab is ever left on its own, and the unit
+  survives a reload. Shortcuts stay clear of the operating systems' own
+  (Ctrl+Alt+Tab, Ctrl+Alt+T) and the browser's.
+- **Pop out** now opens AgentDeck's own full-window terminal page instead of the
+  bare terminal view: the terminal fills the whole browser tab under a slim bar
+  that names the conversation, its provider and folder, and carries one button,
+  **← Back to session**. That button hands the terminal back to the conversation's
+  panel in the main window, shows that conversation there, and closes the
+  pop-out tab, so the browser lands on the main window — however many tabs are
+  open. The main window keeps **focus tab** to go the other way. The page
+  attaches by the exact terminal key, so it survives a reload and says when the
+  terminal has ended, and its tab is titled after the conversation.
 - A shared conversation navigator with question ticks and hold-to-edge arrows
   that can reveal older, initially unloaded messages. Opening or returning
   to a conversation now shows its latest messages; live updates preserve an

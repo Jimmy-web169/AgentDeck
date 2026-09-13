@@ -39,6 +39,8 @@ export function targetKey(target: Target | null | undefined) {
   if (isDeckTarget(target)) return `${target?.kind}|${target?.dashboardId}`
   if (!target?.provider) return ''
   const scope = sourceKey(target.provider, target.root || '')
+  // A terminal tab shows one terminal on its own; it never merges with the conversation tab.
+  if (target.kind === 'terminal') return `${scope}|terminal-tab|${target.terminalKey || target.launchId || target.id || ''}`
   if (target.id) return `${scope}|session|${target.id}`
   if (target.terminalKey) return `${scope}|terminal|${target.terminalKey}`
   if (target.launchId) return `${scope}|launch|${target.launchId}`

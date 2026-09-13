@@ -5,7 +5,7 @@ import { useShellNavigation, type ShellProvider } from './useShellNavigation.ts'
 import { createApi, useEventStream, useShellQueries } from '../api/index.ts'
 import { announceTerminalEnd } from './terminalTarget.ts'
 import { isDeckTarget } from './tabs.ts'
-import { isHome, loadRecent, normalizeView, sameTarget, targetKey } from './tabs.ts'
+import { groupTabs, isHome, isTerminalTab, loadRecent, normalizeView, sameTarget, targetKey, unitEntry } from './tabs.ts'
 import { fromHash, replaceHash, toHash } from './route.ts'
 
 // Connect the shell to browser gestures and the shared Query inventories.
@@ -173,16 +173,29 @@ export function bindShellShortcuts() {
       return
     }
     if (!e.altKey || mod || e.shiftKey) return
-    if (e.target instanceof Element && e.target.closest('.xterm')) return
-    const cur = shell.store.getState().state
-    const idx = cur.tabs.findIndex((t) => t.key === cur.activeKey)
+    if (e.target instanceof Element && e.target.closest('.xterm, input, textarea, select, [contenteditable="true"]')) return
+    // Tab shortcuts step over units (a conversation with its terminal sub-tab is
+    // one), landing on the segment last used there; Alt+↑/↓ move inside a unit.
+    const { state: cur, lastSegment } = shell.store.getState()
+    const units = groupTabs(cur.tabs)
+    const idx = units.findIndex((u) => u.tab.key === cur.activeKey || u.terminal?.key === cur.activeKey)
+    const unit = units[idx]
+    const active = cur.tabs.find((t) => t.key === cur.activeKey)
+    const enter = (u: (typeof units)[number] | undefined) => u && activateTab(unitEntry(u, lastSegment))
     if (e.code === 'KeyT') newTab()
     else if (e.code === 'KeyW') closeTab(cur.activeKey)
-    else if (e.code === 'BracketLeft') activateTab(cur.tabs[(idx - 1 + cur.tabs.length) % cur.tabs.length]?.key)
-    else if (e.code === 'BracketRight') activateTab(cur.tabs[(idx + 1) % cur.tabs.length]?.key)
-    else if (/^Digit[1-9]$/.test(e.code)) {
+    // Alt+←/→ walk the big tabs, Alt+↑/↓ the small ones inside a unit; Alt+[ ] stay as the older pair.
+    else if (e.code === 'BracketLeft' || e.code === 'ArrowLeft') enter(units[(idx - 1 + units.length) % units.length])
+    else if (e.code === 'BracketRight' || e.code === 'ArrowRight') enter(units[(idx + 1) % units.length])
+    else if (e.code === 'ArrowDown') {
+      if (!unit?.terminal || isTerminalTab(active?.target)) return
+      activateTab(unit.terminal.key)
+    } else if (e.code === 'ArrowUp') {
+      if (!unit || !isTerminalTab(active?.target)) return
+      activateTab(unit.tab.key)
+    } else if (/^Digit[1-9]$/.test(e.code)) {
       const n = Number(e.code.slice(5))
-      activateTab((n === 9 ? cur.tabs[cur.tabs.length - 1] : cur.tabs[n - 1])?.key)
+      enter(n === 9 ? units[units.length - 1] : units[n - 1])
     } else return
     e.preventDefault()
   }

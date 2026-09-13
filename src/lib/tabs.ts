@@ -47,8 +47,12 @@ export const homeViewLabel = (k: string | null | undefined) => HOME_VIEWS.find((
 
 export const newKey = () => Math.random().toString(36).slice(2, 10)
 
+export const isTerminalTab = (target: Target | null | undefined) => target?.kind === 'terminal' && !!target.provider
+// The conversation a terminal tab belongs to: the same identity without the tab kind.
+export const sessionTargetOf = (target: Target): Target => ({ ...target, kind: undefined })
 export const sameTarget = (a: Target | null | undefined, b: Target | null | undefined) => {
   if (isDeckTarget(a) || isDeckTarget(b)) return isDeckTarget(a) && isDeckTarget(b) && targetKey(a) === targetKey(b)
+  if (isTerminalTab(a) !== isTerminalTab(b)) return false
   if (a?.provider !== b?.provider || a?.root !== b?.root) return false
   if (a?.terminalKey && a.terminalKey === b?.terminalKey) return true
   if (a?.launchId && a.launchId === b?.launchId) return true
@@ -79,7 +83,10 @@ export function terminalTabKeys(terminals: Terminal[]) {
     const t = liveTarget(terminal)
     if (!t.provider || !t.root) continue
     if (t.id) keys.add(targetKey(t))
-    if (t.terminalKey) keys.add(targetKey({ ...t, id: null }))
+    if (t.terminalKey) {
+      keys.add(targetKey({ ...t, id: null }))
+      keys.add(targetKey({ ...t, kind: 'terminal' }))
+    }
     if (t.launchId) keys.add(targetKey({ ...t, id: null, terminalKey: null }))
   }
   return keys
@@ -87,6 +94,8 @@ export function terminalTabKeys(terminals: Terminal[]) {
 
 export function adoptTerminal(target: Target, terminal: Terminal) {
   if (!target?.provider) return target
+  // A terminal tab learns its conversation like the conversation tab does.
+  const plain = isTerminalTab(target) ? sessionTargetOf(target) : target
   const legacy =
     target.draft &&
     !target.launchId &&
@@ -94,8 +103,8 @@ export function adoptTerminal(target: Target, terminal: Terminal) {
     terminal.provider === target.provider &&
     terminal.root === target.root &&
     [target.cwd, target.slug].some((p) => !!p && !!target.root && terminal.key === legacyDraftKey(target.root, p))
-  const requested = terminal.requestedTarget && sameTarget(target, { ...terminal.requestedTarget, provider: terminal.provider })
-  if (!legacy && !requested && !sameTarget(target, liveTarget(terminal))) return target
+  const requested = terminal.requestedTarget && sameTarget(plain, { ...terminal.requestedTarget, provider: terminal.provider })
+  if (!legacy && !requested && !sameTarget(plain, liveTarget(terminal))) return target
   return {
     ...target,
     terminalKey: terminal.key,
@@ -151,7 +160,9 @@ export function openTabState(state: TabState, target: Target, { newTab = false }
   if (target?.kind === 'folder') target = { provider: null, view: 'activity' }
   const stored = target
     ? Object.fromEntries(
-        Object.entries(target).filter(([k, v]) => v !== undefined && !['newConversation', 'at'].includes(k) && (k !== 'kind' || isDeckTarget(target)))
+        Object.entries(target).filter(
+          ([k, v]) => v !== undefined && !['newConversation', 'at'].includes(k) && (k !== 'kind' || isDeckTarget(target) || isTerminalTab(target))
+        )
       )
     : { provider: null, view: 'activity' }
   const existing =
@@ -172,8 +183,13 @@ export function openTabState(state: TabState, target: Target, { newTab = false }
 }
 
 // What the strip prints for a tab: a primary (project) and secondary (session) part.
-export function tabLabel(target: Target | null, providers: readonly { id: string; label: string }[] = []) {
+export function tabLabel(target: Target | null, providers: readonly { id: string; label: string }[] = []): { primary: string; secondary: string } {
   if (isDeckTarget(target)) return { primary: target?.title || 'Dashboard', secondary: 'Live tmux' }
+  if (target && isTerminalTab(target)) {
+    const base = tabLabel(sessionTargetOf(target), providers)
+    // A glyph in front survives the strip's truncation; a suffix would not.
+    return { primary: `>_ ${base.primary}`, secondary: base.secondary }
+  }
   if (!target?.provider)
     return {
       primary: homeViewLabel(target?.view),
@@ -190,7 +206,7 @@ export function tabLabel(target: Target | null, providers: readonly { id: string
       secondary: target.cwd || target.slug ? `new · ${shortPath(target.cwd || target.slug)}` : target.title || 'New conversation',
     }
   if (target.id) return project ? { primary: project, secondary: target.title || '' } : { primary: target.title || target.id.slice(0, 8), secondary: '' }
-  if (target.slug || target.cwd) return { primary: project || target.slug, secondary: '' }
+  if (target.slug || target.cwd) return { primary: project || target.slug || '', secondary: '' }
   return { primary: providerLabel, secondary: target.rootLabel || '' }
 }
 
@@ -255,3 +271,64 @@ export function forgetRecent(match: (target: Target) => boolean) {
     writeStorage(RECENT_KEY, JSON.stringify(next))
   } catch {}
 }
+
+// ---- units: a conversation tab and its terminal sub-tab ----
+// The tab list stays flat and persisted as before; a terminal tab is grouped
+// under the conversation tab with the same identity and always sits right after
+// it. Units are what the strip renders and what Alt+[ ] / Alt+1…9 step over;
+// Alt+↑/↓ flip inside a unit.
+export interface TabUnit {
+  tab: Tab
+  terminal: Tab | null
+}
+const conversationOf = (tabs: Tab[], terminal: Tab) =>
+  tabs.find((t) => t.key !== terminal.key && !isTerminalTab(t.target) && !!terminal.target && sameTarget(t.target, sessionTargetOf(terminal.target)))
+
+export function groupTabs(tabs: Tab[]): TabUnit[] {
+  const units: TabUnit[] = tabs.filter((t) => !isTerminalTab(t.target)).map((tab) => ({ tab, terminal: null }))
+  const orphans: TabUnit[] = []
+  for (const tab of tabs) {
+    if (!isTerminalTab(tab.target)) continue
+    const parent = conversationOf(tabs, tab)
+    const unit = parent && units.find((u) => u.tab.key === parent.key)
+    if (unit) unit.terminal ||= tab
+    else orphans.push({ tab, terminal: null })
+  }
+  return [...units, ...orphans]
+}
+
+export const unitOf = (tabs: Tab[], key: string | null | undefined) =>
+  key ? groupTabs(tabs).find((u) => u.tab.key === key || u.terminal?.key === key) || null : null
+export const unitKeys = (unit: TabUnit) => [unit.tab.key, ...(unit.terminal ? [unit.terminal.key] : [])]
+
+// The flat order the store keeps: every terminal tab right after its
+// conversation tab, an orphan given a conversation tab of its own, a second
+// terminal tab for the same conversation dropped.
+export function normalizeGroups(tabs: Tab[]): Tab[] {
+  const out: Tab[] = []
+  const placed = new Set<string>()
+  const parents = tabs.filter((t) => !isTerminalTab(t.target))
+  for (const tab of tabs) {
+    if (placed.has(tab.key)) continue
+    if (isTerminalTab(tab.target)) {
+      if (parents.some((p) => !!tab.target && sameTarget(p.target, sessionTargetOf(tab.target)))) continue // placed with its conversation
+      const parent = emptyTab(tab.target ? sessionTargetOf(tab.target) : null)
+      parents.push(parent)
+      out.push(parent, tab)
+      placed.add(tab.key)
+      continue
+    }
+    out.push(tab)
+    placed.add(tab.key)
+    const child = tabs.find((t) => !placed.has(t.key) && isTerminalTab(t.target) && !!t.target && sameTarget(tab.target, sessionTargetOf(t.target)))
+    if (child) {
+      out.push(child)
+      placed.add(child.key)
+    }
+  }
+  return out
+}
+
+// Which tab a unit opens on: the segment last used there, else the conversation.
+export const unitEntry = (unit: TabUnit, lastSegment: Record<string, 'conversation' | 'terminal'> = {}) =>
+  unit.terminal && lastSegment[unit.tab.key] === 'terminal' ? unit.terminal.key : unit.tab.key

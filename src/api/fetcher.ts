@@ -6,6 +6,9 @@ export type RequestOptions = {
   signal?: AbortSignal
   cache?: RequestCache
   revalidate?: boolean
+  // Extra attempts after a network failure or a 5xx answer. Only for requests
+  // the server treats idempotently (a terminal start reuses its key).
+  retry?: number
 }
 // Conditional-GET store: url -> { etag, data }. When the server replies 304
 // we return the exact same object reference as last time, so a poller's
@@ -19,12 +22,38 @@ export type RequestOptions = {
 // modest; polled views only touch a handful of URLs at a time anyway.
 // revalidate:false preserves Deck's unconditional reads without retaining tags.
 
-export function createFetcher({ fetch: fetchImpl, capacity = 100 }: { fetch?: typeof globalThis.fetch; capacity?: number } = {}) {
+// A transient failure is one a second attempt can answer: the connection
+// dropped, or the server failed while handling the request. A 4xx is the
+// server's answer to this request and is never retried.
+export const isTransient = (error: unknown) =>
+  !(error && typeof error === 'object' && 'status' in error && typeof error.status === 'number' && error.status < 500)
+const defaultBackoff = (attempt: number) => 400 * 2 ** attempt
+
+export function createFetcher({
+  fetch: fetchImpl,
+  capacity = 100,
+  backoff = defaultBackoff,
+}: {
+  fetch?: typeof globalThis.fetch
+  capacity?: number
+  backoff?: (attempt: number) => number
+} = {}) {
   const etags: Map<string, { etag: string; data: unknown }> = new Map()
 
-  async function request<T>(
+  async function request<T>(pathname: string, { retry = 0, ...options }: RequestOptions = {}): Promise<T> {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await attemptRequest<T>(pathname, options)
+      } catch (error) {
+        if (attempt >= retry || !isTransient(error) || options.signal?.aborted) throw error
+        await new Promise((resolve) => setTimeout(resolve, backoff(attempt)))
+      }
+    }
+  }
+
+  async function attemptRequest<T>(
     pathname: string,
-    { method = 'GET', params = {}, body, signal, cache = method === 'GET' ? 'no-store' : undefined, revalidate = true }: RequestOptions = {}
+    { method = 'GET', params = {}, body, signal, cache = method === 'GET' ? 'no-store' : undefined, revalidate = true }: Omit<RequestOptions, 'retry'> = {}
   ): Promise<T> {
     const query = new URLSearchParams(Object.entries(params).map(([key, value]) => [key, String(value)])).toString()
     const url = `${pathname}${query ? `?${query}` : ''}`

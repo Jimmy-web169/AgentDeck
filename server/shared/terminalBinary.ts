@@ -73,3 +73,16 @@ export const findTmux = () => {
   if (tmuxBin === undefined) tmuxBin = findOnPath(['tmux'], TMUX_EXTRA)
   return tmuxBin
 }
+
+// tmux resolves `-t =name` as an exact session name. psmux, the tmux stand-in
+// on native Windows, does not: attach-session lands on the server's current
+// session whatever `-t` names (with or without `=`), and kill-session with `=`
+// silently does nothing. Names are fixed-length hashes, so a plain name is
+// already exact there, and `new-session -A` is the one attach form psmux
+// resolves by name. A session that ended between has-session and attach then
+// runs an exiting command instead of hijacking another terminal or leaving a
+// bare shell behind under the AgentDeck name.
+export const tmuxTarget = (name: string, platform: NodeJS.Platform = process.platform) => (platform === 'win32' ? name : `=${name}`)
+export function tmuxAttachArgs(name: string, platform: NodeJS.Platform = process.platform): string[] {
+  return platform === 'win32' ? ['new-session', '-A', '-s', name, '--', 'cmd.exe', '/c', 'exit'] : ['attach-session', '-t', `=${name}`]
+}

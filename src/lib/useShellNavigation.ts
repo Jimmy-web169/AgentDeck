@@ -29,7 +29,10 @@ export function useShellNavigation(providers: readonly ShellProvider[], { enable
   const activeSessions = useActiveSessions(providers, { enabled })
   const activeTab = state.tabs.find((tab) => tab.key === state.activeKey) || state.tabs[0]
   const activeTarget = activeTab?.target || null
-  const drafts = useMemo(() => state.tabs.map((tab) => tab.target).filter((target): target is Target => !!(target?.provider && target.draft)), [state.tabs])
+  const drafts = useMemo(
+    () => state.tabs.map((tab) => tab.target).filter((target): target is Target => !!(target?.provider && target.draft && target.kind !== 'terminal')),
+    [state.tabs]
+  )
   const termKeys = useMemo(() => {
     const keys = terminalTabKeys(activeSessions.tmux)
     for (const terminal of activeSessions.tmux) {

@@ -48,3 +48,66 @@ test('close-right, close-others and reordering retain the selected target unless
   fx.actions.closeOthers('missing')
   expect(fx.read()).toBe(state)
 })
+
+test('detaching a tab removes it like closing, but never reports a closed terminal', () => {
+  const fx = fixture()
+  fx.actions.detachTab('b')
+  expect(fx.read().tabs.map((t) => t.key)).toEqual(['a', 'c'])
+  expect(fx.read().activeKey).toBe('c')
+  expect(fx.closed).toEqual([])
+  expect(fx.pending).toHaveLength(1)
+  fx.actions.closeTab('c')
+  expect(fx.closed.map((t) => t.key)).toEqual(['c'])
+})
+
+function grouped() {
+  const conv = { provider: 'claude', root: 'root', id: 'b', terminalKey: 'kb' }
+  let state: import('../../../src/store/shellTabs.ts').TabState = {
+    tabs: [
+      { key: 'a', target: { provider: 'claude', root: 'root', id: 'a' } },
+      { key: 'b', target: conv },
+      { key: 'bt', target: { ...conv, kind: 'terminal' } },
+      { key: 'c', target: { provider: 'claude', root: 'root', id: 'c' } },
+    ],
+    activeKey: 'bt',
+  }
+  const closed: Tab[] = [],
+    pending: (Target | null | undefined)[] = []
+  const actions = createTabActions({
+    read: () => state,
+    commit: (next) => {
+      state = next
+    },
+    notifyClosed: (tabs) => closed.push(...tabs),
+    issuePending: (target) => pending.push(target),
+    createHomeTab: () => ({ key: 'home', target: { provider: null, view: 'activity' } }),
+  })
+  return { actions, read: () => state, closed, pending }
+}
+test('a conversation and its terminal sub-tab are one unit: closing, folding, others, right and moving', () => {
+  let fx = grouped()
+  fx.actions.closeTab('bt') // folding the terminal back returns to its conversation, reports nothing
+  expect(fx.read().tabs.map((t) => t.key)).toEqual(['a', 'b', 'c'])
+  expect(fx.read().activeKey).toBe('b')
+  expect(fx.closed).toEqual([])
+  fx = grouped()
+  fx.actions.closeTab('b') // closing the conversation takes the sub-tab, one notice
+  expect(fx.read().tabs.map((t) => t.key)).toEqual(['a', 'c'])
+  expect(fx.closed.map((t) => t.key)).toEqual(['b'])
+  expect(fx.read().activeKey).toBe('c')
+  fx = grouped()
+  fx.actions.closeOthers('bt')
+  expect(fx.read().tabs.map((t) => t.key)).toEqual(['b', 'bt'])
+  expect(fx.read().activeKey).toBe('bt')
+  expect(fx.closed.map((t) => t.key)).toEqual(['a', 'c'])
+  fx = grouped()
+  fx.actions.closeRight('a')
+  expect(fx.read().tabs.map((t) => t.key)).toEqual(['a'])
+  expect(fx.closed.map((t) => t.key)).toEqual(['b', 'c'])
+  fx = grouped()
+  fx.actions.closeRight('bt')
+  expect(fx.read().tabs.map((t) => t.key)).toEqual(['a', 'b', 'bt'])
+  fx = grouped()
+  fx.actions.moveTab('bt', 0) // dragging the sub-tab moves its unit
+  expect(fx.read().tabs.map((t) => t.key)).toEqual(['b', 'a', 'bt', 'c']) // the store's commit re-attaches the sub-tab
+})

@@ -54,8 +54,9 @@ import { useEffect, useRef, useState } from 'react'
 import { shortPath } from '../../lib/paths.ts'
 import OpenAppButtons from './OpenAppButtons.tsx'
 import ResizeHandle from './ResizeHandle.tsx'
-import { getTermView, setTermView, useTerminalHeight, useShell } from '../../store/index.ts'
+import { getTermView, setTermView, subscribeTermView, useTerminalHeight, useShell, shellActions } from '../../store/index.ts'
 import { terminalRequest, announceTerminal, announceTerminalEnd } from '../../lib/terminalTarget.ts'
+import { popoutHref, popoutWindowName } from '../../lib/route.ts'
 import TerminalStatus from './TerminalStatus.tsx'
 import LinkConversationButton from './LinkConversationButton.tsx'
 import HandoffActions from './HandoffActions.tsx'
@@ -151,10 +152,19 @@ export default function TerminalPanel({
     }
   }, [paneKey || myKey])
 
+  // "Back to session" on the popped-out page hands the terminal back to this
+  // panel: it clears the popped view in storage, which arrives here as a
+  // storage event from that other tab.
+  useEffect(() => subscribeTermView(() => setView(getTermView(key || myKey) || 'embedded')), [key, myKey])
+
   // Transcript promotion must not reset this pane or its iframe.
   // biome-ignore lint/correctness/useExhaustiveDependencies: A new URL or explicit reload starts a new frame-load lifecycle.
   useEffect(() => setFrameLoaded(false), [url, nonce])
   const endVersion = useShell((state) => (key ? state.terminalEnds[terminalEntryKey(providerId, '', key)] || 0 : 0))
+  // While a terminal tab shows this terminal, the panel folds to a bar: one viewer per pty.
+  const tabbedKey = key || terminalKey || null
+  const tabbed = useShell((state) => !!tabbedKey && state.state.tabs.some((t) => t.target?.kind === 'terminal' && t.target.terminalKey === tabbedKey))
+  const tabTarget = () => ({ provider: providerId, root, slug, cwd, id, title, launchId, terminalKey: tabbedKey || undefined, draft: !!isNew })
   const watchedEnd = useRef<{ key: string | null; version: number }>({ key: null, version: 0 })
   useEffect(() => {
     if (watchedEnd.current.key !== key) {
@@ -218,10 +228,14 @@ export default function TerminalPanel({
     setView('embedded')
   }
 
-  // open the ttyd terminal in a new browser tab (not a separate window) and collapse the embedded iframe
+  // The popped-out page is AgentDeck's own full-window terminal page for this
+  // exact terminal, with a way back to the conversation; the main window keeps
+  // "focus tab" so the two switch either way.
+  const popoutTarget = () => ({ provider: providerId, root, slug, cwd, id, title, launchId, terminalKey: key || terminalKey, draft: !!isNew })
+  // open in a new browser tab (not a separate window) and collapse the embedded iframe
   const popOut = () => {
     // named (not _blank) so re-opening reuses the same tab; no window features = a tab, not a popup window
-    const w = window.open(url || '', `agentdeck-term-${key || myKey}`)
+    const w = window.open(popoutHref(popoutTarget()), popoutWindowName(key || myKey))
     if (w) {
       popoutRef.current = w
       setTermView(key || myKey, 'popped')
@@ -230,7 +244,7 @@ export default function TerminalPanel({
         w.focus()
       } catch {}
     } else {
-      window.open(url || '', '_blank', 'noopener')
+      window.open(popoutHref(popoutTarget()), '_blank', 'noopener')
     }
   }
 
@@ -266,6 +280,31 @@ export default function TerminalPanel({
     )
   }
 
+  // shown in its own AgentDeck tab: a slim bar that leads there or takes it back
+  if (tabbed) {
+    return (
+      <div className="shrink-0 border-t border-zinc-800 bg-ink-900/60 px-4 py-2 flex flex-wrap items-center gap-3">
+        <span className="w-1.5 h-1.5 rounded-full bg-sky-400 animate-pulse shrink-0" />
+        <span className="text-[12px] text-zinc-400 shrink-0">Terminal open in its own tab</span>
+        <HandoffActions provider={providerId} root={root} slug={slug} id={id} cwd={cwd} title={title} disabled={loading} />
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={() => shellActions.openTarget({ ...tabTarget(), kind: 'terminal' })}
+          className="text-[12px] text-sky-300/90 hover:text-sky-200"
+        >
+          focus tab
+        </button>
+        <button type="button" onClick={() => tabbedKey && shellActions.closeTerminalTabs(tabbedKey)} className="text-[12px] text-zinc-400 hover:text-zinc-200">
+          ⧉ re-embed
+        </button>
+        <button type="button" onClick={stop} className="text-[12px] text-zinc-500 hover:text-red-300" title={presentation.endTitle}>
+          End ✕
+        </button>
+      </div>
+    )
+  }
+
   // popped out: collapse to a slim bar so the monitoring page stays clean
   if (view === 'popped') {
     return (
@@ -278,7 +317,7 @@ export default function TerminalPanel({
           type="button"
           onClick={() => {
             try {
-              const w = window.open(url || '', `agentdeck-term-${key || myKey}`)
+              const w = window.open(popoutHref(popoutTarget()), popoutWindowName(key || myKey))
               if (w) {
                 popoutRef.current = w
                 w.focus()
@@ -337,7 +376,15 @@ export default function TerminalPanel({
         <ContextMeter summary={contextSummary} used={contextUsed} label="ctx" />
         <HandoffActions provider={providerId} root={root} slug={slug} id={id} cwd={cwd} title={title} disabled={loading} />
         <OpenAppButtons onOpenTool={onOpenTool} className="mr-1" />
-        <button type="button" onClick={popOut} className="text-zinc-500 hover:text-sky-300" title="Open in a new browser tab and collapse this panel">
+        <button
+          type="button"
+          onClick={() => shellActions.popOutToTab(tabTarget())}
+          className="text-zinc-500 hover:text-sky-300"
+          title="Show this terminal in its own AgentDeck tab, beside this one, and collapse this panel"
+        >
+          ⧉ to tab
+        </button>
+        <button type="button" onClick={popOut} className="text-zinc-500 hover:text-sky-300 ml-1" title="Open in a new browser tab and collapse this panel">
           ⤢ pop out
         </button>
         <button
