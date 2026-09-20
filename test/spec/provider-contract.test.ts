@@ -239,6 +239,12 @@ describe('provider-terminal-adapters', async () => {
       assert.equal(resolve({ meta, files: () => ['/other/account/sessions/' + path.basename(entries[0].file)] }), null)
       const exact = resolve({ meta, files: () => [entries[0].file] })
       assert.equal(exact?.id, entries[0].id, id + ' associates its owned transcript')
+      // binding carries the listed title, so a launch placeholder never outlives the first prompt
+      assert.ok(typeof exact?.title === 'string' && exact.title.length > 0, id + ' binds with the listed title')
+      // a bound terminal keeps following the listed title without new process evidence
+      const bound = resolve({ meta: { ...meta, id: entries[0].id, slug: exact?.slug ?? null }, files: () => [] })
+      assert.equal(bound?.id, entries[0].id, id + ' refreshes a bound conversation')
+      assert.equal(bound?.title, exact?.title, id + ' refreshes the same listed title')
       assert.equal(resolve({ meta, files: () => entries.slice(0, 2).map((e) => e.file) }), null, id + ' rejects ambiguity')
       if (id === 'claude') {
         assert.equal(resolve({ meta: { ...meta, expectedSessionId: entries[0].id }, files: () => [] })?.id, entries[0].id)

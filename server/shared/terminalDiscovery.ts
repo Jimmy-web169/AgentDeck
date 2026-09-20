@@ -1,14 +1,21 @@
 import fs from 'node:fs'
 import { execFileSync, type ExecFileSyncOptionsWithStringEncoding } from 'node:child_process'
+import { windowsProcessFiles } from './terminalWindows.ts'
+import { tmuxTarget } from './terminalBinary.ts'
 
 // Optional evidence source. Failure/ambiguity leaves the terminal unbound and
 // attachable; it must never select the newest transcript in a working folder.
 // Process-owned paths also work for legacy tmux sessions without launch IDs.
 export function processFiles(tmux: string | null | undefined, name: string | null | undefined): string[] {
-  if (!tmux || !name || process.platform === 'win32') return []
+  if (!tmux || !name) return []
   try {
     const opts: ExecFileSyncOptionsWithStringEncoding = { encoding: 'utf8', timeout: 1500, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1024 * 1024 }
-    const roots = execFileSync(tmux, ['list-panes', '-t', name, '-F', '#{pane_pid}'], opts).trim().split(/\s+/).map(Number).filter(Number.isInteger)
+    const roots = execFileSync(tmux, ['list-panes', '-t', tmuxTarget(name), '-F', '#{pane_pid}'], opts)
+      .trim()
+      .split(/\s+/)
+      .map(Number)
+      .filter((pid) => Number.isSafeInteger(pid) && pid > 0)
+    if (process.platform === 'win32') return windowsProcessFiles(roots)
     const rows = execFileSync('ps', ['-axo', 'pid=,ppid='], opts)
       .trim()
       .split('\n')

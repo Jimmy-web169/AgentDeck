@@ -73,6 +73,10 @@ export interface TerminalEntry {
   name?: string
   socket?: string
   attached?: boolean
+  /**
+   * The command that attaches this tmux session from the server's own shell (psmux on Windows needs `new-session -A`).
+   */
+  attachCommand?: string | null
   tmux?: boolean
   startedAt?: (string | number) | null
   [k: string]: unknown

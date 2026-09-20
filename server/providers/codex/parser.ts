@@ -6,6 +6,10 @@ type Parts = NonNullable<TimelineEvent['parts']>
 import { guardTranscriptSize } from '../../shared/transcriptGuard.ts'
 import { withTotal } from '../../shared/tokens.ts'
 
+// A rollout with no prompt yet has no title; consumers that need "unknown"
+// rather than a label compare against this.
+export const UNTITLED = '(untitled session)'
+
 /**
  * Parse a Codex "rollout" .jsonl into raw records.
  * Each line is one JSON event; tolerate malformed/truncated trailing lines.
@@ -353,7 +357,7 @@ export function summarize(records: unknown[], id: string): NormalizedSummary {
 
   return {
     id,
-    title: title || firstPrompt || '(untitled session)',
+    title: title || firstPrompt || UNTITLED,
     firstPrompt: firstPrompt || '',
     lastUserPrompt,
     lastUserPromptTs,

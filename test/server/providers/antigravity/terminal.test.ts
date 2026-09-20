@@ -76,8 +76,11 @@ test('a terminal binds to the conversation its log names when that conversation 
     fs.writeFileSync(logFile, line(`Created conversation ${CHILD}`))
     assert.equal(resolve(), null, 'a sub-agent conversation is never a terminal’s conversation')
     fs.writeFileSync(logFile, line(`Created conversation ${PARENT}`))
-    assert.deepEqual(resolve(), { id: PARENT, slug: meta.cwd, cwd: meta.cwd, title: 'New conversation' })
-    assert.equal(resolve({ id: PARENT }), null, 'an identified terminal is never rebound')
+    // no annotation title yet: unknown is null, never the launch placeholder
+    assert.deepEqual(resolve(), { id: PARENT, slug: meta.cwd, cwd: meta.cwd, title: null })
+    const bound = resolve({ id: PARENT })
+    assert.equal(bound?.id, PARENT, 'an identified terminal is never rebound, only its title refreshed')
+    assert.equal(bound?.title, null)
     assert.equal(resolveAntigravitySession({ meta, files: () => [] }), null, 'without a log file the process evidence decides, and here there is none')
   })
 })

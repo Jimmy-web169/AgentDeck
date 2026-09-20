@@ -74,6 +74,10 @@
     "attached": {
       "type": "boolean"
     },
+    "attachCommand": {
+      "description": "The command that attaches this tmux session from the server's own shell (psmux on Windows needs `new-session -A`).",
+      "type": ["string", "null"]
+    },
     "tmux": {
       "type": "boolean"
     },

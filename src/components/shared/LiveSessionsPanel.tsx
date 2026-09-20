@@ -106,10 +106,10 @@ export default function LiveSessionsPanel({ items = [], providers = [], onEnter,
     }
   }
 
-  // copy `tmux attach -t <name>` so the session can be attached from any terminal
-  const copyAttach = (name: string) => {
+  // copy the server's attach command so the session can be attached from any terminal
+  const copyAttach = (name: string, command: string) => {
     navigator.clipboard
-      ?.writeText(`tmux attach -t ${name}`)
+      ?.writeText(command)
       .then(() => {
         setCopied(name)
         setTimeout(() => setCopied((c) => (c === name ? null : c)), 1500)
@@ -181,13 +181,13 @@ export default function LiveSessionsPanel({ items = [], providers = [], onEnter,
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        if (it.tmuxName) copyAttach(it.tmuxName)
+                        if (it.tmuxName) copyAttach(it.tmuxName, it.attachCommand || `tmux attach -t ${it.tmuxName}`)
                       }}
                       title="Copy — attach this session from any terminal"
                       className="mt-1 flex items-center gap-1 text-[10.5px] font-mono text-zinc-600 hover:text-sky-300 max-w-full"
                     >
                       <span className="shrink-0">{copied === it.tmuxName ? '✓ copied' : '⧉'}</span>
-                      <span className="truncate">tmux attach -t {it.tmuxName}</span>
+                      <span className="truncate">{it.attachCommand || `tmux attach -t ${it.tmuxName}`}</span>
                     </button>
                   )}
                 </Row>

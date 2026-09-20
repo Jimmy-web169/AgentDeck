@@ -105,6 +105,9 @@ export function adoptTerminal(target: Target, terminal: Terminal) {
     [target.cwd, target.slug].some((p) => !!p && !!target.root && terminal.key === legacyDraftKey(target.root, p))
   const requested = terminal.requestedTarget && sameTarget(plain, { ...terminal.requestedTarget, provider: terminal.provider })
   if (!legacy && !requested && !sameTarget(plain, liveTarget(terminal))) return target
+  // The live terminal's title is the conversation's listed title, refreshed by
+  // the server; a draft's placeholder or an older name gives way to it.
+  const sameConversation = !!terminal.id && (!target.id || target.id === terminal.id)
   return {
     ...target,
     terminalKey: terminal.key,
@@ -112,7 +115,7 @@ export function adoptTerminal(target: Target, terminal: Terminal) {
     id: terminal.id || target.id,
     slug: terminal.slug || target.slug,
     cwd: terminal.cwd || target.cwd,
-    title: (!target.id && terminal.id ? terminal.title : target.title) || target.title || terminal.title,
+    title: (sameConversation && terminal.title) || target.title || terminal.title,
     draft: !(terminal.id || target.id),
   }
 }

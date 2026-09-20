@@ -12,7 +12,8 @@ import { fileURLToPath } from 'node:url'
 import { terminalIdentity, findTerminal } from '../../../server/shared/terminalIdentity.ts'
 import { uniqueSession } from '../../../server/shared/terminalDiscovery.ts'
 import { findOnPath, resolveVendoredExe } from '../../../server/shared/terminal.ts'
-import { tmuxTarget, tmuxAttachArgs } from '../../../server/shared/terminalBinary.ts'
+import { tmuxTarget, tmuxAttachArgs, tmuxAttachHint } from '../../../server/shared/terminalBinary.ts'
+import { windowsProcessFiles, settleWindowsProcessFiles } from '../../../server/shared/terminalWindows.ts'
 
 describe('terminal-lifecycle', async () => {
   test('terminal identity isolates providers, accounts and concurrent drafts; retries are idempotent', () => {
@@ -299,5 +300,36 @@ describe('windows/psmux-targets', () => {
     assert.deepEqual(attach.slice(0, 4), ['new-session', '-A', '-s', 'agentdeck-0123456789ab'])
     // an ended session runs an exiting command: no bare shell survives under the AgentDeck name
     assert.deepEqual(attach.slice(4), ['--', 'cmd.exe', '/c', 'exit'])
+  })
+
+  test('the Live hint is the form the server’s own tmux resolves by name', () => {
+    // `tmux attach -t` on psmux lands every copy of the hint on the same session
+    assert.equal(tmuxAttachHint('agentdeck-0123456789ab', 'linux'), 'tmux attach -t agentdeck-0123456789ab')
+    assert.equal(tmuxAttachHint('agentdeck-0123456789ab', 'darwin'), 'tmux attach -t agentdeck-0123456789ab')
+    assert.equal(tmuxAttachHint('agentdeck-0123456789ab', 'win32'), 'tmux new-session -A -s agentdeck-0123456789ab')
+  })
+})
+
+describe('windows/process-files', () => {
+  // Codex holds its rollout open; without lsof the pane's process tree is read
+  // through its file handles, in the background, so a poll never blocks.
+  test('reports a file the process tree holds open, without blocking the caller', { skip: process.platform !== 'win32' }, async (t) => {
+    const dir = temporaryDirectory('agentdeck-handles-')
+    const file = path.join(dir, 'rollout.jsonl')
+    const fd = fs.openSync(file, 'w')
+    t.after(() => {
+      fs.closeSync(fd)
+      fs.rmSync(dir, { recursive: true, force: true })
+    })
+    const held = fs.realpathSync.native(file).toLowerCase()
+    const started = Date.now()
+    const first = windowsProcessFiles([process.pid])
+    assert.ok(Date.now() - started < 200, 'the sync call returns before the probe runs')
+    assert.ok(Array.isArray(first))
+    await settleWindowsProcessFiles()
+    const files = windowsProcessFiles([process.pid]).map((f) => f.toLowerCase())
+    assert.ok(files.includes(held), `expected ${held} in ${files.filter((f) => f.includes('agentdeck-handles')).join(', ') || '(none)'}`)
+    assert.deepEqual(windowsProcessFiles([]), [])
+    assert.deepEqual(windowsProcessFiles([-1, 0, Number.NaN]), [])
   })
 })

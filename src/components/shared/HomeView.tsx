@@ -313,9 +313,9 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }: Activit
   }, [visible, index, scanned])
   const loadingLatest = visible && scanned.some((p) => index.sessionsFor(p.provider, p.root, p.slug) === null)
 
-  const copyAttach = (name: string) => {
+  const copyAttach = (name: string, command: string) => {
     navigator.clipboard
-      ?.writeText(`tmux attach -t ${name}`)
+      ?.writeText(command)
       .then(() => {
         setCopied(name)
         setTimeout(() => setCopied((c) => (c === name ? null : c)), 1500)
@@ -374,12 +374,12 @@ function Activity({ providers, visible, index, live, termKeys, onOpen }: Activit
                     {it.tmuxName && (
                       <button
                         type="button"
-                        onClick={() => it.tmuxName && copyAttach(it.tmuxName)}
+                        onClick={() => it.tmuxName && copyAttach(it.tmuxName, it.attachCommand || `tmux attach -t ${it.tmuxName}`)}
                         title="Copy — attach this session from any terminal"
                         className="flex items-center gap-1 text-[10.5px] font-mono text-zinc-600 hover:text-sky-300 max-w-full"
                       >
                         <span className="shrink-0">{copied === it.tmuxName ? '✓ copied' : '⧉'}</span>
-                        <span className="truncate">tmux attach -t {it.tmuxName}</span>
+                        <span className="truncate">{it.attachCommand || `tmux attach -t ${it.tmuxName}`}</span>
                       </button>
                     )}
                     <div className="flex gap-2 mt-auto pt-1">

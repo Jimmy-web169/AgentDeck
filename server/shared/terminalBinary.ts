@@ -86,3 +86,9 @@ export const tmuxTarget = (name: string, platform: NodeJS.Platform = process.pla
 export function tmuxAttachArgs(name: string, platform: NodeJS.Platform = process.platform): string[] {
   return platform === 'win32' ? ['new-session', '-A', '-s', name, '--', 'cmd.exe', '/c', 'exit'] : ['attach-session', '-t', `=${name}`]
 }
+// The command a person types in their own terminal to attach the same session.
+// Live entries carry it because only the server knows which tmux runs there:
+// `tmux attach -t` on psmux lands every copy of the hint on the same session.
+export function tmuxAttachHint(name: string, platform: NodeJS.Platform = process.platform) {
+  return platform === 'win32' ? `tmux new-session -A -s ${name}` : `tmux attach -t ${name}`
+}

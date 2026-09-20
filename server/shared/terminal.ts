@@ -8,7 +8,7 @@ import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { findTerminal } from './terminalIdentity.ts'
 import { createTerminalInventory } from './terminalInventory.ts'
-import { findTmux, findTtyd, tmuxTarget, tmuxAttachArgs } from './terminalBinary.ts'
+import { findTmux, findTtyd, tmuxTarget, tmuxAttachArgs, tmuxAttachHint } from './terminalBinary.ts'
 export { findOnPath, resolveVendoredExe, findTmux, findTtyd } from './terminalBinary.ts'
 
 // Shared embedded-terminal pool. Runs a provider's real CLI TUI inside a ttyd
@@ -36,7 +36,9 @@ export function registerTerminalProvider(config: TerminalConfig) {
 }
 const metadataOf = (value: TerminalMetadata = {}): TerminalMetadata =>
   Object.fromEntries(
-    Object.entries(value).filter(([k]) => !['url', 'port', 'alive', 'tmux', 'tmuxName', 'attached', 'ok', 'reused', 'requestedTarget'].includes(k))
+    Object.entries(value).filter(
+      ([k]) => !['url', 'port', 'alive', 'tmux', 'tmuxName', 'tmuxSocket', 'attached', 'attachCommand', 'ok', 'reused', 'requestedTarget'].includes(k)
+    )
   )
 let nextPort = PORT_BASE
 
@@ -252,6 +254,7 @@ export function listTerminals() {
     alive: e.proc?.exitCode == null && !e.proc?.killed,
     tmux: !!e.tmuxName,
     tmuxName: e.tmuxName || null,
+    attachCommand: e.tmuxName ? tmuxAttachHint(e.tmuxName) : null,
     ...e.meta,
   }))
 }

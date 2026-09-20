@@ -6,7 +6,23 @@ import path from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { resolveRoot, listProjectSlugs, projectsDir, assertInside } from './paths.ts'
 import { uniqueSession } from '../../shared/terminalDiscovery.ts'
-import { readRecords } from './parser.ts'
+import { cachedRecords, cachedDerived, fingerprintOf } from '../../shared/parseCache.ts'
+import { readRecords, summarize, UNTITLED } from './parser.ts'
+
+// The listed title of one transcript, through the same cache the sessions
+// list fills (one stat, then a cache hit). Unknown — no prompt yet, oversize,
+// unreadable — is null, never a label.
+export function sessionTitle(file: string, id: string): string | null {
+  try {
+    const fp = fingerprintOf(file)
+    const title = summarizeCached(file, id, fp).title
+    return title && title !== UNTITLED ? title : null
+  } catch {
+    return null
+  }
+}
+const summarizeCached = (file: string, id: string, fp: ReturnType<typeof fingerprintOf>) =>
+  cachedDerived(file, 'summary', () => summarize(cachedRecords(file, readRecords, fp), id), fp)
 
 const supported = new Map<string, boolean>()
 export function resolveSavedClaudeSession({ root, id, slug }: Parameters<NonNullable<TerminalConfig['resolveSavedSession']>>[0]): SavedSession | null {
@@ -20,7 +36,7 @@ export function resolveSavedClaudeSession({ root, id, slug }: Parameters<NonNull
         .map(jsonRecord)
         .find((r) => typeof r.cwd === 'string' && r.cwd)?.cwd
     ) || null
-  return { id, slug, cwd }
+  return { id, slug, cwd, title: sessionTitle(file, id) }
 }
 export function prepareClaudeLaunch({ bin, resumeId }: Pick<Parameters<NonNullable<TerminalConfig['prepareLaunch']>>[0], 'bin' | 'resumeId'>) {
   if (resumeId || !bin) return {}
@@ -39,18 +55,21 @@ export function prepareClaudeLaunch({ bin, resumeId }: Pick<Parameters<NonNullab
 export function resolveClaudeSession({ meta, files }: Parameters<NonNullable<TerminalConfig['resolveSession']>>[0]): SavedSession | null {
   const dir = resolveRoot(meta.root).dir
   const base = projectsDir(dir)
+  const saved = (id: string, slug: string): SavedSession => ({ id, slug, cwd: meta.cwd, title: sessionTitle(path.join(base, slug, `${id}.jsonl`), id) })
+  // Bound: only the listed title can still change (first prompt, later renames).
+  if (meta.id && typeof meta.slug === 'string' && meta.slug) return saved(meta.id, meta.slug)
+  if (meta.id) return null
   const candidates: SavedSession[] = []
   // Preallocation identifies the new transcript without relying on timing.
-  if (!meta.id && typeof meta.expectedSessionId === 'string' && meta.expectedSessionId) {
+  if (typeof meta.expectedSessionId === 'string' && meta.expectedSessionId) {
     for (const slug of listProjectSlugs(dir)) {
-      if (fs.existsSync(path.join(base, slug, `${meta.expectedSessionId}.jsonl`))) candidates.push({ id: meta.expectedSessionId, slug, cwd: meta.cwd })
+      if (fs.existsSync(path.join(base, slug, `${meta.expectedSessionId}.jsonl`))) candidates.push(saved(meta.expectedSessionId, slug))
     }
   }
   if (candidates.length) return uniqueSession(candidates)
-  if (meta.id) return null
   for (const file of files()) {
     const rel = path.relative(base, file).split(path.sep)
-    if (rel.length === 2 && /^[0-9a-f-]{36}\.jsonl$/i.test(rel[1])) candidates.push({ id: rel[1].slice(0, -6), slug: rel[0], cwd: meta.cwd })
+    if (rel.length === 2 && /^[0-9a-f-]{36}\.jsonl$/i.test(rel[1])) candidates.push(saved(rel[1].slice(0, -6), rel[0]))
   }
   return uniqueSession(candidates)
 }

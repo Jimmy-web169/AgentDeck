@@ -25,6 +25,8 @@ export function toManagerItems({ tmux = [] }: { tmux?: TerminalEntry[] }) {
     id: t.id,
     cwd: t.cwd,
     tmuxName: typeof t.tmuxName === 'string' ? t.tmuxName : undefined,
+    // the server's own attach form: psmux on Windows needs `new-session -A`
+    attachCommand: typeof t.attachCommand === 'string' ? t.attachCommand : typeof t.tmuxName === 'string' ? `tmux attach -t ${t.tmuxName}` : undefined,
     attached: !!t.attached,
     title: t.title || (t.cwd || t.slug ? shortPath(t.cwd || t.slug) : '') || (t.id ? String(t.id).slice(0, 8) : 'terminal'),
   }))

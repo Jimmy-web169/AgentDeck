@@ -68,12 +68,16 @@ export function conversationFromLog(file: string | null | undefined): string | n
 }
 
 export function resolveAntigravitySession({ meta, files }: Parameters<NonNullable<TerminalConfig['resolveSession']>>[0]): SavedSession | null {
-  if (meta.id) return null
   const dir = resolveRoot(meta.root).dir
+  if (meta.id) {
+    // Bound: only the listed title can still change (the CLI names it later).
+    const entry = isSessionId(meta.id) ? sessionFileById(dir, meta.id) : null
+    return entry ? { id: meta.id, slug: meta.slug, cwd: meta.cwd, title: readTitle(dir, meta.id) } : null
+  }
   const logged = conversationFromLog(typeof meta.logFile === 'string' ? meta.logFile : null)
   if (logged) {
     const entry = sessionFileById(dir, logged)
-    if (entry && !entry.isSubagent) return { id: logged, slug: entry.cwd || meta.cwd, cwd: entry.cwd || meta.cwd, title: readTitle(dir, logged) || meta.title }
+    if (entry && !entry.isSubagent) return { id: logged, slug: entry.cwd || meta.cwd, cwd: entry.cwd || meta.cwd, title: readTitle(dir, logged) }
   }
   return uniqueSession(
     files().flatMap((file) => {
@@ -83,7 +87,7 @@ export function resolveAntigravitySession({ meta, files }: Parameters<NonNullabl
       if (!id) return []
       const entry = sessionFileById(dir, id)
       if (!entry || entry.isSubagent) return []
-      return [{ id, slug: entry.cwd || meta.cwd, cwd: entry.cwd || meta.cwd, title: readTitle(dir, id) || meta.title }]
+      return [{ id, slug: entry.cwd || meta.cwd, cwd: entry.cwd || meta.cwd, title: readTitle(dir, id) }]
     })
   )
 }

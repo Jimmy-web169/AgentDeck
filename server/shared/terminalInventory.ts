@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { sourceKey } from '../../shared/identity.ts'
-import { findTmux, tmuxTarget } from './terminalBinary.ts'
+import { findTmux, tmuxTarget, tmuxAttachHint } from './terminalBinary.ts'
 import { processFiles } from './terminalDiscovery.ts'
 import type { ChangeEvent } from '../../shared/types.d.ts'
 import type { TerminalConfig, TerminalMetadata, TerminalPoolEntry } from './terminalTypes.ts'
@@ -71,9 +71,12 @@ export function createTerminalInventory(providers: Map<string, TerminalConfig>, 
       const dirty = last && last.version !== version
       if (provider?.resolveSession && (!last || Date.now() - last.at >= (dirty ? 500 : 4000))) {
         try {
+          // Unbound: the adapter looks for exact evidence. Bound: it refreshes
+          // the conversation's listed title, so a launch placeholder ("New
+          // conversation") gives way to the first prompt and later renames.
           const observed = provider.resolveSession({ meta, files: () => processFiles(tmux, name) })
-          if (observed?.id && (observed.id !== meta.id || observed.slug !== meta.slug || observed.title !== meta.title)) {
-            meta = { ...meta, ...observed, isNew: false }
+          if (observed?.id && (observed.id !== meta.id || observed.slug !== meta.slug || (observed.title ?? null) !== (meta.title ?? null))) {
+            meta = { ...meta, ...observed, title: observed.title ?? null, isNew: false }
             execFileSync(tmux, ['set-environment', '-t', tmuxTarget(name), 'AGENTDECK_META', Buffer.from(JSON.stringify(meta)).toString('base64')], {
               stdio: 'ignore',
               timeout: 2000,
@@ -86,7 +89,7 @@ export function createTerminalInventory(providers: Map<string, TerminalConfig>, 
         }
         discovered.set(name, { at: Date.now(), version })
       }
-      const entry = { ...meta, tmuxName: name, tmuxSocket: tmuxSocket || null, attached: attached !== '0' }
+      const entry = { ...meta, tmuxName: name, tmuxSocket: tmuxSocket || null, attached: attached !== '0', attachCommand: tmuxAttachHint(name) }
       out.push(entry)
       for (const listener of terminalObservers) {
         try {

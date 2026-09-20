@@ -6,6 +6,22 @@ All notable changes to AgentDeck are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- On Windows, the attach hint in Live sessions and on Home (`⧉ tmux attach -t
+  agentdeck-…`) attached every copy to the same session: psmux, the tmux
+  stand-in there, ignores `attach-session -t`. Live entries now carry the
+  server's own attach form (`attachCommand`; `tmux new-session -A -s <name>` on
+  Windows, `tmux attach -t <name>` elsewhere) and both places show and copy it.
+- On Windows, a new Codex conversation never became its saved session in the
+  tab strip or Live sessions: binding relied on `lsof`, which does not exist
+  there. The pane's process tree is now read through its open file handles
+  (Codex holds its rollout open), in a background PowerShell probe whose last
+  result answers each poll, so the HTTP host never blocks on it.
+- A conversation started as "New conversation" kept that placeholder in its
+  tab and in Live sessions after it was bound (Claude, Codex, Antigravity).
+  The inventory now refreshes a bound terminal's listed title — the first
+  prompt, a later rename — and the tab that shows the terminal follows it.
+
 ### Changed
 - The Conversation toolbar's **Show sub-agents** button (formerly Multi-view)
   appears only for sessions that have spawned subagents. The sub-agent pane

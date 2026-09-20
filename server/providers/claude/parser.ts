@@ -7,6 +7,10 @@ type ToolResult = { content: string; isError: boolean }
 import { guardTranscriptSize } from '../../shared/transcriptGuard.ts'
 import { withTotal } from '../../shared/tokens.ts'
 
+// A transcript with no prompt yet has no title; consumers that need "unknown"
+// rather than a label compare against this.
+export const UNTITLED = '(untitled session)'
+
 /**
  * Parse a Claude Code session .jsonl into raw records.
  * Each line is one JSON event; tolerate malformed/truncated trailing lines.
@@ -274,7 +278,7 @@ export function summarize(records: unknown[], id: string): NormalizedSummary {
 
   return {
     id,
-    title: customTitle || aiTitle || firstPrompt || '(untitled session)',
+    title: customTitle || aiTitle || firstPrompt || UNTITLED,
     firstPrompt: firstPrompt || '',
     lastUserPrompt,
     lastUserPromptTs,

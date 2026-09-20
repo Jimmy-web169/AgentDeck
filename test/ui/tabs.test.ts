@@ -43,6 +43,24 @@ test('saved session identity ignores project labels, views and late cwd discover
   assert.equal(sameTarget(a, { ...a, root: 'account-b' }), false)
 })
 
+test('a tab follows its live terminal’s listed title, and never another conversation’s', () => {
+  const draft = newDraft({ ...scope, title: 'New conversation' })
+  const terminal = { ...scope, launchId: draft.launchId, key: 'terminal-a', id: 'saved-a', title: null }
+  // bound before the first prompt: the placeholder stays until a title exists
+  const bound = adoptTerminal(draft, terminal)
+  assert.equal(bound.id, 'saved-a')
+  assert.equal(bound.title, 'New conversation')
+  // the server learned the first prompt: the tab shows it
+  const titled = adoptTerminal(bound, { ...terminal, title: 'Fix the flaky test' })
+  assert.equal(titled.title, 'Fix the flaky test')
+  // a later rename follows too; a terminal without a title keeps the tab's
+  assert.equal(adoptTerminal(titled, { ...terminal, title: 'Flaky test fixed' }).title, 'Flaky test fixed')
+  assert.equal(adoptTerminal(titled, terminal).title, 'Fix the flaky test')
+  // another conversation's terminal does not touch this tab
+  const other = { ...scope, launchId: 'other-launch', key: 'terminal-b', id: 'saved-b', title: 'Other work' }
+  assert.equal(adoptTerminal(titled, other).title, 'Fix the flaky test')
+})
+
 test('running dots distinguish same-folder drafts and preserve launch aliases after binding', () => {
   const a = newDraft(scope),
     b = newDraft(scope)

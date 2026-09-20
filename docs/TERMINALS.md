@@ -37,8 +37,11 @@ therefore attaches there with `new-session -A -s <name>` — exact by name; a
 session that has ended runs an exiting command instead of a bare shell — and
 addresses kill, has-session and set-environment by the plain name, which is
 exact because every AgentDeck session name is the same fixed-length hash. tmux
-keeps `=<name>`. `tmuxTarget` and `tmuxAttachArgs` in
-`server/shared/terminalBinary.ts` own the two forms.
+keeps `=<name>`. `tmuxTarget`, `tmuxAttachArgs` and `tmuxAttachHint` in
+`server/shared/terminalBinary.ts` own the forms. Every live entry carries
+`attachCommand`, the hint Live sessions and Home show and copy, because only
+the server knows which tmux runs there (`tmux new-session -A -s <name>` on
+Windows, `tmux attach -t <name>` elsewhere).
 
 ## Provider adapter contract
 
@@ -90,10 +93,20 @@ The UI consumes the same targets and navigation policy for every provider.
 | Codex | Exact rollout held by the terminal's process tree, validated against the provider index; subagents excluded | Daemon-backed CLIs or versions that do not hold a rollout open may require explicit linking |
 | Antigravity | The conversation `agy` names in this launch's own log file (`--log-file`, exact on every platform), else the transcript/database held by the terminal's process tree; both validated against its index | Only the CLI's default data folder is supported for new/resume; workspace metadata may arrive later |
 
-Process-file discovery is optional on POSIX (`ps`/`lsof`). On Windows, inaccessible
-processes, or ambiguous candidates, use explicit linking. The terminal key and
-reattachment work independently of this capability. Provider adapters can add
-verified lifecycle events later without changing the shell or tab model.
+Process-file discovery is optional: `ps`/`lsof` on POSIX; on Windows the pane's
+process tree is read through its open file handles by a background PowerShell
+probe (`server/shared/terminalWindows.ts`) whose last completed result answers
+each poll, so the first poll after a rollout opens sees nothing and the next one
+sees it. Inaccessible processes or ambiguous candidates leave the terminal
+unbound; use explicit linking. The terminal key and reattachment work
+independently of this capability. Provider adapters can add verified lifecycle
+events later without changing the shell or tab model.
+
+Once bound, the inventory keeps asking the adapter for the conversation's
+listed title (`resolveSession` with `meta.id` set returns `{ id, slug, cwd,
+title }`), so a launch placeholder gives way to the first prompt and later
+renames reach Live sessions and the tab that shows the terminal. An unknown
+title is `null`, never a label.
 
 Binding describes the conversation selected through AgentDeck. CLI commands
 that independently switch conversations require relinking; an existing binding
