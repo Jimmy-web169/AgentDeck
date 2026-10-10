@@ -49,9 +49,5 @@ dashboards/
 # keep in sync. scripts/setup.sh and setup.ps1 create that link.
 .claude/
 
-# local research notes, handoffs, scratch — never committed (see CLAUDE.md)
+# local research notes, handoffs, scratch — never committed
 tmp/
-
-# maintainer working notes for Claude — local only, like .claude/ (see README for public docs)
-CLAUDE.md
-/AGENTS.md
